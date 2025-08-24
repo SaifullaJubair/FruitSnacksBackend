@@ -49,7 +49,10 @@ export const postUser: RequestHandler = async (
     }
 
     // Hash the password once
-    const hashedPassword = await bcrypt.hash(requestData?.user_password, saltRounds);
+    const hashedPassword = await bcrypt.hash(
+      requestData?.user_password,
+      saltRounds
+    );
     delete requestData?.user_password; // Remove plain password
 
     if (existingUser) {
@@ -93,7 +96,6 @@ export const postUser: RequestHandler = async (
   }
 };
 
-
 // login a user
 export const postLogUser: RequestHandler = async (
   req: Request,
@@ -132,11 +134,15 @@ export const postLogUser: RequestHandler = async (
         throw new ApiError(400, "User update failed!");
       }
 
-      const token = jwt.sign({ user_phone }, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM", {
-        expiresIn: "365d",
-      });
+      const token = jwt.sign(
+        { user_phone },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
+        {
+          expiresIn: "365d",
+        }
+      );
 
-      res.cookie("fashion_for_you_token", token);
+      res.cookie("artisan_lather_token", token);
 
       return sendResponse<IUserInterface>(res, {
         statusCode: httpStatus.OK,
@@ -155,11 +161,15 @@ export const postLogUser: RequestHandler = async (
       throw new ApiError(400, "Password does not match!");
     }
 
-    const token = jwt.sign({ user_phone }, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM", {
-      expiresIn: "365d",
-    });
+    const token = jwt.sign(
+      { user_phone },
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
+      {
+        expiresIn: "365d",
+      }
+    );
 
-    res.cookie("fashion_for_you_token", token);
+    res.cookie("artisan_lather_token", token);
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
@@ -170,7 +180,6 @@ export const postLogUser: RequestHandler = async (
     next(error);
   }
 };
-
 
 // resend his OTP and also update in DB
 export const postUserResendCode: RequestHandler = async (

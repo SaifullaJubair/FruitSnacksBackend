@@ -18,7 +18,7 @@ export const verifyToken = (permission: string): RequestHandler => {
     next: NextFunction
   ): Promise<any> => {
     try {
-      const cokieToken = req.cookies?.fashion_for_you_token;
+      const cokieToken = req.cookies?.artisan_lather_token;
       if (!cokieToken) {
         throw new ApiError(400, "Need Log In !");
       }

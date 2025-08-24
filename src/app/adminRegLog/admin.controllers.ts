@@ -4,7 +4,13 @@ import ApiError from "../../errors/ApiError";
 import sendResponse from "../../shared/sendResponse";
 import { adminSearchableField, IAdminInterface } from "./admin.interface";
 import AdminModel from "./admin.model";
-import { deleteAdminServices, findAdminInfoServices, findAllDashboardAdminRoleAdminServices, postAdminServices, updateAdminServices } from "./admin.services";
+import {
+  deleteAdminServices,
+  findAdminInfoServices,
+  findAllDashboardAdminRoleAdminServices,
+  postAdminServices,
+  updateAdminServices,
+} from "./admin.services";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 const jwt = require("jsonwebtoken");
@@ -17,7 +23,7 @@ export const getMeAdmin: RequestHandler = async (
   next: NextFunction
 ) => {
   try {
-    const token = await req.cookies?.fashion_for_you_token;
+    const token = await req.cookies?.artisan_lather_token;
 
     if (!token) {
       throw new ApiError(400, "Admin get failed !");
@@ -106,7 +112,7 @@ export const postAdmin: RequestHandler = async (
   }
 };
 
-// login a Admin 
+// login a Admin
 export const postLogAdmin: RequestHandler = async (
   req: Request,
   res: Response,
@@ -136,7 +142,7 @@ export const postLogAdmin: RequestHandler = async (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
         { expiresIn: "365d" }
       );
-      res.cookie("fashion_for_you_token", token);
+      res.cookie("artisan_lather_token", token);
       return sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
@@ -204,19 +210,19 @@ export const updateAdmin: RequestHandler = async (
     if (!requestData?.admin_phone) {
       throw new ApiError(400, "Phone Number Required !");
     }
-   
-      const findAdminWithEmailOrPhoneExist: boolean | null | undefined | any =
-        await AdminModel.exists({
-          admin_phone: requestData?.admin_phone,
-        });
 
-      if (
-        findAdminWithEmailOrPhoneExist &&
-        requestData?._id !== findAdminWithEmailOrPhoneExist?._id.toString()
-      ) {
-        throw new ApiError(400, "Already Added This Phone !");
-      }
-    
+    const findAdminWithEmailOrPhoneExist: boolean | null | undefined | any =
+      await AdminModel.exists({
+        admin_phone: requestData?.admin_phone,
+      });
+
+    if (
+      findAdminWithEmailOrPhoneExist &&
+      requestData?._id !== findAdminWithEmailOrPhoneExist?._id.toString()
+    ) {
+      throw new ApiError(400, "Already Added This Phone !");
+    }
+
     if (requestData?.admin_password) {
       bcrypt.hash(
         requestData?.admin_password,

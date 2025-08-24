@@ -17,8 +17,8 @@ const s3 = new S3Client({
   region,
   endpoint,
   credentials: {
-    accessKeyId: "DO003NGNH3Z8U72AGPHW",
-    secretAccessKey: "y05jtj5lb1CGu9XxZMCYVggZSTNhaQuukluw+AuCuME",
+    accessKeyId: "test-key",
+    secretAccessKey: "test-secret",
   },
 });
 
@@ -91,7 +91,7 @@ const uploadToSpaces = async (file: any) => {
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `fashion_for_you_image/${file.filename}`,
+    Key: `artisen_leather_images/${file.filename}`,
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL,
     ContentType: contentType,
@@ -157,7 +157,7 @@ const VideoUploader = async (file: any) => {
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `fashion_for_you_video/${file.filename}`,
+    Key: `artisen_leather_videos/${file.filename}`,
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL,
   };
