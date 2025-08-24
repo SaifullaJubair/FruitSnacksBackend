@@ -19,9 +19,6 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:4173",
     "http://localhost:3001",
-    "https://fashionforyou.com.bd",
-    "https://www.fashionforyou.com.bd",
-    "https://admin.fashionforyou.com.bd",
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
@@ -31,7 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get("/", async (req: Request, res: Response) => {
-  res.send("Jewellery Point BD App is working! YaY!");
+  res.send("Artisan Leather Server is working! YaY!");
 });
 
 // Import All Api
@@ -128,6 +125,6 @@ app.listen(port, () => {
     time,
     ":",
     date,
-    `: Jewellery Point BD app listening on port ${port}`
+    `: Artisan Leather server listening on port ${port}`
   );
 });

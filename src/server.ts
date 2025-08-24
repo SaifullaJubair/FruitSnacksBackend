@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 
-// const uri = `mongodb://classicit_fashionforyouuser:dHVVpfmR0N@103.240.4.56:27017/classicit_fashionforyoudb?replicaSet=rs0&authSource=admin`;
-const uri = `mongodb+srv://jewelleryPointBD:xvA8bKMxyrYVl37F@cluster0.bqp7r2z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.xxqcwqo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 function connectDB() {
   mongoose.set("strictQuery", false);
