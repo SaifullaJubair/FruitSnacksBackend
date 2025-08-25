@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.xxqcwqo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb+srv://saifullajubair6:o89AfmHshyzDnAi0@cluster0.xxqcwqo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 function connectDB() {
   mongoose.set("strictQuery", false);
