@@ -144,9 +144,9 @@ export const postCategory: RequestHandler = async (
         category_logo_key = category_logo_upload?.Key;
       }
       if (req.files && "category_video" in req.files) {
-        const categoryImage = req.files["category_video"][0];
-        const category_video_upload = await FileUploadHelper.uploadToSpaces(
-          categoryImage
+        const categoryVideo = req.files["category_video"][0];
+        const category_video_upload = await FileUploadHelper.VideoUploader(
+          categoryVideo
         );
         category_video = category_video_upload?.Location;
         category_video_key = category_video_upload?.Key;
@@ -324,7 +324,7 @@ export const updateCategory: RequestHandler = async (
       }
       if (req.files && "category_video" in req.files) {
         const categoryImage = req.files["category_video"][0];
-        const category_video_upload = await FileUploadHelper.uploadToSpaces(
+        const category_video_upload = await FileUploadHelper.VideoUploader(
           categoryImage
         );
         category_video = category_video_upload?.Location;
