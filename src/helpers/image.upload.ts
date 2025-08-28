@@ -1,3 +1,5 @@
+
+
 import {
   DeleteObjectCommand,
   ObjectCannedACL,
@@ -10,20 +12,22 @@ import ApiError from "../errors/ApiError";
 const path = require("path");
 const uuid = require("uuid");
 
-// Set up AWS configuration
-const region = "ap-south-1";
-const endpoint = "https://blr1.digitaloceanspaces.com";
+// ================= AWS Config (DigitalOcean Spaces) ===================
+const region = "sgp1"; // তোমার space এর region
+const endpoint = "https://sgp1.digitaloceanspaces.com"; // DO এর endpoint
 const s3 = new S3Client({
   region,
   endpoint,
   credentials: {
-    accessKeyId: "test-key",
-    secretAccessKey: "test-secret",
+    accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
+    secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
   },
 });
 
-const SpaceName = "cit-node";
+// তোমার Space name
+const SpaceName = "artisen-leather";
 
+// ================= Multer Config ===================
 const storage = multer.diskStorage({
   destination: "uploads/",
   filename: function (req, file, cb) {
@@ -36,80 +40,103 @@ const ImageUpload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
     cb(null, true);
-    // const supportedImage =
-    //   /png|jpg|webp|jpeg|gif|PNG|JPG|WEBP|JPEG|GIF|pdf|PDF/; // Added gif and GIF
-    // const extension = path.extname(file.originalname);
-
-    // if (supportedImage.test(extension)) {
-    //   cb(null, true);
-    // } else {
-    //   cb(new Error("Must be a png|jpg|webp|jpeg|gif image"));
-    // }
   },
   limits: {
     fileSize: 10 * 1024 * 1024, // 10 MB limit
   },
 });
 
-// Function to determine content type based on file extension
+// ================= Content-Type Checker ===================
 const getContentType = (filename: string) => {
   const extension = path.extname(filename).toLowerCase();
   switch (extension) {
+    // Image types
     case ".webp":
       return "image/webp";
     case ".png":
       return "image/png";
     case ".jpg":
-      return "image/jpg";
+      return "image/jpeg";
     case ".jpeg":
       return "image/jpeg";
     case ".gif":
       return "image/gif";
-    case ".WEBP":
-      return "image/WEBP";
-    case ".PNG":
-      return "image/PNG";
-    case ".JPG":
-      return "image/JPG";
-    case ".JPEG":
-      return "image/JPEG";
-    case ".GIF":
-      return "image/GIF";
+
+    // Video types
+    case ".mp4":
+      return "video/mp4";
+    case ".mov":
+      return "video/quicktime";
+    case ".avi":
+      return "video/x-msvideo";
+    case ".webm":
+      return "video/webm";
+    case ".m4v":
+      return "video/x-m4v";
+    case ".mkv":
+      return "video/x-matroska";
+
+    // Document types
     case ".pdf":
       return "application/pdf";
+
+    // Uppercase versions
+    case ".WEBP":
+      return "image/webp";
+    case ".PNG":
+      return "image/png";
+    case ".JPG":
+      return "image/jpeg";
+    case ".JPEG":
+      return "image/jpeg";
+    case ".GIF":
+      return "image/gif";
+    case ".MP4":
+      return "video/mp4";
+    case ".MOV":
+      return "video/quicktime";
+    case ".AVI":
+      return "video/x-msvideo";
+    case ".WEBM":
+      return "video/webm";
     case ".PDF":
-      return "application/PDF";
+      return "application/pdf";
+
     default:
       return "application/octet-stream";
   }
 };
 
-// Upload image to DigitalOcean Spaces
+// ================= Upload Image to DigitalOcean Spaces ===================
 const uploadToSpaces = async (file: any) => {
   const fileStream = fs.createReadStream(file.path);
   const contentType = getContentType(file.filename);
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `artisen_leather_images/${file.filename}`,
+    Key: `artisen_leather_images/${file.filename}`, // DO তে ফোল্ডার + filename
     Body: fileStream,
-    ACL: "public-read" as ObjectCannedACL,
+    ACL: "public-read" as ObjectCannedACL, // Public read access
     ContentType: contentType,
   };
 
   try {
     const data = await s3.send(new PutObjectCommand(uploadParams));
     const httpStatusCode = data?.$metadata?.httpStatusCode;
-    const { Bucket, Key } = uploadParams;
-    const Location = `https://cit-node.blr1.cdn.digitaloceanspaces.com/${Key}`;
-    // const Location = `https://blr1.digitaloceanspaces.com/${Bucket}/${Key}`;
+    const { Key } = uploadParams;
+
+    // ✅ CDN URL ব্যবহার করছি (origin বাদ দিয়ে)
+    const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+
     const sendData = {
-      Location,
-      Key,
+      Location, // frontend এ use হবে
+      Key, // future delete এর জন্য দরকার
     };
-    // Normalize the file path to ensure cross-platform compatibility
+
+    // লোকাল uploads ফোল্ডার থেকে ফাইল delete করে দিচ্ছি
     const normalizedPath = path.normalize(file.path);
     fs.unlinkSync(normalizedPath);
+
     if (httpStatusCode == 200) return sendData;
     else throw new ApiError(400, "Image upload failed");
   } catch (error) {
@@ -117,6 +144,7 @@ const uploadToSpaces = async (file: any) => {
   }
 };
 
+// ================= Delete File from DigitalOcean Spaces ===================
 const deleteFromSpaces = async (key: any) => {
   const deleteParams = {
     Bucket: SpaceName,
@@ -127,62 +155,67 @@ const deleteFromSpaces = async (key: any) => {
     const data = await s3.send(new DeleteObjectCommand(deleteParams));
     const httpStatusCode = data?.$metadata?.httpStatusCode;
     if (httpStatusCode == 204) return true;
-    else throw new ApiError(400, "Image Delete failed");
+    else throw new ApiError(400, "File Delete failed"); // সাধারণ error message
   } catch (error) {
     throw error;
   }
 };
 
-// Initialize multer with the storage settings
+// ================= Video Upload ===================
 const VideoUpload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
-    const supportedVideo = /mp4/;
+    const supportedVideo = /mp4|mov|avi|webm/i; // ✅ Support more formats
     const extension = path.extname(file.originalname);
 
-    // Check if the file extension is mp4
     if (supportedVideo.test(extension)) {
       cb(null, true);
     } else {
-      cb(new Error("Must be an MP4 video"));
+      cb(new Error("Must be a supported video format (mp4, mov, avi, webm)"));
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB limit
+    fileSize: 20 * 1024 * 1024, // ✅ Changed to 20MB for videos
   },
 });
 
 const VideoUploader = async (file: any) => {
-  const fileStream = fs.createReadStream(file.path); // Assuming file is a multer file object
+  const fileStream = fs.createReadStream(file.path);
+  const contentType = getContentType(file.filename); // ডাইনামিক কনটেন্ট টাইপ
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `artisen_leather_videos/${file.filename}`,
+    Key: `artisen_leather_videos/${file.filename}`, // ✅ ভিডিও ফোল্ডারে সেভ হবে
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL,
+    ContentType: contentType, // ✅ ডাইনামিক কনটেন্ট টাইপ
   };
 
   try {
     const data = await s3.send(new PutObjectCommand(uploadParams));
     const httpStatusCode = data?.$metadata?.httpStatusCode;
-    const { Bucket, Key } = uploadParams;
-    const Location = `https://cit-node.blr1.cdn.digitaloceanspaces.com/${Key}`;
+    const { Key } = uploadParams;
+
+    // ✅ CDN URL for videos
+    const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+
     fs.unlinkSync(file.path);
     const sendData = {
       Location,
       Key,
     };
     if (httpStatusCode == 200) return sendData;
-    else throw new ApiError(400, "Image upload failed");
+    else throw new ApiError(400, "Video upload failed");
   } catch (error) {
-    throw error; // Rethrow the error to handle it further up the call stack
+    throw error;
   }
 };
 
+// ================= Export Helper ===================
 export const FileUploadHelper = {
   ImageUpload,
   uploadToSpaces,
-  deleteFromSpaces,
+  deleteFromSpaces, // এই ফাংশন এখন যেকোন ফাইল ডিলিট করতে পারবে
   VideoUploader,
   VideoUpload,
 };
