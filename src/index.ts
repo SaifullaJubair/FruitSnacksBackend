@@ -19,6 +19,8 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:4173",
     "http://localhost:3001",
+    "http://admin.artisenleather.com",
+    "http://www.admin.artisenleather.com",
     "https://artisenleather.com",
     "https://www.artisenleather.com",
     "https://admin.artisenleather.com",
