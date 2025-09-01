@@ -19,6 +19,7 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:4173",
     "http://localhost:3001",
+    
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
