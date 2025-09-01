@@ -19,6 +19,10 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:4173",
     "http://localhost:3001",
+    "https://artisenleather.com",
+    "https://www.artisenleather.com",
+    "https://admin.artisenleather.com",
+    "https://www.admin.artisenleather.com",
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
