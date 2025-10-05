@@ -80,8 +80,7 @@ export const getZoneData: RequestHandler = async (
       });
     }
     const response = await fetch(
-      // "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
-      "https://test-api.pathao.com/oauth/token",
+      "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
 
       {
         method: "POST",
@@ -91,9 +90,11 @@ export const getZoneData: RequestHandler = async (
         body: JSON.stringify({
           // client_id: "8mepZDpbMy", // Replace with actual client_id
           // client_secret: "GaE4FmJo3SEHSN04r2owFOdID4H9u6SPO9kQJYKQ", // Replace with actual client_secret
+          client_id: "ELe3yqpb69",
+          client_secret: "Ay5xEjUY3d7Fs4W3RQvhyVUQvOL7U0hStqJlMjk5", // Replace with actual client_secret
           grant_type: "password",
-          username: "mumufariha21@gmail.com", // Replace with your email
-          password: "Aa95580", // Replace with your password
+          username: "artisenleather@gmail.com", // Replace with your email
+          password: "Sagor@123", // Replace with your password
         }),
       }
     );

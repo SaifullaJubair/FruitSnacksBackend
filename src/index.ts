@@ -23,6 +23,7 @@ const corsOptions = {
     "https://www.artisenleather.com",
     "https://admin.artisenleather.com",
     "https://www.admin.artisenleather.com",
+    "https://artisan-lather-frontend.vercel.app"
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
