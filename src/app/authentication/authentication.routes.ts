@@ -4,6 +4,7 @@ import {
   deleteAAuthenticationInfo,
   findAllAuthentication,
   findAllDashboardAuthentication,
+  logoutUser,
   postAuthentication,
   updateAuthentication,
 } from "./authentication.controllers";
@@ -19,5 +20,6 @@ router
 
 // get all Authentication in dashboard
 router.route("/dashboard").get(findAllDashboardAuthentication);
+router.post("/logout", logoutUser);
 
 export const AuthenticationRoutes = router;

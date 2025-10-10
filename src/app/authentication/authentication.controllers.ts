@@ -3,8 +3,17 @@ import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import ApiError from "../../errors/ApiError";
 import { Types } from "mongoose";
-import { authenticationSearchableField, IAuthenticationInterface } from "./authentication.interface";
-import { deleteAuthenticationServices, findAllAuthenticationServices, findAllDashboardAuthenticationServices, postAuthenticationServices, updateAuthenticationServices } from "./authentication.services";
+import {
+  authenticationSearchableField,
+  IAuthenticationInterface,
+} from "./authentication.interface";
+import {
+  deleteAuthenticationServices,
+  findAllAuthenticationServices,
+  findAllDashboardAuthenticationServices,
+  postAuthenticationServices,
+  updateAuthenticationServices,
+} from "./authentication.services";
 import AuthenticationModel from "./authentication.model";
 
 // Add A Authentication
@@ -15,9 +24,8 @@ export const postAuthentication: RequestHandler = async (
 ): Promise<IAuthenticationInterface | any> => {
   try {
     const requestData = req.body;
-    const result: IAuthenticationInterface | {} = await postAuthenticationServices(
-      requestData
-    );
+    const result: IAuthenticationInterface | {} =
+      await postAuthenticationServices(requestData);
     if (result) {
       return sendResponse<IAuthenticationInterface>(res, {
         statusCode: httpStatus.OK,
@@ -44,7 +52,11 @@ export const findAllDashboardAuthentication: RequestHandler = async (
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
     const result: IAuthenticationInterface[] | any =
-      await findAllDashboardAuthenticationServices(limitNumber, skip, searchTerm);
+      await findAllDashboardAuthenticationServices(
+        limitNumber,
+        skip,
+        searchTerm
+      );
     const andCondition = [];
     if (searchTerm) {
       andCondition.push({
@@ -76,7 +88,8 @@ export const findAllAuthentication: RequestHandler = async (
   next: NextFunction
 ): Promise<IAuthenticationInterface | any> => {
   try {
-    const result: IAuthenticationInterface[] | any = await findAllAuthenticationServices();
+    const result: IAuthenticationInterface[] | any =
+      await findAllAuthenticationServices();
     return sendResponse<IAuthenticationInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -96,10 +109,8 @@ export const updateAuthentication: RequestHandler = async (
 ): Promise<IAuthenticationInterface | any> => {
   try {
     const requestData = req.body;
-    const result: IAuthenticationInterface | any = await updateAuthenticationServices(
-      requestData,
-      requestData?._id
-    );
+    const result: IAuthenticationInterface | any =
+      await updateAuthenticationServices(requestData, requestData?._id);
     if (result?.modifiedCount > 0) {
       return sendResponse<IAuthenticationInterface>(res, {
         statusCode: httpStatus.OK,
@@ -132,6 +143,26 @@ export const deleteAAuthenticationInfo = async (
     } else {
       throw new ApiError(400, "Authentication Delete Failed !");
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout Controller
+export const logoutUser: RequestHandler = (req, res, next) => {
+  try {
+    // Clear the cookie
+    res.cookie("artisan_lather_token", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      expires: new Date(0),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logged out successfully!",
+    });
   } catch (error) {
     next(error);
   }

@@ -112,6 +112,8 @@ const moduleRoutes = [
     path: "/authentication",
     route: AuthenticationRoutes,
   },
+
+  
   {
     path: "/payment_method",
     route: PaymentMethodRoutes,
