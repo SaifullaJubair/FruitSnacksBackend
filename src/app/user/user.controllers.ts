@@ -142,7 +142,13 @@ export const postLogUser: RequestHandler = async (
         }
       );
 
-      res.cookie("artisan_lather_token", token);
+      // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
+      res.cookie("artisan_lather_token", token, {
+        httpOnly: true, // নিরাপত্তার জন্য
+        secure: true, // https connection এর জন্য অবশ্যই true লাগবে
+        sameSite: "none", // cross-domain এর জন্য required
+        maxAge: 365 * 24 * 60 * 60 * 1000, // optional, 1 year
+      });
 
       return sendResponse<IUserInterface>(res, {
         statusCode: httpStatus.OK,
@@ -169,7 +175,13 @@ export const postLogUser: RequestHandler = async (
       }
     );
 
-    res.cookie("artisan_lather_token", token);
+    // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
+    res.cookie("artisan_lather_token", token, {
+      httpOnly: true, // নিরাপত্তার জন্য
+      secure: true, // https connection এর জন্য অবশ্যই true লাগবে
+      sameSite: "none", // cross-domain এর জন্য required
+      maxAge: 365 * 24 * 60 * 60 * 1000, // optional, 1 year
+    });
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
