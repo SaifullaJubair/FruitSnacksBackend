@@ -5,12 +5,9 @@ import {
   getSteadfastBalanceService,
   sendOrderToSteadfastService,
   trackSteadfastOrderService,
-} from "./steadfast.service";
-import sendResponse from "../../shared/sendResponse";
-import {
-  sendOrderToPathaoService,
-  trackPathaoOrderService,
-} from "./pathao.service";
+} from "../steadfast.service";
+import sendResponse from "../../../shared/sendResponse";
+import { sendOrderToPathaoService } from "../pathao.service";
 
 // ===================== STEADFAST =====================
 
@@ -108,21 +105,21 @@ export const sendToPathao = async (
 };
 
 // Pathao order track করো
-export const trackPathaoOrder = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  try {
-    const { consignment_id } = req.params;
-    const result = await trackPathaoOrderService(consignment_id);
-    return sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      message: "Pathao Tracking Info",
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+// export const trackPathaoOrder = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ) => {
+//   try {
+//     const { consignment_id } = req.params;
+//     const result = await trackPathaoOrderService(consignment_id);
+//     return sendResponse(res, {
+//       statusCode: httpStatus.OK,
+//       success: true,
+//       message: "Pathao Tracking Info",
+//       data: result,
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };

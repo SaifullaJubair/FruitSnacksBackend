@@ -28,7 +28,7 @@ import { QuestionRoutes } from "../app/question/question.routes";
 import { OfferRoutes } from "../app/offer/offer.routes";
 import { OfferOrderRoutes } from "../app/offerOrder/offerOrder.routes";
 import { DashboardRoutes } from "../app/dashboard/dashboard.routes";
-import { CourierRoutes } from "../app/order/courier.routes";
+import { CourierRoutes } from "../app/order/courier/courier.routes";
 import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
 
 const router = express.Router();

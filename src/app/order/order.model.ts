@@ -132,6 +132,20 @@ const orderSchema = new Schema<IOrderInterface>(
     },
     steadfast_status: {
       type: String,
+      enum: [
+        "in_review",
+        "pending",
+        "delivered_approval_pending",
+        "partial_delivered_approval_pending",
+        "cancelled_approval_pending",
+        "unknown_approval_pending",
+        "delivered",
+        "partial_delivered",
+        "cancelled",
+        "hold",
+        "unknown",
+      ],
+      default: "in_review",
     },
     steadfast_tracking_message: {
       type: String,

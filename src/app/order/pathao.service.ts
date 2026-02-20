@@ -95,6 +95,11 @@ export const sendOrderToPathaoService = async (
       consignment_id: consignment?.consignment_id,
       tracking_code: consignment?.order_tracking_code,
       courier_type: "pathao",
+      order_status: "processing", // ✅ এটা যোগ করো
+      processing_time:
+        new Date().toISOString().split("T")[0] +
+        " " +
+        new Date().toLocaleTimeString(), // ✅ এটা যোগ করো
     },
     { session, runValidators: true },
   );
@@ -103,17 +108,3 @@ export const sendOrderToPathaoService = async (
 };
 
 // Pathao tracking
-export const trackPathaoOrderService = async (
-  consignment_id: string,
-): Promise<any> => {
-  const accessToken = await getPathaoAccessToken();
-  const response = await axios.get(
-    `${PATHAO_BASE_URL}/orders/${consignment_id}/info`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  );
-  return response.data;
-};

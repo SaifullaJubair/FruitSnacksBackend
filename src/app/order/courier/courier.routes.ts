@@ -1,11 +1,11 @@
 import express from "express";
-import { verifyToken } from "../../middlewares/verify.token";
+import { verifyToken } from "../../../middlewares/verify.token";
 import {
   sendToSteadfast,
   trackSteadfastOrder,
   getSteadfastBalance,
   sendToPathao,
-  trackPathaoOrder,
+  // trackPathaoOrder,
 } from "./courier.controller";
 
 const router = express.Router();
@@ -35,8 +35,8 @@ router
   .post(verifyToken("order_update"), sendToPathao);
 
 // Pathao order track
-router
-  .route("/pathao/track/:consignment_id")
-  .get(verifyToken("order_show"), trackPathaoOrder);
+// router
+//   .route("/pathao/track/:consignment_id")
+//   .get(verifyToken("order_show"), trackPathaoOrder);
 
 export const CourierRoutes = router;

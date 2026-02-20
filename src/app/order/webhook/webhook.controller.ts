@@ -1,18 +1,26 @@
 // webhook.controller.ts
 import { Request, Response } from "express";
 import OrderModel from "../order.model";
+import OrderProductModel from "../../orderProducts/orderProduct.model";
+import ProductModel from "../../product/product.model";
+import VariationModel from "../../variation/variation.model";
 
 // Steadfast status → আমাদের order_status mapping
 
+// webhook.controller.ts
 const steadfastStatusMap: Record<string, string> = {
-  pending: "processing",
   in_review: "processing",
-  partially_delivered: "delivered",
+  pending: "shipped",
+  hold: "shipped",
+  delivered_approval_pending: "shipped",
+  partial_delivered_approval_pending: "shipped",
+  cancelled_approval_pending: "shipped",
+  unknown_approval_pending: "shipped",
   delivered: "delivered",
+  partial_delivered: "delivered",
   cancelled: "cancel",
   unknown: "processing",
 };
-
 export const steadfastWebhookController = async (
   req: Request,
   res: Response,
@@ -54,10 +62,40 @@ export const steadfastWebhookController = async (
           new Date().toLocaleTimeString();
 
         if (newOrderStatus === "processing") {
-          updateData.processing_time = timeNow;
+          if (!order.processing_time) {
+            updateData.processing_time = timeNow;
+          }
         }
+        if (newOrderStatus === "shipped") {
+          if (!order.shipped_time) {
+            updateData.shipped_time = timeNow;
+          }
+        }
+
         if (newOrderStatus === "delivered") {
           updateData.delivered_time = timeNow;
+
+          // শুধু fully delivered হলে quantity কমাও
+          // partial_delivered এ কমাবে না
+          if (normalizedStatus === "delivered") {
+            const orderProducts = await OrderProductModel.find({
+              order_id: order._id.toString(),
+            });
+
+            for (const op of orderProducts) {
+              if (!op.variation_id) {
+                await ProductModel.updateOne(
+                  { _id: op.product_id },
+                  { $inc: { product_quantity: -op.product_quantity } },
+                );
+              } else {
+                await VariationModel.updateOne(
+                  { _id: op.variation_id },
+                  { $inc: { variation_quantity: -op.product_quantity } },
+                );
+              }
+            }
+          }
         }
         if (newOrderStatus === "cancel") {
           updateData.cancel_time = timeNow;
