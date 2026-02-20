@@ -118,10 +118,28 @@ const orderSchema = new Schema<IOrderInterface>(
     delivery_fee: {
       type: Number,
     },
+    // new thing
+
+    courier_type: {
+      type: String,
+      enum: ["pathao", "steadfast"],
+    },
+    steadfast_consignment_id: {
+      type: String,
+    },
+    steadfast_tracking_code: {
+      type: String,
+    },
+    steadfast_status: {
+      type: String,
+    },
+    steadfast_tracking_message: {
+      type: String,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const OrderModel = model<IOrderInterface>("orders", orderSchema);

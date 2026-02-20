@@ -28,6 +28,8 @@ import { QuestionRoutes } from "../app/question/question.routes";
 import { OfferRoutes } from "../app/offer/offer.routes";
 import { OfferOrderRoutes } from "../app/offerOrder/offerOrder.routes";
 import { DashboardRoutes } from "../app/dashboard/dashboard.routes";
+import { CourierRoutes } from "../app/order/courier.routes";
+import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
 
 const router = express.Router();
 
@@ -67,6 +69,14 @@ const moduleRoutes = [
   {
     path: "/order",
     route: OrderRoutes,
+  },
+  {
+    path: "/webhook",
+    route: WebhookRoutes,
+  },
+  {
+    path: "/courier",
+    route: CourierRoutes,
   },
   {
     path: "/review",
@@ -113,7 +123,6 @@ const moduleRoutes = [
     route: AuthenticationRoutes,
   },
 
-  
   {
     path: "/payment_method",
     route: PaymentMethodRoutes,
