@@ -8,7 +8,7 @@ import VariationModel from "../../variation/variation.model";
 // Steadfast status → আমাদের order_status mapping
 
 // webhook.controller.ts
-const steadfastStatusMap: Record<string, string> = {
+export const steadfastStatusMap: Record<string, string> = {
   in_review: "processing",
   pending: "shipped",
   hold: "shipped",
