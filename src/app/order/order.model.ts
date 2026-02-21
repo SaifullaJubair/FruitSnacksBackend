@@ -112,6 +112,10 @@ const orderSchema = new Schema<IOrderInterface>(
       required: true,
       type: String,
     },
+    // Pathao status
+    pathao_status: {
+      type: String,
+    },
     consignment_id: {
       type: String,
     },

@@ -36,6 +36,7 @@ export interface IOrderInterface {
   pathao_city_name: string;
   pathao_zone_id: number;
   pathao_zone_name: string;
+  pathao_status?: string;
   consignment_id?: string;
   delivery_fee?: number;
   courier_type?: "pathao" | "steadfast";

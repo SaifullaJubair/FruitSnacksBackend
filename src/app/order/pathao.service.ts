@@ -7,7 +7,7 @@ import ProductModel from "../product/product.model";
 import VariationModel from "../variation/variation.model";
 
 const PATHAO_BASE_URL =
-  process.env.PATHAO_BASE_URL || "https://merchant.pathao.com/api/v1";
+  process.env.PATHAO_BASE_URL || "https://api-hermes.pathao.com/aladdin/api/v1";
 const PATHAO_CLIENT_ID = process.env.PATHAO_CLIENT_ID!;
 const PATHAO_CLIENT_SECRET = process.env.PATHAO_CLIENT_SECRET!;
 const PATHAO_CLIENT_EMAIL = process.env.PATHAO_CLIENT_EMAIL!;

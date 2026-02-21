@@ -61,17 +61,14 @@ export const getACustomerAllOrderServices = async (
     if (searchTerm) {
       andCondition.push({
         $or: orderSearchableField?.map((field) => ({
-          [field]: {
-            $regex: searchTerm,
-            $options: "i",
-          },
+          [field]: { $regex: searchTerm, $options: "i" },
         })),
       });
     }
     andCondition.push({ customer_id });
     const whereCondition =
       andCondition.length > 0 ? { $and: andCondition } : {};
-    // Fetch all orders for the given customer_id
+
     const getAllOrder = await OrderModel.find(whereCondition)
       .populate("customer_id")
       .sort({ createdAt: -1 })
@@ -91,6 +88,7 @@ export const getDashboardOrderServices = async (
   skip: number,
   searchTerm: any,
   order_status: any,
+  courier_type?: any,
 ): Promise<any> => {
   const andCondition: any[] = [];
 
@@ -104,6 +102,11 @@ export const getDashboardOrderServices = async (
 
   if (order_status && order_status !== "undefined" && order_status !== "null") {
     andCondition.push({ order_status });
+  }
+
+  // ✅ courier_type filter (Pathao tab এর জন্য)
+  if (courier_type && courier_type !== "undefined" && courier_type !== "null") {
+    andCondition.push({ courier_type });
   }
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
@@ -131,7 +134,7 @@ export const getDashboardOrderServices = async (
   );
 };
 
-// Get Steadfast Orders (courier_type = steadfast, steadfast_status filter support)
+// Get Steadfast Orders
 export const getSteadfastOrderServices = async (
   limit: number,
   skip: number,
@@ -155,6 +158,57 @@ export const getSteadfastOrderServices = async (
     steadfast_status !== "all"
   ) {
     andCondition.push({ steadfast_status });
+  }
+
+  const whereCondition = { $and: andCondition };
+
+  const getAllOrder = await OrderModel.find(whereCondition)
+    .populate([
+      {
+        path: "customer_id",
+        model: "users",
+        select: "-user_password -user_otp",
+      },
+    ])
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  return await Promise.all(
+    getAllOrder?.map(async (order: any) => {
+      const plainOrder = order?.toObject();
+      const orderProduct = await OrderProductModel.find({
+        order_id: plainOrder?._id?.toString(),
+      }).select("product_id variation_id product_quantity");
+      return { ...plainOrder, order_products: orderProduct };
+    }),
+  );
+};
+
+// ✅ Get Pathao Orders
+export const getPathaoOrderServices = async (
+  limit: number,
+  skip: number,
+  searchTerm: any,
+  pathao_status?: any,
+): Promise<any> => {
+  const andCondition: any[] = [{ courier_type: "pathao" }];
+
+  if (searchTerm) {
+    andCondition.push({
+      $or: orderSearchableField?.map((field) => ({
+        [field]: { $regex: searchTerm, $options: "i" },
+      })),
+    });
+  }
+
+  if (
+    pathao_status &&
+    pathao_status !== "undefined" &&
+    pathao_status !== "null" &&
+    pathao_status !== "all"
+  ) {
+    andCondition.push({ pathao_status });
   }
 
   const whereCondition = { $and: andCondition };
