@@ -8,6 +8,7 @@ import {
   getAOrderWithOrderProductsServices,
   getDashboardOrderServices,
   getSteadfastOrderServices,
+  getPathaoOrderServices,
   getOrderTrackingInfoService,
   postOrderServices,
   updateOrderServices,
@@ -399,7 +400,7 @@ export const getDashboardOrder: RequestHandler = async (
 };
 
 // ================================================================
-// GET Steadfast Orders (tab wise steadfast_status filter)
+// GET Steadfast Orders
 // ================================================================
 export const getSteadfastOrders: RequestHandler = async (
   req: Request,
@@ -450,9 +451,59 @@ export const getSteadfastOrders: RequestHandler = async (
 };
 
 // ================================================================
-// PATCH Cancel Steadfast Order (with validation)
+// ✅ GET Pathao Orders
 // ================================================================
+export const getPathaoOrders: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { page, limit, searchTerm, pathao_status }: any = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
+    const result = await getPathaoOrderServices(
+      limitNumber,
+      skip,
+      searchTerm,
+      pathao_status,
+    );
+
+    const andCondition: any[] = [{ courier_type: "pathao" }];
+    if (searchTerm) {
+      andCondition.push({
+        $or: orderSearchableField?.map((field) => ({
+          [field]: { $regex: searchTerm, $options: "i" },
+        })),
+      });
+    }
+    if (
+      pathao_status &&
+      pathao_status !== "undefined" &&
+      pathao_status !== "null" &&
+      pathao_status !== "all"
+    ) {
+      andCondition.push({ pathao_status });
+    }
+    const total = await OrderModel.countDocuments({ $and: andCondition });
+
+    return sendResponse<IOrderInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Pathao Orders Found Successfully !",
+      data: result,
+      totalData: total,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ================================================================
+// PATCH Cancel Steadfast Order
+// ================================================================
 export const cancelSteadfastOrder: RequestHandler = async (
   req: Request,
   res: Response,
@@ -460,14 +511,11 @@ export const cancelSteadfastOrder: RequestHandler = async (
 ): Promise<any> => {
   const session = await mongoose.startSession();
   session.startTransaction();
-
   try {
     const { order_id } = req.params;
     const order: any = await OrderModel.findById(order_id).session(session);
-
     if (!order) throw new ApiError(404, "Order Not Found!");
 
-    // Steadfast status check
     if (order.courier_type === "steadfast") {
       const blockList = [
         "delivered_approval_pending",
@@ -507,14 +555,12 @@ export const cancelSteadfastOrder: RequestHandler = async (
       { session, runValidators: true },
     );
 
-    if (result.modifiedCount === 0) {
+    if (result.modifiedCount === 0)
       throw new ApiError(400, "Order Cancel Failed!");
-    }
 
     await session.commitTransaction();
     session.endSession();
 
-    // pending হলে warning সহ message
     const message =
       order.steadfast_status === "pending"
         ? "Order Cancelled! Please also cancel manually from Steadfast portal."
@@ -531,73 +577,7 @@ export const cancelSteadfastOrder: RequestHandler = async (
     next(error);
   }
 };
-// export const cancelSteadfastOrder: RequestHandler = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction,
-// ): Promise<any> => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
 
-//   try {
-//     const { order_id } = req.params;
-//     const order: any = await OrderModel.findById(order_id).session(session);
-
-//     if (!order) throw new ApiError(404, "Order Not Found!");
-
-//     if (order.courier_type === "steadfast") {
-//       if (order.steadfast_status === "in_review") {
-
-//       } else if (order.steadfast_status === "pending") {
-//         // cancel করো কিন্তু warning দাও
-//         // response এ message দাও যে Steadfast portal থেকেও manually cancel করতে হবে
-//       } else {
-//         // বাকি সব status এ block করো
-//         throw new ApiError(
-//           400,
-//           "Cannot cancel! Order is already in transit or delivered.",
-//         );
-//       }
-//     }
-
-//     const cancelTime =
-//       new Date().toISOString().split("T")[0] +
-//       " " +
-//       new Date().toLocaleTimeString();
-
-//     // Update order
-//     const result = await OrderModel.updateOne(
-//       { _id: order_id },
-//       {
-//         order_status: "cancel",
-//         steadfast_status:
-//           order.courier_type === "steadfast"
-//             ? "cancelled"
-//             : order.steadfast_status,
-//         cancel_time: cancelTime,
-//         order_updated_by: (req as any).userId, // from verifyToken middleware
-//       },
-//       { session, runValidators: true },
-//     );
-
-//     if (result.modifiedCount === 0) {
-//       throw new ApiError(400, "Order Cancel Failed!");
-//     }
-
-//     await session.commitTransaction();
-//     session.endSession();
-
-//     return sendResponse<IOrderInterface>(res, {
-//       statusCode: httpStatus.OK,
-//       success: true,
-//       message: "Order Cancelled Successfully!",
-//     });
-//   } catch (error) {
-//     await session.abortTransaction();
-//     session.endSession();
-//     next(error);
-//   }
-// };
 // ================================================================
 // GET A Order Details With Order Products
 // ================================================================
@@ -623,9 +603,6 @@ export const getAOrderWithOrderProducts: RequestHandler = async (
 
 // ================================================================
 // PATCH Update Order
-// Admin শুধু cancel করতে পারবে manually
-// delivered হলে product/variation quantity কমবে
-// Pathao/Steadfast সব courier.controller থেকে handle হবে
 // ================================================================
 export const updateOrder: RequestHandler = async (
   req: Request,
@@ -641,7 +618,6 @@ export const updateOrder: RequestHandler = async (
       " " +
       new Date().toLocaleTimeString();
 
-    // সময় auto set করো
     if (requestData?.order_status === "processing")
       requestData.processing_time = timeNow;
     if (requestData?.order_status === "shipped")
@@ -661,7 +637,6 @@ export const updateOrder: RequestHandler = async (
     if (result?.modifiedCount === 0)
       throw new ApiError(400, "Order Update Failed !");
 
-    // Delivered হলে product/variation quantity কমাও
     if (requestData?.order_status === "delivered") {
       const { order_products } = requestData;
       for (const order_product of order_products || []) {

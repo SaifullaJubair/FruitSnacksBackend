@@ -5,6 +5,7 @@ import {
   getAOrderWithOrderProducts,
   getDashboardOrder,
   getSteadfastOrders,
+  getPathaoOrders,
   getOrderTrackingInfo,
   postOrder,
   postSingleOrder,
@@ -24,21 +25,24 @@ router
 // Single order (guest checkout)
 router.route("/single_order").post(postSingleOrder);
 
-// Dashboard orders (all + filter by order_status)
-// GET /order/dashboard?order_status=pending&page=1&limit=10
+// Dashboard orders
 router.route("/dashboard").get(verifyToken("order_show"), getDashboardOrder);
 
-// Steadfast orders (tab wise filter by steadfast_status)
-// GET /order/steadfast?steadfast_status=in_review&page=1&limit=10
-// steadfast_status: all | pending | in_review | delivered | partial_delivered | cancelled
+// Steadfast orders
 router.route("/steadfast").get(verifyToken("order_show"), getSteadfastOrders);
 router
   .route("/steadfast/cancel/:order_id")
   .patch(verifyToken("order_update"), cancelSteadfastOrder);
-// Order tracking (frontend)
+
+// ✅ Pathao orders
+router.route("/pathao").get(verifyToken("order_show"), getPathaoOrders);
+
+// Order tracking (frontend — no auth)
 router.route("/order_tracking").post(getOrderTrackingInfo);
 
 // Order details with products
+// ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard
+// সব /:order_id হিসেবে match হয়ে যাবে এবং Cast Error দেবে
 router.route("/:order_id").get(getAOrderWithOrderProducts);
 
 export const OrderRoutes = router;

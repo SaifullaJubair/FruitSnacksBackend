@@ -12,6 +12,7 @@ import {
   sendOrderToPathaoService,
   trackPathaoOrderService,
   syncPathaoOrderService,
+  bulkSendToPathaoService,
 } from "../pathao.service";
 import sendResponse from "../../../shared/sendResponse";
 
@@ -186,6 +187,36 @@ export const syncPathaoOrder = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Pathao status sync সফল!",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkSendToPathao = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { order_ids } = req.body;
+    if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "order_ids array required" });
+    }
+    if (order_ids.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: "Please send less than 50 orders at a time.",
+      });
+    }
+    const result = await bulkSendToPathaoService(order_ids);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: `${result.success.length} Success, ${result.failed.length} Failed।`,
       data: result,
     });
   } catch (error) {

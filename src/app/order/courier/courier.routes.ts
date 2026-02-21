@@ -9,6 +9,7 @@ import {
   syncSteadfastOrder,
   trackPathaoOrder,
   syncPathaoOrder,
+  bulkSendToPathao,
 } from "./courier.controller";
 
 const router = express.Router();
@@ -40,6 +41,10 @@ router
 router
   .route("/pathao/send/:order_id")
   .post(verifyToken("order_update"), sendToPathao);
+
+router
+  .route("/pathao/bulk-send")
+  .post(verifyToken("order_update"), bulkSendToPathao);
 
 router
   .route("/pathao/sync/:order_id")

@@ -59,21 +59,40 @@ const getPathaoAccessToken = async (): Promise<string> => {
 // Pathao order status → আমাদের order_status mapping
 // ================================================================
 export const pathaoStatusMap: Record<string, string> = {
+  // Processing statuses
   Pending: "processing",
+  "Order Created": "processing",
+  "Order Updated": "processing",
   "Pickup Requested": "processing",
   "Pickup Scheduled": "processing",
-  "Picked Up": "shipped",
+  "Assigned For Pickup": "processing",
   "Pickup Failed": "processing",
+  "Pickup Cancel": "cancel", // ✅ Pathao portal থেকে cancel
+  "Pickup Cancelled": "cancel", // ✅ alternate spelling
+  Exchange: "processing",
+  // Shipped statuses
+  Pickup: "shipped",
+  "Picked Up": "shipped",
   "At the Sorting Hub": "shipped",
   "In Transit": "shipped",
   "Received at Last Mile Hub": "shipped",
+  "Assigned for Delivery": "shipped",
   "Out for Delivery": "shipped",
-  Delivered: "delivered",
-  "Partially Delivered": "delivered",
-  Returned: "return",
-  "Partially Returned": "return",
-  Cancelled: "cancel",
+  "On Hold": "shipped",
   Hold: "shipped",
+  // Delivered statuses
+  Delivered: "delivered",
+  "Partial Delivery": "delivered",
+  "Partially Delivered": "delivered",
+  // Return statuses
+  Return: "return",
+  Returned: "return",
+  "Paid Return": "return",
+  "Partially Returned": "return",
+  "Delivery Failed": "cancel",
+  // Cancelled
+  Cancelled: "cancel",
+  "Delivery Cancelled": "cancel",
 };
 
 // ================================================================
@@ -311,5 +330,142 @@ export const syncPathaoOrderService = async (
       400,
       error.response?.data?.message || "Pathao Sync Failed!",
     );
+  }
+};
+
+// ================================================================
+// Pathao Bulk Send — একসাথে multiple order পাঠাও
+// ================================================================
+export const bulkSendToPathaoService = async (
+  order_ids: string[],
+): Promise<{ success: any[]; failed: any[] }> => {
+  const successList: any[] = [];
+  const failedList: any[] = [];
+
+  // সব order fetch করো
+  const orders = await OrderModel.find({
+    _id: { $in: order_ids },
+  }).populate("customer_id");
+
+  // ── Validation — কোনটা পাঠানো যাবে না ──────────────────────
+  const validOrders: any[] = [];
+
+  for (const order of orders) {
+    const o = order as any;
+
+    if (o.courier_type === "pathao" && o.consignment_id) {
+      failedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: "আগেই Pathao তে পাঠানো হয়েছে",
+      });
+      continue;
+    }
+    if (["processing", "shipped", "delivered"].includes(o.order_status)) {
+      failedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: `Status "${o.order_status}" — পাঠানো যাবে না`,
+      });
+      continue;
+    }
+    if (!o.pathao_city_id || !o.pathao_zone_id) {
+      failedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: "Pathao city/zone সেট করা নেই",
+      });
+      continue;
+    }
+    validOrders.push(o);
+  }
+
+  if (validOrders.length === 0) {
+    return { success: successList, failed: failedList };
+  }
+
+  // ── Token একবার নাও ──────────────────────────────────────────
+  const accessToken = await getPathaoAccessToken();
+  const storeId = Number(process.env.PATHAO_STORE_ID);
+
+  // ── Pathao bulk payload বানাও ────────────────────────────────
+  const bulkPayload = {
+    orders: validOrders.map((o) => ({
+      store_id: storeId,
+      merchant_order_id: o.invoice_id,
+      recipient_name: (o.customer_id as any)?.user_name || "Customer",
+      recipient_phone: o.customer_phone,
+      recipient_address: o.billing_address,
+      recipient_city: o.pathao_city_id,
+      recipient_zone: o.pathao_zone_id,
+      delivery_type: 48,
+      item_type: 2,
+      special_instruction: `Invoice: ${o.invoice_id}`,
+      item_quantity: 1,
+      item_weight: 0.5,
+      amount_to_collect: o.grand_total_amount,
+      item_description: `Order ${o.invoice_id}`,
+    })),
+  };
+
+  console.log("Pathao bulk payload:", JSON.stringify(bulkPayload));
+
+  try {
+    // ── Pathao bulk API call ─────────────────────────────────────
+    // Pathao bulk response: 202 — async processing
+    // তাই আমরা DB তে "processing" set করব, পরে sync দিয়ে consignment_id আনব
+    const response = await axios.post(
+      `${PATHAO_BASE_URL}/orders/bulk`,
+      bulkPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          Accept: "application/json",
+        },
+      },
+    );
+
+    console.log("Pathao bulk response:", response.data);
+
+    // Pathao bulk API 202 দেয় — মানে accepted, async process হবে
+    // সব valid order কে processing এ set করো
+    const timeNow =
+      new Date().toISOString().split("T")[0] +
+      " " +
+      new Date().toLocaleTimeString();
+
+    for (const o of validOrders) {
+      await OrderModel.updateOne(
+        { _id: o._id },
+        {
+          courier_type: "pathao",
+          order_status: "processing",
+          processing_time: timeNow,
+          pathao_status: "Pending",
+        },
+      );
+      successList.push({ order_id: o._id, invoice_id: o.invoice_id });
+    }
+
+    return { success: successList, failed: failedList };
+  } catch (error: any) {
+    console.error("Pathao bulk error:", error.response?.data);
+
+    if (error.response?.status === 401) {
+      cachedToken = null;
+      tokenExpiry = 0;
+    }
+
+    // bulk fail হলে সব valid order কে failed এ দাও
+    for (const o of validOrders) {
+      failedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: error.response?.data?.message || "Pathao Bulk Send Failed!",
+      });
+    }
+
+    return { success: successList, failed: failedList };
   }
 };
