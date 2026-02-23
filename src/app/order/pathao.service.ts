@@ -608,7 +608,83 @@ export const bulkSyncPathaoOrdersService = async (): Promise<{
   return { success: successList, failed: failedList, skipped: skippedList };
 };
 
+// ================================================================
+// Pathao Order Cancel
+// শুধু "Pending" status এ API দিয়ে cancel করা যাবে
+// অন্য status এ error দেবে — portal থেকে manually করতে হবে
+// ================================================================
 
+export const cancelPathaoOrderService = async (
+  order_id: string,
+): Promise<any> => {
+  const order: any = await OrderModel.findById(order_id);
+  if (!order) throw new ApiError(404, "Order Not Found!");
+
+  if (order.courier_type !== "pathao") {
+    throw new ApiError(400, "এই order Pathao courier এর না।");
+  }
+
+  if (!order.consignment_id) {
+    throw new ApiError(400, "Consignment ID নেই — Pathao তে পাঠানো হয়নি।");
+  }
+
+  // Pending ছাড়া cancel করা যাবে না
+  if (order.pathao_status && order.pathao_status !== "Pending") {
+    throw new ApiError(
+      400,
+      `Pathao status "${order.pathao_status}" — API দিয়ে cancel করা যাবে না। Pathao portal থেকে manually cancel করুন।`,
+    );
+  }
+
+  const accessToken = await getPathaoAccessToken();
+
+  try {
+    const response = await axios.put(
+      `${PATHAO_BASE_URL}/orders/${order.consignment_id}/cancel`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      },
+    );
+
+    console.log("Pathao cancel response:", response.data);
+
+    // Cancel সফল হলে DB update করো
+    const timeNow =
+      new Date().toISOString().split("T")[0] +
+      " " +
+      new Date().toLocaleTimeString();
+
+    await OrderModel.updateOne(
+      { _id: order_id },
+      {
+        $set: {
+          order_status: "cancel",
+          pathao_status: "Pickup Cancel",
+          cancel_time: timeNow,
+        },
+      },
+    );
+
+    return { message: "Pathao তে Order Cancel সফল!" };
+  } catch (error: any) {
+    console.error("Pathao cancel error:", error.response?.data);
+
+    if (error.response?.status === 401) {
+      cachedToken = null;
+      tokenExpiry = 0;
+    }
+
+    // Pathao থেকে specific error আসলে সেটা দেখাও
+    const errMsg =
+      error.response?.data?.message || error.message || "Pathao Cancel Failed!";
+    throw new ApiError(400, errMsg);
+  }
+};
 
 // ================================================================
 // Pathao Bulk Send- with builk api — একসাথে multiple order পাঠাও
