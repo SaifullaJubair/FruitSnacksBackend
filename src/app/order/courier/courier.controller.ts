@@ -14,6 +14,7 @@ import {
   syncPathaoOrderService,
   bulkSendToPathaoService,
   bulkSyncPathaoOrdersService,
+  cancelPathaoOrderService,
 } from "../pathao.service";
 import sendResponse from "../../../shared/sendResponse";
 
@@ -236,6 +237,25 @@ export const bulkSyncPathaoOrders = async (
       statusCode: httpStatus.OK,
       success: true,
       message: `✅ ${result.success.length} synced, ❌ ${result.failed.length} failed, ⏭️ ${result.skipped.length} skipped`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cancelPathaoOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { order_id } = req.params;
+    const result = await cancelPathaoOrderService(order_id);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Pathao Order Cancel সফল!",
       data: result,
     });
   } catch (error) {
