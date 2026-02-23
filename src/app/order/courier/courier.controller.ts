@@ -13,6 +13,8 @@ import {
   trackPathaoOrderService,
   syncPathaoOrderService,
   bulkSendToPathaoService,
+  bulkSyncPathaoOrdersService,
+  cancelPathaoOrderService,
 } from "../pathao.service";
 import sendResponse from "../../../shared/sendResponse";
 
@@ -209,14 +211,51 @@ export const bulkSendToPathao = async (
     if (order_ids.length > 50) {
       return res.status(400).json({
         success: false,
-        message: "Please send less than 50 orders at a time.",
+        message: "একসাথে সর্বোচ্চ ৫০টা order পাঠানো যাবে।",
       });
     }
     const result = await bulkSendToPathaoService(order_ids);
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
-      message: `${result.success.length} Success, ${result.failed.length} Failed।`,
+      message: `${result.success.length} টা সফল, ${result.failed.length} টা ব্যর্থ।`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkSyncPathaoOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const result = await bulkSyncPathaoOrdersService();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: `✅ ${result.success.length} synced, ❌ ${result.failed.length} failed, ⏭️ ${result.skipped.length} skipped`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cancelPathaoOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { order_id } = req.params;
+    const result = await cancelPathaoOrderService(order_id);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Pathao Order Cancel সফল!",
       data: result,
     });
   } catch (error) {
