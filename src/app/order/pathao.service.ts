@@ -499,6 +499,118 @@ export const bulkSendToPathaoService = async (
 };
 
 // ================================================================
+// Pathao Bulk Sync — সব consignment_id আছে এমন order sync করো
+// ================================================================
+export const bulkSyncPathaoOrdersService = async (): Promise<{
+  success: any[];
+  failed: any[];
+  skipped: any[];
+}> => {
+  const successList: any[] = [];
+  const failedList: any[] = [];
+  const skippedList: any[] = [];
+
+  // সব Pathao order আনো যেগুলো delivered/return/cancel না
+  const orders = await OrderModel.find({
+    courier_type: "pathao",
+    order_status: { $nin: ["delivered", "return", "cancel"] },
+  });
+
+  const accessToken = await getPathaoAccessToken();
+  const timeNow =
+    new Date().toISOString().split("T")[0] +
+    " " +
+    new Date().toLocaleTimeString();
+
+  for (const order of orders) {
+    const o = order as any;
+
+    // consignment_id নেই → skip
+    if (!o.consignment_id) {
+      skippedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: "Consignment ID নেই",
+      });
+      continue;
+    }
+
+    try {
+      const response = await axios.get(
+        `${PATHAO_BASE_URL}/orders/${o.consignment_id}/info`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+        },
+      );
+
+      const pathaoStatus = response.data?.data?.order_status;
+      if (!pathaoStatus) {
+        failedList.push({
+          order_id: o._id,
+          invoice_id: o.invoice_id,
+          reason: "Pathao থেকে status পাওয়া যায়নি",
+        });
+        continue;
+      }
+
+      const newOrderStatus = pathaoStatusMap[pathaoStatus];
+      const updateData: any = { pathao_status: pathaoStatus };
+
+      if (newOrderStatus) {
+        updateData.order_status = newOrderStatus;
+        if (newOrderStatus === "shipped" && !o.shipped_time)
+          updateData.shipped_time = timeNow;
+        if (newOrderStatus === "cancel" && !o.cancel_time)
+          updateData.cancel_time = timeNow;
+        if (newOrderStatus === "return" && !o.return_time)
+          updateData.return_time = timeNow;
+        if (newOrderStatus === "delivered" && o.order_status !== "delivered") {
+          updateData.delivered_time = timeNow;
+          // inventory কমাও
+          const orderProducts = await OrderProductModel.find({
+            order_id: o._id.toString(),
+          });
+          for (const op of orderProducts) {
+            if (!op.variation_id) {
+              await ProductModel.updateOne(
+                { _id: op.product_id },
+                { $inc: { product_quantity: -op.product_quantity } },
+              );
+            } else {
+              await VariationModel.updateOne(
+                { _id: op.variation_id },
+                { $inc: { variation_quantity: -op.product_quantity } },
+              );
+            }
+          }
+        }
+      }
+
+      await OrderModel.updateOne({ _id: o._id }, { $set: updateData });
+      successList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        pathao_status: pathaoStatus,
+        order_status: newOrderStatus,
+      });
+    } catch (err: any) {
+      failedList.push({
+        order_id: o._id,
+        invoice_id: o.invoice_id,
+        reason: err.message || "Sync failed",
+      });
+    }
+  }
+
+  return { success: successList, failed: failedList, skipped: skippedList };
+};
+
+
+
+// ================================================================
 // Pathao Bulk Send- with builk api — একসাথে multiple order পাঠাও
 // ================================================================
 // export const bulkSendToPathaoService = async (
@@ -634,112 +746,3 @@ export const bulkSendToPathaoService = async (
 //     return { success: successList, failed: failedList };
 //   }
 // };
-// ================================================================
-// Pathao Bulk Sync — সব consignment_id আছে এমন order sync করো
-// ================================================================
-export const bulkSyncPathaoOrdersService = async (): Promise<{
-  success: any[];
-  failed: any[];
-  skipped: any[];
-}> => {
-  const successList: any[] = [];
-  const failedList: any[] = [];
-  const skippedList: any[] = [];
-
-  // সব Pathao order আনো যেগুলো delivered/return/cancel না
-  const orders = await OrderModel.find({
-    courier_type: "pathao",
-    order_status: { $nin: ["delivered", "return", "cancel"] },
-  });
-
-  const accessToken = await getPathaoAccessToken();
-  const timeNow =
-    new Date().toISOString().split("T")[0] +
-    " " +
-    new Date().toLocaleTimeString();
-
-  for (const order of orders) {
-    const o = order as any;
-
-    // consignment_id নেই → skip
-    if (!o.consignment_id) {
-      skippedList.push({
-        order_id: o._id,
-        invoice_id: o.invoice_id,
-        reason: "Consignment ID নেই",
-      });
-      continue;
-    }
-
-    try {
-      const response = await axios.get(
-        `${PATHAO_BASE_URL}/orders/${o.consignment_id}/info`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-          },
-        },
-      );
-
-      const pathaoStatus = response.data?.data?.order_status;
-      if (!pathaoStatus) {
-        failedList.push({
-          order_id: o._id,
-          invoice_id: o.invoice_id,
-          reason: "Pathao থেকে status পাওয়া যায়নি",
-        });
-        continue;
-      }
-
-      const newOrderStatus = pathaoStatusMap[pathaoStatus];
-      const updateData: any = { pathao_status: pathaoStatus };
-
-      if (newOrderStatus) {
-        updateData.order_status = newOrderStatus;
-        if (newOrderStatus === "shipped" && !o.shipped_time)
-          updateData.shipped_time = timeNow;
-        if (newOrderStatus === "cancel" && !o.cancel_time)
-          updateData.cancel_time = timeNow;
-        if (newOrderStatus === "return" && !o.return_time)
-          updateData.return_time = timeNow;
-        if (newOrderStatus === "delivered" && o.order_status !== "delivered") {
-          updateData.delivered_time = timeNow;
-          // inventory কমাও
-          const orderProducts = await OrderProductModel.find({
-            order_id: o._id.toString(),
-          });
-          for (const op of orderProducts) {
-            if (!op.variation_id) {
-              await ProductModel.updateOne(
-                { _id: op.product_id },
-                { $inc: { product_quantity: -op.product_quantity } },
-              );
-            } else {
-              await VariationModel.updateOne(
-                { _id: op.variation_id },
-                { $inc: { variation_quantity: -op.product_quantity } },
-              );
-            }
-          }
-        }
-      }
-
-      await OrderModel.updateOne({ _id: o._id }, { $set: updateData });
-      successList.push({
-        order_id: o._id,
-        invoice_id: o.invoice_id,
-        pathao_status: pathaoStatus,
-        order_status: newOrderStatus,
-      });
-    } catch (err: any) {
-      failedList.push({
-        order_id: o._id,
-        invoice_id: o.invoice_id,
-        reason: err.message || "Sync failed",
-      });
-    }
-  }
-
-  return { success: successList, failed: failedList, skipped: skippedList };
-};
