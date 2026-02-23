@@ -112,16 +112,52 @@ const orderSchema = new Schema<IOrderInterface>(
       required: true,
       type: String,
     },
+    // Pathao status
+    pathao_status: {
+      type: String,
+    },
     consignment_id: {
       type: String,
     },
     delivery_fee: {
       type: Number,
     },
+    // new thing
+
+    courier_type: {
+      type: String,
+      enum: ["pathao", "steadfast"],
+    },
+    steadfast_consignment_id: {
+      type: String,
+    },
+    steadfast_tracking_code: {
+      type: String,
+    },
+    steadfast_status: {
+      type: String,
+      enum: [
+        "in_review",
+        "pending",
+        "delivered_approval_pending",
+        "partial_delivered_approval_pending",
+        "cancelled_approval_pending",
+        "unknown_approval_pending",
+        "delivered",
+        "partial_delivered",
+        "cancelled",
+        "hold",
+        "unknown",
+      ],
+      default: "in_review",
+    },
+    steadfast_tracking_message: {
+      type: String,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const OrderModel = model<IOrderInterface>("orders", orderSchema);

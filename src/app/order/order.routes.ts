@@ -4,26 +4,45 @@ import {
   getACustomerAllOrder,
   getAOrderWithOrderProducts,
   getDashboardOrder,
+  getSteadfastOrders,
+  getPathaoOrders,
   getOrderTrackingInfo,
   postOrder,
   postSingleOrder,
   updateOrder,
+  cancelSteadfastOrder,
 } from "./order.controller";
+
 const router = express.Router();
 
-// post order and get a cuustomer all order
-router.route("/").post(postOrder).get(getACustomerAllOrder).patch( verifyToken("order_update"), updateOrder);
+// Customer order create & get
+router
+  .route("/")
+  .post(postOrder)
+  .get(getACustomerAllOrder)
+  .patch(verifyToken("order_update"), updateOrder);
 
-// post single order
+// Single order (guest checkout)
 router.route("/single_order").post(postSingleOrder);
 
-// get all dashboard order
-router.route("/dashboard").get( verifyToken("order_show"), getDashboardOrder);
+// Dashboard orders
+router.route("/dashboard").get(verifyToken("order_show"), getDashboardOrder);
 
-// get order tracking info
+// Steadfast orders
+router.route("/steadfast").get(verifyToken("order_show"), getSteadfastOrders);
+router
+  .route("/steadfast/cancel/:order_id")
+  .patch(verifyToken("order_update"), cancelSteadfastOrder);
+
+// ✅ Pathao orders
+router.route("/pathao").get(verifyToken("order_show"), getPathaoOrders);
+
+// Order tracking (frontend — no auth)
 router.route("/order_tracking").post(getOrderTrackingInfo);
 
-// get a order with order details and order products
+// Order details with products
+// ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard
+// সব /:order_id হিসেবে match হয়ে যাবে এবং Cast Error দেবে
 router.route("/:order_id").get(getAOrderWithOrderProducts);
 
 export const OrderRoutes = router;

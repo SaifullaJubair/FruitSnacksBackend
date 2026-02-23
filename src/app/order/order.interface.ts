@@ -36,8 +36,14 @@ export interface IOrderInterface {
   pathao_city_name: string;
   pathao_zone_id: number;
   pathao_zone_name: string;
+  pathao_status?: string;
   consignment_id?: string;
   delivery_fee?: number;
+  courier_type?: "pathao" | "steadfast";
+  steadfast_consignment_id?: string;
+  steadfast_tracking_code?: string;
+  steadfast_status?: string;
+  steadfast_tracking_message?: string;
 }
 
 export const orderSearchableField = [

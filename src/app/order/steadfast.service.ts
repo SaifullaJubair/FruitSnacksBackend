@@ -1,0 +1,241 @@
+import axios from "axios";
+import OrderModel from "../order/order.model";
+import ApiError from "../../errors/ApiError";
+import mongoose from "mongoose";
+import OrderProductModel from "../orderProducts/orderProduct.model";
+import ProductModel from "../product/product.model";
+import VariationModel from "../variation/variation.model";
+import { steadfastStatusMap } from "./webhook/webhook.controller";
+
+// TEST VERSION — hardcoded keys
+const STEADFAST_BASE_URL = "https://portal.packzy.com/api/v1";
+const STEADFAST_API_KEY = process.env.STEADFAST_API_KEY;
+const STEADFAST_SECRET_KEY = process.env.STEADFAST_SECRET_KEY;
+const steadfastHeaders = {
+  "Api-Key": STEADFAST_API_KEY,
+  "Secret-Key": STEADFAST_SECRET_KEY,
+  "Content-Type": "application/json",
+};
+
+// Steadfast এ order পাঠানো
+export const sendOrderToSteadfastService = async (
+  order_id: string,
+  session: mongoose.ClientSession,
+): Promise<any> => {
+  const order: any =
+    await OrderModel.findById(order_id).populate("customer_id");
+  if (!order) throw new ApiError(404, "Order Not Found!");
+
+  // ✅ Duplicate check — আগে পাঠানো হয়েছে কিনা
+  if (order.courier_type === "steadfast" && order.steadfast_consignment_id) {
+    throw new ApiError(
+      400,
+      `এই order আগেই Steadfast এ পাঠানো হয়েছে। Consignment ID: ${order.steadfast_consignment_id}`,
+    );
+  }
+
+  // ✅ Already processing/shipped/delivered হলে block করো
+  if (["processing", "shipped", "delivered"].includes(order.order_status)) {
+    throw new ApiError(
+      400,
+      `এই order ইতিমধ্যে "${order.order_status}" status এ আছে। আবার পাঠানো যাবে না।`,
+    );
+  }
+
+  const payload = {
+    invoice: order.invoice_id,
+    recipient_name: order.customer_id?.user_name || "Customer",
+    recipient_phone: order.customer_phone,
+    recipient_address: `${order.billing_address}, ${order.billing_city}, ${order.billing_state}, ${order.billing_country}`,
+    cod_amount: order.grand_total_amount,
+    note: "",
+  };
+
+  console.log("Steadfast payload:", payload);
+
+  const response = await axios.post(
+    `${STEADFAST_BASE_URL}/create_order`,
+    payload,
+    { headers: steadfastHeaders },
+  );
+
+  console.log("Steadfast response:", response.data);
+
+  if (response.data?.status !== 200) {
+    throw new ApiError(
+      400,
+      response.data?.message || "Steadfast Order Failed!",
+    );
+  }
+
+  const consignment = response.data?.consignment;
+
+  // ✅ Edge case — consignment না আসলে
+  if (!consignment?.consignment_id) {
+    throw new ApiError(
+      500,
+      "Steadfast থেকে consignment ID পাওয়া যায়নি। Steadfast portal চেক করুন।",
+    );
+  }
+
+  const timeNow =
+    new Date().toISOString().split("T")[0] +
+    " " +
+    new Date().toLocaleTimeString();
+
+  await OrderModel.updateOne(
+    { _id: order_id },
+    {
+      steadfast_consignment_id: consignment?.consignment_id,
+      steadfast_tracking_code: consignment?.tracking_code,
+      steadfast_status: consignment?.status,
+      courier_type: "steadfast",
+      order_status: "processing",
+      processing_time: timeNow,
+    },
+    { session, runValidators: true },
+  );
+
+  return consignment;
+};
+
+
+
+// ================================================================
+// Steadfast bulk send
+// ================================================================
+export const bulkSendToSteadfastService = async (
+  order_ids: string[],
+): Promise<any> => {
+  const results = {
+    success: [] as string[],
+    failed: [] as { order_id: string; reason: string }[],
+  };
+
+  for (const order_id of order_ids) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      await sendOrderToSteadfastService(order_id, session);
+      await session.commitTransaction();
+      session.endSession();
+      results.success.push(order_id);
+    } catch (error: any) {
+      await session.abortTransaction();
+      session.endSession();
+      results.failed.push({
+        order_id,
+        reason: error?.message || "Unknown error",
+      });
+    }
+  }
+
+  return results;
+};
+
+
+// Steadfast tracking
+export const trackSteadfastOrderService = async (
+  consignment_id: string,
+): Promise<any> => {
+  const response = await axios.get(
+    `${STEADFAST_BASE_URL}/status_by_cid/${consignment_id}`,
+    { headers: steadfastHeaders },
+  );
+  return response.data;
+};
+
+// Steadfast balance check
+export const getSteadfastBalanceService = async (): Promise<any> => {
+  const response = await axios.get(`${STEADFAST_BASE_URL}/get_balance`, {
+    headers: {
+      "Api-Key": STEADFAST_API_KEY,
+      "Secret-Key": STEADFAST_SECRET_KEY,
+    },
+  });
+  return response.data;
+};
+
+
+// ================================================================
+// Steadfast status sync — DB তে manually update করো
+// ================================================================ 
+export const syncSteadfastOrderService = async (
+  order_id: string,
+): Promise<any> => {
+  const order: any = await OrderModel.findById(order_id);
+  if (!order) throw new ApiError(404, "Order Not Found!");
+
+  if (!order.steadfast_consignment_id) {
+    throw new ApiError(400, "এই order Steadfast এ পাঠানো হয়নি।");
+  }
+
+  const response = await axios.get(
+    `${STEADFAST_BASE_URL}/status_by_cid/${order.steadfast_consignment_id}`,
+    { headers: steadfastHeaders },
+  );
+
+  const steadfastStatus = response.data?.delivery_status?.toLowerCase();
+  if (!steadfastStatus) {
+    throw new ApiError(400, "Steadfast থেকে status পাওয়া যায়নি।");
+  }
+
+  const newOrderStatus = steadfastStatusMap[steadfastStatus];
+  const timeNow =
+    new Date().toISOString().split("T")[0] +
+    " " +
+    new Date().toLocaleTimeString();
+
+  const updateData: any = {
+    steadfast_status: steadfastStatus,
+  };
+
+  if (newOrderStatus) {
+    updateData.order_status = newOrderStatus;
+
+    if (newOrderStatus === "processing" && !order.processing_time) {
+      updateData.processing_time = timeNow;
+    }
+    if (newOrderStatus === "shipped" && !order.shipped_time) {
+      updateData.shipped_time = timeNow;
+    }
+    if (newOrderStatus === "delivered") {
+      updateData.delivered_time = timeNow;
+
+      // শুধু fully delivered হলে quantity কমাও
+      if (
+        steadfastStatus === "delivered" &&
+        order.order_status !== "delivered"
+      ) {
+        const orderProducts = await OrderProductModel.find({
+          order_id: order._id.toString(),
+        });
+
+        for (const op of orderProducts) {
+          if (!op.variation_id) {
+            await ProductModel.updateOne(
+              { _id: op.product_id },
+              { $inc: { product_quantity: -op.product_quantity } },
+            );
+          } else {
+            await VariationModel.updateOne(
+              { _id: op.variation_id },
+              { $inc: { variation_quantity: -op.product_quantity } },
+            );
+          }
+        }
+      }
+    }
+    if (newOrderStatus === "cancel") {
+      updateData.cancel_time = timeNow;
+    }
+  }
+
+  await OrderModel.updateOne({ _id: order_id }, { $set: updateData });
+
+  return {
+    steadfast_status: steadfastStatus,
+    order_status: newOrderStatus,
+  };
+};
+
