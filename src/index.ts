@@ -25,7 +25,7 @@ const corsOptions = {
     "https://www.artisenleather.com",
     "https://admin.artisenleather.com",
     "https://www.admin.artisenleather.com",
-    "https://artisan-lather-frontend.vercel.app"
+    "https://artisan-lather-frontend.vercel.app",
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
@@ -35,7 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get("/", async (req: Request, res: Response) => {
-  res.send("Artisan Leather Server is working! YaY!");
+  res.send("Artisan Leather Server is working!");
 });
 
 // Import All Api
@@ -92,7 +92,7 @@ const updateCampaignStatus = async () => {
           await ProductModel.findByIdAndUpdate(
             productId,
             { $unset: { product_campaign_id: 1 } },
-            { new: true }
+            { new: true },
           );
         }
       }
@@ -132,6 +132,6 @@ app.listen(port, () => {
     time,
     ":",
     date,
-    `: Artisan Leather server listening on port ${port}`
+    `: Artisan Leather server listening on port ${port}`,
   );
 });
