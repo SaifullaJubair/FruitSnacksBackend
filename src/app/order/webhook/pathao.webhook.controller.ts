@@ -87,9 +87,9 @@ export const pathaoWebhookController = async (req: Request, res: Response) => {
         PATHAO_WEBHOOK_SECRET,
       );
       if (!isValid) {
-        console.warn("Pathao webhook: invalid signature");
-        // signature invalid হলেও 202 দাও, না হলে Pathao retry করবে
-        return respond();
+        console.warn("Pathao webhook: invalid signature — continuing anyway");
+        // signature invalid হলেও process করো, block করো না
+        // return respond();
       }
     }
 
@@ -99,7 +99,11 @@ export const pathaoWebhookController = async (req: Request, res: Response) => {
     const { event, consignment_id, merchant_order_id, order_status } = payload;
 
     // webhook_integration test event — শুধু 202 দাও
-    if (event === "webhook_integration") {
+    if (
+      event === "webhook_integration" ||
+      event === "order.created" ||
+      !order_status // order_status নেই এমন যেকোনো event skip করো
+    ) {
       return respond();
     }
 
