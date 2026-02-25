@@ -30,6 +30,7 @@ import { OfferOrderRoutes } from "../app/offerOrder/offerOrder.routes";
 import { DashboardRoutes } from "../app/dashboard/dashboard.routes";
 import { CourierRoutes } from "../app/order/courier/courier.routes";
 import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
+import { FraudRoutes } from "../app/fraud/fraud.routes";
 
 const router = express.Router();
 
@@ -77,6 +78,10 @@ const moduleRoutes = [
   {
     path: "/courier",
     route: CourierRoutes,
+  },
+  {
+    path: "/fraud",
+    route: FraudRoutes,
   },
   {
     path: "/review",
