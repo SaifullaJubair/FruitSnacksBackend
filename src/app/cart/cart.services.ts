@@ -18,7 +18,7 @@ export const syncCartService = async (
   let cart = await CartModel.findOne({ cart_user_id: user_id });
 
   if (!cart) {
-    // নতুন cart create করো
+    // DB তে cart নেই → local cart দিয়ে create করো
     cart = await CartModel.create({
       cart_user_id: user_id,
       cart_products: localProducts,
@@ -26,7 +26,7 @@ export const syncCartService = async (
     return cart;
   }
 
-  // Existing cart এ merge করো
+  // DB cart আছে → merge করো
   for (const localItem of localProducts) {
     const existingIndex = cart.cart_products.findIndex((item) => {
       const productMatch =
@@ -38,10 +38,10 @@ export const syncCartService = async (
     });
 
     if (existingIndex > -1) {
-      // Already আছে — quantity add করো
-      cart.cart_products[existingIndex].quantity += localItem.quantity;
+      // Same product DB তে আছে → DB এর quantity রাখো, local ignore
+      // (কিছু করতে হবে না)
     } else {
-      // নেই — নতুন add করো
+      // নতুন product → add করো
       cart.cart_products.push(localItem);
     }
   }
