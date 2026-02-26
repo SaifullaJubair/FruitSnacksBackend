@@ -31,6 +31,7 @@ import { DashboardRoutes } from "../app/dashboard/dashboard.routes";
 import { CourierRoutes } from "../app/order/courier/courier.routes";
 import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
 import { FraudRoutes } from "../app/fraud/fraud.routes";
+import { CartRoutes } from "../app/cart/cart.routes";
 
 const router = express.Router();
 
@@ -66,6 +67,10 @@ const moduleRoutes = [
   {
     path: "/filter_product",
     route: ProductFilterRoutes,
+  },
+  {
+    path: "/cart",
+    route: CartRoutes,
   },
   {
     path: "/order",

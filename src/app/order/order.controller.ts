@@ -209,10 +209,11 @@ export const postOrder: any = async (
 
     await session.commitTransaction();
     session.endSession();
-    return sendResponse<IOrderInterface>(res, {
+    return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "Order Create Successfully !",
+      data: { order_id: result?._id, invoice_id: requestData?.invoice_id },
     });
   } catch (error) {
     await session.abortTransaction();
