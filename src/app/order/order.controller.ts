@@ -24,6 +24,7 @@ import { IUserInterface } from "../user/user.interface";
 import { postSingleOrderUserServices } from "../user/user.services";
 import UserModel from "../user/user.model";
 import mongoose from "mongoose";
+import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 
@@ -209,6 +210,44 @@ export const postOrder: any = async (
 
     await session.commitTransaction();
     session.endSession();
+
+    // Server side Purchase event — silent fail
+    try {
+      const clientIp =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        req.socket?.remoteAddress ||
+        "";
+      const clientUserAgent = req.headers["user-agent"] || "";
+
+      await sendMetaEvent({
+        event_name: "Purchase",
+        event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
+        event_source_url:
+          req.headers?.referer || "https://artisenleather.com/cart",
+        action_source: "website",
+        user_data: {
+          ph: requestData?.customer_phone,
+          fn: requestData?.customer_name,
+          external_id: requestData?.customer_id,
+          client_ip_address: clientIp,
+          client_user_agent: clientUserAgent,
+          fbc: requestData?.fbc,
+          fbp: requestData?.fbp,
+        },
+        custom_data: {
+          currency: "BDT",
+          value: requestData?.grand_total_amount,
+          content_ids: requestData?.order_products?.map(
+            (p: any) => p?.product_id,
+          ),
+          content_type: "product",
+          num_items: requestData?.order_products?.length,
+          order_id: result?._id?.toString(),
+        },
+      });
+    } catch (e) {
+      // Silent fail — order already created
+    }
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -269,10 +308,48 @@ export const postSingleOrder: any = async (
 
     await session.commitTransaction();
     session.endSession();
-    return sendResponse<IOrderInterface>(res, {
+    // ✅ Server side Purchase event — silent fail
+    try {
+      const clientIp =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        req.socket?.remoteAddress ||
+        "";
+
+      await sendMetaEvent({
+        event_name: "Purchase",
+        event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
+        event_source_url: req.headers?.referer || "https://artisenleather.com",
+        action_source: "website",
+        user_data: {
+          ph: requestData?.customer_phone,
+          fn: requestData?.customer_name,
+          external_id: requestData?.customer_id,
+          client_ip_address: clientIp,
+          client_user_agent: req.headers["user-agent"] || "",
+          fbc: requestData?.fbc,
+          fbp: requestData?.fbp,
+        },
+        custom_data: {
+          currency: "BDT",
+          value: requestData?.grand_total_amount,
+          content_ids: requestData?.order_products?.map(
+            (p: any) => p?.product_id,
+          ),
+          content_type: "product",
+          num_items: requestData?.order_products?.length,
+          order_id: result?._id?.toString(),
+        },
+      });
+    } catch (e) {
+      // Silent fail
+    }
+
+    return sendResponse(res, {
+      // ✅ <IOrderInterface> সরানো
       statusCode: httpStatus.OK,
       success: true,
       message: "Order Create Successfully !",
+      data: { order_id: result?._id, invoice_id: requestData?.invoice_id },
     });
   } catch (error) {
     await session.abortTransaction();

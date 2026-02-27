@@ -32,6 +32,7 @@ import { CourierRoutes } from "../app/order/courier/courier.routes";
 import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
 import { FraudRoutes } from "../app/fraud/fraud.routes";
 import { CartRoutes } from "../app/cart/cart.routes";
+import { MetaPixelRoutes } from "../app/metaPixel/meta.pixel.routes";
 
 const router = express.Router();
 
@@ -169,6 +170,8 @@ const moduleRoutes = [
     path: "/dashboard",
     route: DashboardRoutes,
   },
+
+  { path: "/meta-pixel", route: MetaPixelRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

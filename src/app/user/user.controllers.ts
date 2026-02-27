@@ -17,6 +17,7 @@ import { SendPhoneOTP } from "../../middlewares/send.otp.phone";
 import OrderModel from "../order/order.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import OfferOrderModel from "../offerOrder/offerOrder.model";
+import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 const jwt = require("jsonwebtoken");
@@ -25,7 +26,7 @@ const jwt = require("jsonwebtoken");
 export const postUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IUserInterface | any> => {
   try {
     const requestData = req.body;
@@ -51,7 +52,7 @@ export const postUser: RequestHandler = async (
     // Hash the password once
     const hashedPassword = await bcrypt.hash(
       requestData?.user_password,
-      saltRounds
+      saltRounds,
     );
     delete requestData?.user_password; // Remove plain password
 
@@ -60,7 +61,7 @@ export const postUser: RequestHandler = async (
       const updateResult = await UserModel.updateOne(
         { user_phone: requestData?.user_phone },
         { user_password: hashedPassword },
-        { runValidators: true }
+        { runValidators: true },
       );
 
       if (updateResult.modifiedCount > 0) {
@@ -100,7 +101,7 @@ export const postUser: RequestHandler = async (
 export const postLogUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { user_password, user_phone } = req.body;
@@ -127,7 +128,7 @@ export const postLogUser: RequestHandler = async (
       const result = await UserModel.updateOne(
         { user_phone },
         { user_password: hashedPassword },
-        { runValidators: true }
+        { runValidators: true },
       );
 
       if (result.modifiedCount === 0) {
@@ -139,7 +140,7 @@ export const postLogUser: RequestHandler = async (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
         {
           expiresIn: "365d",
-        }
+        },
       );
 
       // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
@@ -149,6 +150,27 @@ export const postLogUser: RequestHandler = async (
         sameSite: "none", // cross-domain এর জন্য required
         maxAge: 365 * 24 * 60 * 60 * 1000, // optional, 1 year
       });
+      // Server side Login event
+      try {
+        const clientIp =
+          (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+          req.socket?.remoteAddress ||
+          "";
+
+        await sendMetaEvent({
+          event_name: "Login",
+          event_id: req.body?.login_event_id || `login-${Date.now()}`,
+          action_source: "website",
+          user_data: {
+            ph: user_phone,
+            external_id: findUser?._id?.toString(),
+            client_ip_address: clientIp,
+            client_user_agent: req.headers["user-agent"] || "",
+            fbc: req.body?.fbc,
+            fbp: req.body?.fbp,
+          },
+        });
+      } catch (e) {}
 
       return sendResponse<IUserInterface>(res, {
         statusCode: httpStatus.OK,
@@ -160,7 +182,7 @@ export const postLogUser: RequestHandler = async (
     // Compare password if user already has one
     const isPasswordValid = await bcrypt.compare(
       user_password,
-      findUser.user_password
+      findUser.user_password,
     );
 
     if (!isPasswordValid) {
@@ -172,7 +194,7 @@ export const postLogUser: RequestHandler = async (
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
       {
         expiresIn: "365d",
-      }
+      },
     );
 
     // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
@@ -197,7 +219,7 @@ export const postLogUser: RequestHandler = async (
 export const postUserResendCode: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { user_phone, user_name } = req.body;
@@ -223,7 +245,7 @@ export const postUserResendCode: RequestHandler = async (
 export const postForgotPasswordUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { user_phone } = req.body;
@@ -242,7 +264,7 @@ export const postForgotPasswordUser: RequestHandler = async (
 
     const forgetOTPSave = await updateLogUsersNewOTPService(
       user_phone,
-      user_otp
+      user_otp,
     );
     if (forgetOTPSave?.modifiedCount > 0) {
       return sendResponse(res, {
@@ -283,7 +305,7 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
         async function (err: Error, hash: string) {
           const users = await updateforgotPasswordUsersChangeNewPasswordService(
             user_phone,
-            hash
+            hash,
           );
           if (users?.modifiedCount > 0) {
             return sendResponse(res, {
@@ -294,7 +316,7 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
           } else {
             throw new ApiError(400, "Some thing went wrong !");
           }
-        }
+        },
       );
     } catch (error) {
       next(error);
@@ -305,7 +327,7 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
 export const findAllDashboardUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IUserInterface | any> => {
   try {
     const { page, limit, searchTerm } = req.query;
@@ -315,7 +337,7 @@ export const findAllDashboardUser: RequestHandler = async (
     const result: IUserInterface[] | any = await findAllDashboardUserServices(
       limitNumber,
       skip,
-      searchTerm
+      searchTerm,
     );
     const andCondition = [];
     if (searchTerm) {
@@ -347,7 +369,7 @@ export const findAllDashboardUser: RequestHandler = async (
 export const updateUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IUserInterface | any> => {
   try {
     const requestData = req.body;
@@ -379,7 +401,7 @@ export const updateUser: RequestHandler = async (
           const data = { ...requestData, user_password: hash };
           const result: IUserInterface | any = await updateUserServices(
             data,
-            requestData?._id
+            requestData?._id,
           );
           if (result?.modifiedCount > 0) {
             return sendResponse<IUserInterface>(res, {
@@ -390,12 +412,12 @@ export const updateUser: RequestHandler = async (
           } else {
             throw new ApiError(400, "User Update Failed !");
           }
-        }
+        },
       );
     } else {
       const result: IUserInterface | any = await updateUserServices(
         requestData,
-        requestData?._id
+        requestData?._id,
       );
       if (result?.modifiedCount > 0) {
         return sendResponse<IUserInterface>(res, {
@@ -416,7 +438,7 @@ export const updateUser: RequestHandler = async (
 export const deleteAUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IUserInterface | any> => {
   try {
     const data = req.body;
