@@ -36,4 +36,8 @@ export interface ISettingInterface {
   card_four_title?: string;
   address_three?: string;
   address_two?: string;
+  // ✅ SEO fields
+  seo_title?: string;
+  seo_description?: string;
+  seo_keywords?: string;
 }
