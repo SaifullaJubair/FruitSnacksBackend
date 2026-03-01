@@ -260,6 +260,14 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    page_seo_show: {
+      type: Boolean,
+      default: false,
+    }, 
+    page_seo_update: {
+      type: Boolean,
+      default: false,
+    }, 
     order_show: {
       type: Boolean,
       default: false,
@@ -295,7 +303,7 @@ const roleSchema = new Schema<IRoleInterface>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const RoleModel = model<IRoleInterface>("roles", roleSchema);
