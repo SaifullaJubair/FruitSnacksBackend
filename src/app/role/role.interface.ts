@@ -67,6 +67,8 @@ export interface IRoleInterface {
   slider_delete?: true | false;
   slider_show?: true | false;
   site_setting_update?: true | false;
+  page_seo_show?: true | false;
+  page_seo_update?: true | false;
   order_show?: true | false;
   order_update?: true | false;
   offer_order_update?: true | false;
@@ -75,5 +77,4 @@ export interface IRoleInterface {
   customer_update?: true | false;
   customer_delete?: true | false;
   customer_show?: true | false;
-
 }
