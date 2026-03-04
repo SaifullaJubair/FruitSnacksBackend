@@ -20,7 +20,7 @@ const { promisify } = require("util");
 export const getMeAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const token = await req.cookies?.artisan_lather_token;
@@ -28,10 +28,7 @@ export const getMeAdmin: RequestHandler = async (
     if (!token) {
       throw new ApiError(400, "Admin get failed !");
     }
-    const decode = await promisify(jwt.verify)(
-      token,
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM"
-    );
+    const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
     // const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
 
     const Admin = await findAdminInfoServices(decode.admin_phone);
@@ -54,7 +51,7 @@ export const getMeAdmin: RequestHandler = async (
 export const postAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IAdminInterface | any> => {
   try {
     const requestData = req.body;
@@ -105,7 +102,7 @@ export const postAdmin: RequestHandler = async (
         } catch (error) {
           next(error);
         }
-      }
+      },
     );
   } catch (error: any) {
     next(error);
@@ -116,7 +113,7 @@ export const postAdmin: RequestHandler = async (
 export const postLogAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { admin_password, admin_phone } = req.body;
@@ -133,15 +130,13 @@ export const postLogAdmin: RequestHandler = async (
 
     const isPasswordValid = await bcrypt.compare(
       admin_password,
-      findAdmin?.admin_password
+      findAdmin?.admin_password,
     );
     if (isPasswordValid) {
       const admin_phone = findAdmin?.admin_phone;
-      const token = jwt.sign(
-        { admin_phone },
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
-        { expiresIn: "365d" }
-      );
+      const token = jwt.sign({ admin_phone }, process.env.ACCESS_TOKEN, {
+        expiresIn: "365d",
+      });
       // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
       res.cookie("artisan_lather_token", token, {
         httpOnly: true, // নিরাপত্তার জন্য
@@ -167,7 +162,7 @@ export const postLogAdmin: RequestHandler = async (
 export const findAllDashboardAdminRoleAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IAdminInterface | any> => {
   try {
     const { page, limit, searchTerm } = req.query;
@@ -178,7 +173,7 @@ export const findAllDashboardAdminRoleAdmin: RequestHandler = async (
       await findAllDashboardAdminRoleAdminServices(
         limitNumber,
         skip,
-        searchTerm
+        searchTerm,
       );
     const andCondition = [];
     if (searchTerm) {
@@ -210,7 +205,7 @@ export const findAllDashboardAdminRoleAdmin: RequestHandler = async (
 export const updateAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IAdminInterface | any> => {
   try {
     const requestData = req.body;
@@ -239,7 +234,7 @@ export const updateAdmin: RequestHandler = async (
           const data = { ...requestData, admin_password: hash };
           const result: IAdminInterface | any = await updateAdminServices(
             data,
-            requestData?._id
+            requestData?._id,
           );
           if (result?.modifiedCount > 0) {
             return sendResponse<IAdminInterface>(res, {
@@ -250,12 +245,12 @@ export const updateAdmin: RequestHandler = async (
           } else {
             throw new ApiError(400, "Admin Update Failed !");
           }
-        }
+        },
       );
     } else {
       const result: IAdminInterface | any = await updateAdminServices(
         requestData,
-        requestData?._id
+        requestData?._id,
       );
       if (result?.modifiedCount > 0) {
         return sendResponse<IAdminInterface>(res, {
@@ -276,7 +271,7 @@ export const updateAdmin: RequestHandler = async (
 export const deleteAAdmin: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IAdminInterface | any> => {
   try {
     const data = req.body;

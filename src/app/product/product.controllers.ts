@@ -49,7 +49,7 @@ const uploadDir = path.join(__dirname, "../../../uploads");
 export const findTrendingProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { page = 1, limit = 20 } = req.query;
@@ -73,7 +73,7 @@ export const findTrendingProduct: RequestHandler = async (
 export const findBrandMatchProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { page = 1, limit = 20, brand_id } = req.query;
@@ -98,7 +98,7 @@ export const findBrandMatchProduct: RequestHandler = async (
 export const findPopularProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     // const category_id: any = req.query.category_id;
@@ -124,7 +124,7 @@ export const findPopularProduct: RequestHandler = async (
 export const findECommerceChoiceProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { page = 1, limit = 12 } = req.query;
@@ -148,7 +148,7 @@ export const findECommerceChoiceProduct: RequestHandler = async (
 export const findJustForYouProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const findJustForYouProduct: IProductInterface[] | [] | any =
@@ -168,14 +168,14 @@ export const findJustForYouProduct: RequestHandler = async (
 export const checkProductBarcode: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const requestData = req.body;
     if (!requestData?.showProductVariation) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Variation status is required."
+        "Variation status is required.",
       );
     }
 
@@ -194,7 +194,7 @@ export const checkProductBarcode: RequestHandler = async (
         if (varCodeCheck) {
           throw new ApiError(
             httpStatus.BAD_REQUEST,
-            `Barcode "${variation_barcode}" already exists`
+            `Barcode "${variation_barcode}" already exists`,
           );
         }
       }
@@ -213,14 +213,14 @@ export const checkProductBarcode: RequestHandler = async (
 export const checkProductBarcodeWhenUpdate: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const requestData = req.body;
     if (!requestData?.showProductVariation) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Variation status is required."
+        "Variation status is required.",
       );
     }
 
@@ -244,7 +244,7 @@ export const checkProductBarcodeWhenUpdate: RequestHandler = async (
             deleteAllFilesInDirectory(uploadDir);
             throw new ApiError(
               httpStatus.BAD_REQUEST,
-              `Barcode "${variation_barcode}" already exists`
+              `Barcode "${variation_barcode}" already exists`,
             );
           }
         }
@@ -264,7 +264,7 @@ export const checkProductBarcodeWhenUpdate: RequestHandler = async (
 export const postProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -321,20 +321,18 @@ export const postProduct: RequestHandler = async (
       // Handle main image
       const mainImage = files.find((file) => file.fieldname === "main_image");
       if (mainImage) {
-        const main_image_upload = await FileUploadHelper.uploadToSpaces(
-          mainImage
-        );
+        const main_image_upload =
+          await FileUploadHelper.uploadToSpaces(mainImage);
         main_image = main_image_upload?.Location;
         main_image_key = main_image_upload?.Key;
       }
       // Handle size_chart
       const sizeChartImage = files.find(
-        (file) => file.fieldname === "size_chart"
+        (file) => file.fieldname === "size_chart",
       );
       if (sizeChartImage) {
-        const size_chart_upload = await FileUploadHelper.uploadToSpaces(
-          sizeChartImage
-        );
+        const size_chart_upload =
+          await FileUploadHelper.uploadToSpaces(sizeChartImage);
         size_chart = size_chart_upload?.Location;
         size_chart_key = size_chart_upload?.Key;
       }
@@ -342,9 +340,8 @@ export const postProduct: RequestHandler = async (
       // Handle main video
       const mainVideo = files.find((file) => file.fieldname === "main_video");
       if (mainVideo) {
-        const main_video_upload = await FileUploadHelper.VideoUploader(
-          mainVideo
-        );
+        const main_video_upload =
+          await FileUploadHelper.VideoUploader(mainVideo);
         main_video = main_video_upload?.Location;
         main_video_key = main_video_upload?.Key;
       }
@@ -354,7 +351,7 @@ export const postProduct: RequestHandler = async (
 
       // Handle other_images
       const otherImageFiles = files.filter((file) =>
-        file.fieldname.startsWith("other_images")
+        file.fieldname.startsWith("other_images"),
       );
       for (const file of otherImageFiles) {
         const imageUpload = await FileUploadHelper.uploadToSpaces(file);
@@ -404,15 +401,15 @@ export const postProduct: RequestHandler = async (
                     specification_value_id: value?.specification_value_id
                       ? value?.specification_value_id
                       : undefined,
-                  })
+                  }),
                 ) ?? [],
-            })
+            }),
           ) ?? [],
         attributes_details: Object.values(requestData?.attributes_details ?? {})
           .filter(
             (att: any) =>
               att?.attribute_name !== undefined &&
-              att?.attribute_values?.length > 0
+              att?.attribute_values?.length > 0,
           )
           .map((att: any) => ({
             attribute_name: att?.attribute_name,
@@ -426,7 +423,7 @@ export const postProduct: RequestHandler = async (
                     value?.attribute_value_name ?? undefined,
                   attribute_value_code:
                     value?.attribute_value_code ?? undefined,
-                })
+                }),
               ) ?? [],
           })),
         // barcode: requestData?.barcode ?? "",
@@ -496,11 +493,11 @@ export const postProduct: RequestHandler = async (
           product.product_id = newProduct?._id?.toString();
           const matchingFiles = files.filter(
             (file) =>
-              file.fieldname === `variation_details[${index}][variation_image]`
+              file.fieldname === `variation_details[${index}][variation_image]`,
           );
           const matchingVideos = files.filter(
             (file) =>
-              file.fieldname === `variation_details[${index}][variation_video]`
+              file.fieldname === `variation_details[${index}][variation_video]`,
           );
 
           // let v_barcode: any;
@@ -531,7 +528,7 @@ export const postProduct: RequestHandler = async (
           // Call the service to save the state with merged data
           const result: IVariationInterface | {} = await VariationModel.create(
             [variationDetails],
-            { session }
+            { session },
           );
           if (result) {
             successVariationUpload.push(result);
@@ -571,7 +568,7 @@ export const postProduct: RequestHandler = async (
 export const updateProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     if (req.files || req.body) {
@@ -638,9 +635,8 @@ export const updateProduct: RequestHandler = async (
       // Handle main image
       const mainImage = files?.find((file) => file?.fieldname === "main_image");
       if (mainImage) {
-        const main_image_upload = await FileUploadHelper.uploadToSpaces(
-          mainImage
-        );
+        const main_image_upload =
+          await FileUploadHelper.uploadToSpaces(mainImage);
         main_image = main_image_upload?.Location;
         main_image_key = main_image_upload?.Key;
       } else {
@@ -649,12 +645,11 @@ export const updateProduct: RequestHandler = async (
       }
       // Handle size_chart
       const sizeChartImage = files?.find(
-        (file) => file?.fieldname === "size_chart"
+        (file) => file?.fieldname === "size_chart",
       );
       if (sizeChartImage) {
-        const size_chart_upload = await FileUploadHelper.uploadToSpaces(
-          sizeChartImage
-        );
+        const size_chart_upload =
+          await FileUploadHelper.uploadToSpaces(sizeChartImage);
         size_chart = size_chart_upload?.Location;
         size_chart_key = size_chart_upload?.Key;
       } else {
@@ -665,9 +660,8 @@ export const updateProduct: RequestHandler = async (
       // Handle main video
       const mainVideo = files?.find((file) => file?.fieldname === "main_video");
       if (mainVideo) {
-        const main_video_upload = await FileUploadHelper.VideoUploader(
-          mainVideo
-        );
+        const main_video_upload =
+          await FileUploadHelper.VideoUploader(mainVideo);
         main_video = main_video_upload?.Location;
         main_video_key = main_video_upload?.Key;
       } else {
@@ -680,7 +674,7 @@ export const updateProduct: RequestHandler = async (
 
       // Handle other_images
       const otherImageFiles = files.filter((file) =>
-        file.fieldname.startsWith("other_images")
+        file.fieldname.startsWith("other_images"),
       );
       for (const file of otherImageFiles) {
         const imageUpload = await FileUploadHelper.uploadToSpaces(file);
@@ -708,14 +702,27 @@ export const updateProduct: RequestHandler = async (
       }
 
       // Generate a unique slug for the product
-      const product_slug = await generateUniqueSlug(requestData.product_name);
-      requestData.product_slug = product_slug;
+      // const product_slug = await generateUniqueSlug(requestData.product_name);
+      // requestData.product_slug = product_slug;
+      // product name বদলেছে কিনা check করো
+      const existingProduct: any = await ProductModel.findById(requestData._id);
+      if (!existingProduct) {
+        throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
+      }
+
+      let updatedSlug = existingProduct.product_slug; // default পুরনো slug
+
+      if (existingProduct.product_name !== requestData.product_name) {
+        // name বদলেছে — নতুন slug বানাও
+        updatedSlug = await generateUniqueSlug(requestData.product_name);
+      }
+
       requestData.is_variation = requestData?.is_variation;
 
       // Create product object
       const productData: any = {
         product_name: requestData.product_name,
-        // product_slug: requestData.product_slug,
+        product_slug: updatedSlug,
         // product_sku: requestData.product_sku,
         product_status: requestData.product_status as "active" | "in-active",
         category_id: requestData.category_id,
@@ -736,9 +743,9 @@ export const updateProduct: RequestHandler = async (
                     specification_value_id: value.specification_value_id
                       ? value.specification_value_id
                       : undefined,
-                  })
+                  }),
                 ) ?? [],
-            })
+            }),
           ) ?? [],
         description: requestData.description ?? "",
         trending_product:
@@ -797,11 +804,22 @@ export const updateProduct: RequestHandler = async (
 
       // console.log(JSON.stringify(productData, null, 2));
       // console.log(JSON.stringify(requestData, null, 2));
+      // name বদলে থাকলে পুরনো slug history তে push করো
+      if (existingProduct.product_name !== requestData.product_name) {
+        await ProductModel.updateOne(
+          { _id: requestData._id },
+          {
+            $push: {
+              product_slug_history: existingProduct.product_slug,
+            },
+          },
+        );
+      }
 
       // Save product in the database
       const newProduct: any = await updateProductServices(
         requestData?._id,
-        productData
+        productData,
       );
 
       if (newProduct) {
@@ -817,12 +835,12 @@ export const updateProduct: RequestHandler = async (
             const matchingFiles = files.filter(
               (file) =>
                 file.fieldname ===
-                `variation_details[${index}][variation_image]`
+                `variation_details[${index}][variation_image]`,
             );
             const matchingVideos = files.filter(
               (file) =>
                 file.fieldname ===
-                `variation_details[${index}][variation_video]`
+                `variation_details[${index}][variation_video]`,
             );
             // let v_barcode: any;
             // v_barcode = await generateQRCode();
@@ -860,7 +878,7 @@ export const updateProduct: RequestHandler = async (
               await VariationModel.updateOne(
                 { _id: variationDetails._id },
                 variationDetails,
-                { runValidators: true }
+                { runValidators: true },
               );
             if (result) {
               successVariationUpload.push(result);
@@ -893,13 +911,12 @@ export const updateProduct: RequestHandler = async (
 export const findRelatedProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const { product_slug }: any = req.query;
-    const result: IProductInterface[] | any = await findRelatedProductServices(
-      product_slug
-    );
+    const result: IProductInterface[] | any =
+      await findRelatedProductServices(product_slug);
 
     return sendResponse<IProductInterface>(res, {
       statusCode: httpStatus.OK,
@@ -916,7 +933,7 @@ export const findRelatedProduct: RequestHandler = async (
 export const findAllDashboardProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const { page = 1, limit = 10, searchTerm } = req.query;
@@ -956,7 +973,7 @@ export const findAllDashboardProduct: RequestHandler = async (
 export const findADashboardProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const _id = req?.params?._id;
@@ -979,13 +996,12 @@ export const findADashboardProduct: RequestHandler = async (
 export const findAProductDetails: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const product_slug = req.params.product_slug;
-    const result: IProductInterface[] | any = await findAProductDetailsServices(
-      product_slug
-    );
+    const result: IProductInterface[] | any =
+      await findAProductDetailsServices(product_slug);
     return sendResponse<IProductInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -1001,13 +1017,12 @@ export const findAProductDetails: RequestHandler = async (
 export const findCartProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const products = req?.query?.products;
-    const result: IProductInterface[] | any = await findCartProductServices(
-      products
-    );
+    const result: IProductInterface[] | any =
+      await findCartProductServices(products);
     return sendResponse<IProductInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -1023,13 +1038,12 @@ export const findCartProduct: RequestHandler = async (
 export const findCompareProduct: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
     const products = req?.query?.products;
-    const result: IProductInterface[] | any = await findCompareProductServices(
-      products
-    );
+    const result: IProductInterface[] | any =
+      await findCompareProductServices(products);
     return sendResponse<IProductInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -1045,7 +1059,7 @@ export const findCompareProduct: RequestHandler = async (
 export const deleteAProductInfo = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const _id = req.body?._id;
