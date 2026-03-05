@@ -135,13 +135,9 @@ export const postLogUser: RequestHandler = async (
         throw new ApiError(400, "User update failed!");
       }
 
-      const token = jwt.sign(
-        { user_phone },
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
-        {
-          expiresIn: "365d",
-        },
-      );
+      const token = jwt.sign({ user_phone }, process.env.ACCESS_TOKEN, {
+        expiresIn: "365d",
+      });
 
       // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
       res.cookie("artisan_lather_token", token, {
@@ -189,13 +185,9 @@ export const postLogUser: RequestHandler = async (
       throw new ApiError(400, "Password does not match!");
     }
 
-    const token = jwt.sign(
-      { user_phone },
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM",
-      {
-        expiresIn: "365d",
-      },
-    );
+    const token = jwt.sign({ user_phone }, process.env.ACCESS_TOKEN, {
+      expiresIn: "365d",
+    });
 
     // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
     res.cookie("artisan_lather_token", token, {

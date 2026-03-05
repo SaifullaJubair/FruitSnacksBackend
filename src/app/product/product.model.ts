@@ -13,6 +13,11 @@ const productSchema = new Schema<IProductInterface>(
       type: String,
       unique: true,
     },
+    product_slug_history: [
+      {
+        type: String,
+      },
+    ],
     product_sku: {
       type: String,
     },
@@ -39,17 +44,35 @@ const productSchema = new Schema<IProductInterface>(
       type: Schema.Types.ObjectId,
       ref: "brands",
     },
+    // specifications: [
+    //   {
+    //     specification_id: {
+    //       type: Schema.Types.ObjectId,
+    //       ref: "attributes",
+    //     },
+    //     specification_values: [
+    //       {
+    //         specification_value_id: {
+    //           type: Schema.Types.ObjectId,
+    //           ref: "attributes",
+    //         },
+    //       },
+    //     ],
+    //   },
+    // ],
+
+    // Fix — এভাবে করো
     specifications: [
       {
         specification_id: {
           type: Schema.Types.ObjectId,
-          ref: "attributes",
+          ref: "specifications", // ✅
         },
         specification_values: [
           {
             specification_value_id: {
               type: Schema.Types.ObjectId,
-              ref: "attributes",
+              ref: "specifications", // ✅
             },
           },
         ],
@@ -174,7 +197,7 @@ const productSchema = new Schema<IProductInterface>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const ProductModel = model<IProductInterface>("products", productSchema);
