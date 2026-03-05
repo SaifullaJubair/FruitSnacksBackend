@@ -11,44 +11,60 @@ import BrandModel from "../brand/brand.model";
 // Create A Product
 export const postProductServices = async (
   data: IProductInterface,
-  session: mongoose.ClientSession
+  session: mongoose.ClientSession,
 ): Promise<IProductInterface | {} | any> => {
   const createProduct: IProductInterface | {} | any = await ProductModel.create(
     [data],
-    { session }
+    { session },
   );
   return createProduct[0];
 };
 
 // Find a Product Details
 export const findAProductDetailsServices = async (
-  product_slug: string
+  product_slug: string,
 ): Promise<any | null> => {
-  // Step 1: Find the product by its ID and populate related fields
-  const findProduct: any = await ProductModel.findOne({
-    product_slug: product_slug,
-    product_status: "active",
-  })
-    .populate([
-      { path: "category_id", model: "categories" },
-      { path: "sub_category_id", model: "subcategories" },
-      // { path: "child_category_id", model: "childcategories" },
-      { path: "brand_id", model: "brands" },
-      // { path: "product_campaign_id", model: "campaigns" },
-      {
-        path: "specifications.specification_id",
-        model: "attributes",
-      },
-    ])
-    .select(
-      "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt"
-    )
-    .lean();
+  // ✅ Helper function — product fetch করার জন্য
+  const fetchProduct = async (slug: string, isHistorySlug = false) => {
+    return await ProductModel.findOne({
+      ...(isHistorySlug
+        ? { product_slug_history: { $in: [slug] } }
+        : { product_slug: slug }),
+      product_status: "active",
+    })
+      .populate([
+        { path: "category_id", model: "categories" },
+        { path: "sub_category_id", model: "subcategories" },
+        { path: "brand_id", model: "brands" },
+        {
+          path: "specifications.specification_id",
+          model: "specifications", // ✅ fix — আগে "attributes" ছিল
+        },
+      ])
+      .select(
+        "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt",
+      )
+      .lean();
+  };
 
+  // Step 1: Current slug এ খোঁজো
+  let findProduct: any = await fetchProduct(product_slug);
+  let redirect_slug: string | null = null;
+
+  // Step 2: না পেলে slug history তে খোঁজো
   if (!findProduct) {
+    const historyProduct: any = await fetchProduct(product_slug, true);
+
+    if (historyProduct) {
+      // পুরনো slug — নতুন slug এ redirect করতে হবে
+      redirect_slug = historyProduct.product_slug;
+      return { redirect_slug };
+    }
+
     throw new ApiError(404, "Product Not Found !");
   }
 
+  // Step 3: Category, brand status check
   if (findProduct?.category_id?.category_status !== "active") {
     throw new ApiError(404, "Product Unavailable !");
   }
@@ -58,12 +74,6 @@ export const findAProductDetailsServices = async (
   ) {
     throw new ApiError(404, "Product Unavailable !");
   }
-  // if (
-  //   findProduct?.child_category_id &&
-  //   findProduct?.child_category_id?.child_category_status !== "active"
-  // ) {
-  //   throw new ApiError(404, "Product Unavailable !");
-  // }
   if (
     findProduct?.brand_id &&
     findProduct?.brand_id?.brand_status !== "active"
@@ -71,7 +81,6 @@ export const findAProductDetailsServices = async (
     throw new ApiError(404, "Product Unavailable !");
   }
 
-  // product if for campaign and flash sale
   const targetProductId = findProduct?._id;
 
   // Step 3: Extract specific campaign product details
@@ -109,14 +118,14 @@ export const findAProductDetailsServices = async (
       product_id: targetProductId,
     })
       .select(
-        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt"
+        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt",
       )
       .lean();
 
     findProduct.variations = variations;
   }
 
-  // Step 4: Remove other_image_key from other_images
+  // Step 5: other_images key সরাও
   if (findProduct?.other_images) {
     findProduct.other_images = findProduct?.other_images.map((image: any) => ({
       other_image: image.other_image,
@@ -124,7 +133,7 @@ export const findAProductDetailsServices = async (
     }));
   }
 
-  // Include only _id and category_name in category_id
+  // Step 6: Category, subcategory, brand cleanup
   if (findProduct?.category_id) {
     findProduct.category_id = {
       _id: findProduct?.category_id?._id,
@@ -154,52 +163,47 @@ export const findAProductDetailsServices = async (
     };
   }
 
-  // Step 6: Filter specifications
+  // Step 7: Specifications filter
+  // ✅ Fix — আগে attribute_values ও attribute_name ব্যবহার হচ্ছিল
+  // এখন specifications collection এর proper field names ব্যবহার হবে
   if (findProduct?.specifications) {
     findProduct.specifications = findProduct?.specifications?.map(
       (specification: any) => {
         const { specification_id, specification_values } = specification;
 
-        // Filter `specification_id.specification_values` based on `specification_values`
-        const filteredValues = specification_id?.attribute_values?.filter(
+        const filteredValues = specification_id?.specification_values?.filter(
           (value: any) =>
             specification_values?.some(
               (specValue: any) =>
                 specValue?.specification_value_id?.toString() ===
-                value?._id?.toString()
-            )
+                value?._id?.toString(),
+            ),
         );
 
         return {
           _id: specification?._id,
           specification_id: {
             _id: specification_id?._id,
-            specification_name: specification_id?.attribute_name,
-            specification_status: specification_id?.attribute_status,
+            specification_name: specification_id?.specification_name, // ✅ fix
+            specification_status: specification_id?.specification_status, // ✅ fix
             specification_values: filteredValues?.map((value: any) => ({
               _id: value?._id,
-              specification_value_name: value?.attribute_value_name,
-              specification_value_status: value?.attribute_value_slug,
+              specification_value_name: value?.specification_value_name, // ✅ fix
+              specification_value_status: value?.specification_value_status, // ✅ fix
             })),
           },
         };
-      }
+      },
     );
   }
 
+  // Step 8: Review + Order count
   const total_order_count: any = await OrderProductModel.countDocuments({
     product_id: targetProductId,
   });
 
-  let avarage_review_ratting: any = 0;
-  let total_review_ratting: any = 0;
-
   const averageReview = await ReviewModel.aggregate([
-    {
-      $match: {
-        review_product_id: targetProductId,
-      },
-    },
+    { $match: { review_product_id: targetProductId } },
     {
       $group: {
         _id: "$review_product_id",
@@ -209,23 +213,17 @@ export const findAProductDetailsServices = async (
     },
   ]);
 
-  if (averageReview.length > 0) {
-    avarage_review_ratting = averageReview[0].averageRating;
-    total_review_ratting = averageReview[0].totalReviews;
-    // console.log(`Average Rating: ${averageReview[0].averageRating}`);
-    // console.log(`Total Reviews: ${averageReview[0].totalReviews}`);
-  }
+  findProduct.avarage_review_ratting =
+    averageReview.length > 0 ? averageReview[0].averageRating : 0;
+  findProduct.total_review_ratting =
+    averageReview.length > 0 ? averageReview[0].totalReviews : 0;
+  findProduct.total_order_count = total_order_count ?? 0;
 
-  findProduct.avarage_review_ratting = avarage_review_ratting;
-  findProduct.total_review_ratting = total_review_ratting;
-  findProduct.total_order_count = total_order_count ? total_order_count : 0;
-
-  return { ...findProduct };
+  return { data: findProduct, redirect_slug: null };
 };
-
 // Find cart Product
 export const findCartProductServices = async (
-  products: any
+  products: any,
 ): Promise<any | null> => {
   const productDetails: any = [];
 
@@ -242,7 +240,7 @@ export const findCartProductServices = async (
         // { path: "child_category_id", model: "childcategories" },
       ])
       .select(
-        "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -sub_category_id -child_category_id -specifications -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details"
+        "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -sub_category_id -child_category_id -specifications -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
       )
       .lean();
 
@@ -328,7 +326,7 @@ export const findCartProductServices = async (
         _id: product?.variation_id,
       })
         .select(
-          "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt"
+          "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt",
         )
         .lean();
 
@@ -380,7 +378,7 @@ export const findCartProductServices = async (
 
 // Find Compare Product
 export const findCompareProductServices = async (
-  products: any
+  products: any,
 ): Promise<any | null> => {
   const productDetails: any = [];
 
@@ -398,7 +396,7 @@ export const findCompareProductServices = async (
         },
       ])
       .select(
-        "product_name product_slug category_id brand_id specifications main_image unit product_warrenty product_return"
+        "product_name product_slug category_id brand_id specifications main_image unit product_warrenty product_return",
       )
       .lean();
 
@@ -434,8 +432,8 @@ export const findCompareProductServices = async (
               specification_values?.some(
                 (specValue: any) =>
                   specValue?.specification_value_id?.toString() ===
-                  value?._id?.toString()
-              )
+                  value?._id?.toString(),
+              ),
           );
 
           return {
@@ -451,7 +449,7 @@ export const findCompareProductServices = async (
               })),
             },
           };
-        }
+        },
       );
     }
 
@@ -499,7 +497,7 @@ export const findCompareProductServices = async (
 // Find RelatedProduct
 
 export const findRelatedProductServices = async (
-  product_slug: any
+  product_slug: any,
 ): Promise<IProductInterface[] | []> => {
   const andCondition = [];
 
@@ -1123,7 +1121,7 @@ export const findRelatedProductServices = async (
 // Find trendingProduct
 export const findTrendingProductServices = async (
   limit: number,
-  skip: number
+  skip: number,
 ): Promise<IProductInterface[] | [] | any> => {
   // Step 1: Count total data
   const totalData = await ProductModel.aggregate([
@@ -1622,14 +1620,13 @@ export const findTrendingProductServices = async (
 export const findBrandMatchProductServices = async (
   limit: number,
   skip: number,
-  brand_id: any
+  brand_id: any,
 ): Promise<IProductInterface[] | [] | any> => {
-
-  const brandDetails = await BrandModel.findOne({_id: brand_id});
+  const brandDetails = await BrandModel.findOne({ _id: brand_id });
 
   const brandObjectId = Types.ObjectId.isValid(brand_id)
-      ? { brand_id: new Types.ObjectId(brand_id) }
-      : { brand_id };
+    ? { brand_id: new Types.ObjectId(brand_id) }
+    : { brand_id };
 
   // Step 1: Count total data
   const totalData = await ProductModel.aggregate([
@@ -1694,7 +1691,7 @@ export const findBrandMatchProductServices = async (
       $match: {
         product_status: "active", // Filter for active products
         trending_product: true, // Filter for active products
-        brand_id: new Types.ObjectId(brand_id), 
+        brand_id: new Types.ObjectId(brand_id),
       },
     },
     // {
@@ -2069,7 +2066,7 @@ export const findBrandMatchProductServices = async (
 export const findPopularProductServices = async (
   limit: number,
   skip: number,
-  category_id: any
+  category_id: any,
 ): Promise<IProductInterface[] | []> => {
   if (category_id) {
     // Step 1: Count total data
@@ -3338,7 +3335,7 @@ export const findPopularProductServices = async (
 // Find ECommerceChoiceProduct
 export const findECommerceChoiceProductServices = async (
   limit: number,
-  skip: number
+  skip: number,
 ): Promise<IProductInterface[] | [] | any> => {
   // Step 1: Count total data
   const totalData = await ProductModel.aggregate([
@@ -3718,8 +3715,9 @@ export const findECommerceChoiceProductServices = async (
 };
 
 // Find JustForYouProduct
-export const findJustForYouProductServices = async (
-): Promise<IProductInterface[] | [] | any> => {
+export const findJustForYouProductServices = async (): Promise<
+  IProductInterface[] | [] | any
+> => {
   const exploreCategory: any = await CategoryModel.find({
     explore_category_show: true,
     category_status: "active",
@@ -4053,12 +4051,12 @@ export const findJustForYouProductServices = async (
           $limit: 20, // Limit the number of documents
         },
       ]);
-       // ✅ Exclude if no products
-       if (findJustForYouProduct.length > 0) {
+      // ✅ Exclude if no products
+      if (findJustForYouProduct.length > 0) {
         return { categoryDetails: category, products: findJustForYouProduct };
       }
       return null;
-    })
+    }),
   );
 
   // ✅ Filter out null entries
@@ -4068,7 +4066,7 @@ export const findJustForYouProductServices = async (
 // update A Product
 export const updateProductServices = async (
   _id: any,
-  data: IProductInterface
+  data: IProductInterface,
 ): Promise<IProductInterface | {}> => {
   const updateFindProduct: IProductInterface | {} | any =
     await ProductModel.findOne({
@@ -4098,7 +4096,7 @@ export const updateProductServices = async (
       $set: updateData, // পাঠানো ফিল্ড আপডেট করা
       $unset: unsetData, // পাঠানো না হলে ফিল্ডগুলো মুছে ফেলা
     },
-    { runValidators: true }
+    { runValidators: true },
   );
 
   return updateProduct;
@@ -4108,7 +4106,7 @@ export const updateProductServices = async (
 export const findAllDashboardProductServices = async (
   limit: number,
   skip: number,
-  searchTerm: any
+  searchTerm: any,
 ): Promise<any> => {
   const andCondition = [];
   if (searchTerm) {
@@ -4159,7 +4157,7 @@ export const findAllDashboardProductServices = async (
         // Return the product as is without variations
         return { ...product, variations: [] };
       }
-    })
+    }),
   );
 
   return productsWithVariations;
@@ -4167,7 +4165,7 @@ export const findAllDashboardProductServices = async (
 
 // Find a dashboard Product
 export const findADashboardProductServices = async (
-  _id: string
+  _id: string,
 ): Promise<any | null> => {
   // Step 1: Find the product by its ID and populate related fields
   const findProduct = await ProductModel.findOne({ _id })
@@ -4203,7 +4201,7 @@ export const findADashboardProductServices = async (
 
 // Delete a Product
 export const deleteProductServices = async (
-  _id: string
+  _id: string,
 ): Promise<IProductInterface | any> => {
   const updateProductInfo: IProductInterface | null =
     await ProductModel.findOne({ _id: _id });
@@ -4214,7 +4212,7 @@ export const deleteProductServices = async (
     { _id: _id },
     {
       runValidators: true,
-    }
+    },
   );
   return Product;
 };

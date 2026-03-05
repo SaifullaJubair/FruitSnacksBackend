@@ -4,8 +4,7 @@ import ApiError from "../errors/ApiError";
 import UserModel from "../app/user/user.model";
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM";
+const JWT_SECRET = process.env.ACCESS_TOKEN;
 
 interface UserRequest extends Request {
   user?: any;

@@ -14,7 +14,7 @@ const jwt = require("jsonwebtoken");
 export const getMeUser: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const token = await req.cookies?.artisan_lather_token;
@@ -22,10 +22,7 @@ export const getMeUser: RequestHandler = async (
     if (!token) {
       throw new ApiError(400, "User get failed !");
     }
-    const decode = await promisify(jwt.verify)(
-      token,
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM"
-    );
+    const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
     // const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
 
     const user = await findUserInfoServices(decode?.user_phone);
@@ -48,7 +45,7 @@ export const getMeUser: RequestHandler = async (
 export const findUserProfileDashboardDataServices: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { user_id } = req.query;

@@ -48,14 +48,23 @@ export interface ISettingInterface {
   free_delivery_min_amount?: number;
 
   // ✅ Analytics Pixels
+  meta_pixel_id?: string;
   meta_pixel_enabled?: boolean;
+  meta_access_token?: string;
   meta_capi_enabled?: boolean;
 
+  tiktok_pixel_id?: string;
   tiktok_pixel_enabled?: boolean;
+  tiktok_access_token?: string;
   tiktok_capi_enabled?: boolean;
-  
+
+  gtm_id?: string;
   gtm_enabled?: boolean;
+
+  ga4_id?: string;
   ga4_enabled?: boolean;
+
+  clarity_id?: string;
   clarity_enabled?: boolean;
 
   // ✅ SMS Provider

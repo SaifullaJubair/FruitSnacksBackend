@@ -15,7 +15,7 @@ export const verifyToken = (permission: string): RequestHandler => {
   return async (
     req: UserRequest,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ): Promise<any> => {
     try {
       const cokieToken = req.cookies?.artisan_lather_token;
@@ -29,7 +29,7 @@ export const verifyToken = (permission: string): RequestHandler => {
 
       const decoded = await promisify(jwt.verify)(
         cokieToken,
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hem11bEBnbWFpbC5jb20iLCJpYXQiOjE2OTQ0MzExOTF9.xtLPsJrvJ0Gtr4rsnHh1kok51_pU10_hYLilZyBiRAM"
+        process.env.ACCESS_TOKEN,
       );
       // const decoded = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
 
