@@ -34,6 +34,7 @@ import { FraudRoutes } from "../app/fraud/fraud.routes";
 import { CartRoutes } from "../app/cart/cart.routes";
 import { MetaPixelRoutes } from "../app/metaPixel/meta.pixel.routes";
 import PageSeoRouter from "../app/pageSeo/pageSeo.route";
+import TikTokPixelRouter from "../app/tiktokPixel/tiktok.pixel.route";
 
 const router = express.Router();
 
@@ -173,6 +174,7 @@ const moduleRoutes = [
   },
 
   { path: "/meta-pixel", route: MetaPixelRoutes },
+  { path: "/tiktok-pixel", route: TikTokPixelRouter },
   { path: "/page-seo", route: PageSeoRouter },
 ];
 

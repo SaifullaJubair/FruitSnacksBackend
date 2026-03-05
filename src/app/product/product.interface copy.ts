@@ -10,7 +10,6 @@ import {
   attributeValuesArray,
   IAttributeInterface,
 } from "../attribute/attribute.interface";
-import { ISpecificationInterface } from "../specification/specification.interface";
 
 interface attribute_valuesArray {
   attribute_value_name?: string;
@@ -22,21 +21,13 @@ export interface attributesArray {
   attribute_values?: attribute_valuesArray[];
 }
 
-// interface specification_valuesArray {
-//   specification_value_id?: Types.ObjectId | attributeValuesArray;
-// }
-
-// export interface specificationsArray {
-//   specification_id?: Types.ObjectId | IAttributeInterface;
-//   specification_values?: specification_valuesArray[];
-// }
-
 interface specification_valuesArray {
-  specification_value_id?: Types.ObjectId; // ✅ শুধু ObjectId
+  specification_value_id?: Types.ObjectId | attributeValuesArray;
 }
 
 export interface specificationsArray {
-  specification_id?: Types.ObjectId | ISpecificationInterface; // ✅
+  specification_id?: Types.ObjectId | IAttributeInterface;
+  specification_values?: specification_valuesArray[];
 }
 
 export interface otherimagesArray {
@@ -52,7 +43,6 @@ export interface IProductInterface {
   _id?: any;
   product_name: string;
   product_slug: string;
-  product_slug_history?: string[];
   product_sku?: string;
   product_status: "active" | "in-active";
   category_id: Types.ObjectId | ICategoryInterface;

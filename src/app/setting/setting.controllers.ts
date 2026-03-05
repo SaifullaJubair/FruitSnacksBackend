@@ -13,7 +13,7 @@ import {
 export const postSetting: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<ISettingInterface | any> => {
   try {
     const data = req.body;
@@ -49,7 +49,7 @@ export const postSetting: RequestHandler = async (
 export const getSetting: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<ISettingInterface | any> => {
   try {
     const result = await getSettingServices();
@@ -68,7 +68,7 @@ export const getSetting: RequestHandler = async (
 export const getZoneData: RequestHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<any> => {
   try {
     const { city_id } = req.query;
@@ -88,15 +88,13 @@ export const getZoneData: RequestHandler = async (
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          // client_id: "8mepZDpbMy", // Replace with actual client_id
-          // client_secret: "GaE4FmJo3SEHSN04r2owFOdID4H9u6SPO9kQJYKQ", // Replace with actual client_secret
-          client_id: "ELe3yqpb69",
-          client_secret: "Ay5xEjUY3d7Fs4W3RQvhyVUQvOL7U0hStqJlMjk5", // Replace with actual client_secret
+          client_id: process.env.PATHAO_CLIENT_ID,
+          client_secret: process.env.PATHAO_CLIENT_SECRET,
           grant_type: "password",
-          username: "artisenleather@gmail.com", // Replace with your email
-          password: "Sagor@123", // Replace with your password
+          username: process.env.PATHAO_USERNAME,
+          password: process.env.PATHAO_PASSWORD,
         }),
-      }
+      },
     );
 
     const result = await response.json();
@@ -109,7 +107,7 @@ export const getZoneData: RequestHandler = async (
           "Content-Type": "application/json",
           Authorization: `Bearer ${result?.access_token}`, // Replace access_token with actual token
         },
-      }
+      },
     );
 
     // Parse zoneData
