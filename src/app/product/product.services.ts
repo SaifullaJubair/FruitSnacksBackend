@@ -225,152 +225,118 @@ export const findAProductDetailsServices = async (
 export const findCartProductServices = async (
   products: any,
 ): Promise<any | null> => {
-  const productDetails: any = [];
+  if (!products?.length) return [];
 
-  for (const product of products) {
-    // Step 1: Find the product by its ID and populate related fields
-    const findProduct: any = await ProductModel.findOne({
-      _id: product?.product_id,
-    })
-      .populate([
-        { path: "brand_id", model: "brands" },
-        // { path: "product_campaign_id", model: "campaigns" },
-        { path: "category_id", model: "categories" },
-        { path: "sub_category_id", model: "subcategories" },
-        // { path: "child_category_id", model: "childcategories" },
-      ])
-      .select(
-        "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -sub_category_id -child_category_id -specifications -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
-      )
-      .lean();
+  // ── Step 1: IDs collect ────────────────────────────────────
+  const productIds = [...new Set(products.map((p: any) => p.product_id))].map(
+    (id: any) => new Types.ObjectId(id as string),
+  );
 
-    if (!findProduct) {
-      continue;
-    }
+  const variationIds = products
+    .filter((p: any) => p.variation_id)
+    .map((p: any) => new Types.ObjectId(p.variation_id as string));
 
-    if (findProduct?.product_status !== "active") {
-      continue;
-    }
-    if (findProduct?.category_id?.category_status !== "active") {
-      continue;
-    }
-    if (
-      findProduct?.sub_category_id &&
-      findProduct?.sub_category_id?.sub_category_status !== "active"
-    ) {
-      continue;
-    }
-    // if (
-    //   findProduct?.child_category_id &&
-    //   findProduct?.child_category_id?.child_category_status !== "active"
-    // ) {
-    //   continue;
-    // }
-    if (
-      findProduct?.brand_id &&
-      findProduct?.brand_id?.brand_status !== "active"
-    ) {
-      continue;
-    }
+  // ── Step 2: একটাই query তে সব product ─────────────────────
+  const foundProducts: any[] = await ProductModel.find({
+    _id: { $in: productIds },
+    product_status: "active",
+  })
+    .populate([
+      { path: "brand_id", model: "brands" },
+      // { path: "product_campaign_id", model: "campaigns" },
+      { path: "category_id", model: "categories" },
+      { path: "sub_category_id", model: "subcategories" },
+      // { path: "child_category_id", model: "childcategories" },
+    ])
+    .select(
+      "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -sub_category_id -specifications -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
+    )
+    .lean();
 
-    if (findProduct?.category_id) {
-      delete findProduct.category_id;
-    }
-    if (findProduct?.sub_category_id) {
-      delete findProduct.sub_category_id;
-    }
-    // if (findProduct?.child_category_id) {
-    //   delete findProduct.child_category_id;
-    // }
-
-    if (product?.quantity) {
-      findProduct.cartQuantity = product?.quantity;
-    }
-
-    // product if for campaign and flash sale
-    const targetProductId = findProduct?._id;
-
-    // Step 3: Extract specific campaign product details
-    // const campaignId = findProduct?.product_campaign_id;
-
-    // if (campaignId && "campaign_products" in campaignId) {
-    //   if (campaignId?.campaign_status === "active") {
-    //     const campaignProduct = campaignId?.campaign_products?.find(
-    //       (product: any) =>
-    //         product?.campaign_product_id?.equals(targetProductId) &&
-    //         product?.campaign_product_status === "active"
-    //     );
-
-    //     if (campaignProduct) {
-    //       findProduct.campaign_details = {
-    //         _id: campaignId?._id,
-    //         campaign_start_date: campaignId?.campaign_start_date,
-    //         campaign_end_date: campaignId?.campaign_end_date,
-    //         campaign_status: campaignId?.campaign_status,
-    //         campaign_title: campaignId?.campaign_title,
-    //         campaign_product: campaignProduct,
-    //       };
-    //       delete findProduct?.product_campaign_id;
-    //     } else {
-    //       delete findProduct?.product_campaign_id;
-    //     }
-    //   } else {
-    //     delete findProduct?.product_campaign_id;
-    //   }
-    // }
-
-    // Step 3: Check if the product has variations
-    if (findProduct?.is_variation && product?.variation_id) {
-      const variations = await VariationModel.findOne({
-        product_id: targetProductId,
-        _id: product?.variation_id,
-      })
+  // ── Step 3: একটাই query তে সব variation ───────────────────
+  const foundVariations: any[] = variationIds.length
+    ? await VariationModel.find({ _id: { $in: variationIds } })
         .select(
           "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt",
         )
-        .lean();
+        .lean()
+    : [];
 
-      findProduct.variations = variations;
-    }
+  const variationById = new Map<string, any>();
+  foundVariations.forEach((v) => variationById.set(v._id.toString(), v));
 
+  // ── Step 4: একটাই aggregate তে সব review ──────────────────
+  const reviewAggregates = await ReviewModel.aggregate([
+    { $match: { review_product_id: { $in: productIds } } },
+    {
+      $group: {
+        _id: "$review_product_id",
+        averageRating: { $avg: "$review_ratting" },
+        totalReviews: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const reviewMap = new Map<string, any>();
+  reviewAggregates.forEach((r) => reviewMap.set(r._id.toString(), r));
+
+  // product কে Map এ রাখো
+  const productById = new Map<string, any>();
+  foundProducts.forEach((p) => productById.set(p._id.toString(), p));
+
+  // ── Step 5: প্রতিটা cart item এর জন্য আলাদা entry ─────────
+  const productDetails: any[] = [];
+
+  for (const cartItem of products) {
+    const productIdStr = cartItem.product_id;
+    const baseProduct = productById.get(productIdStr);
+
+    if (!baseProduct) continue;
+
+    // inactive check
+    if (baseProduct?.category_id?.category_status !== "active") continue;
+    if (
+      baseProduct?.sub_category_id &&
+      baseProduct?.sub_category_id?.sub_category_status !== "active"
+    )
+      continue;
+    if (
+      baseProduct?.brand_id &&
+      baseProduct?.brand_id?.brand_status !== "active"
+    )
+      continue;
+
+    // ✅ deep copy — same product এর দুটো variation আলাদা object হবে
+    const findProduct: any = { ...baseProduct };
+
+    // category/sub_category cleanup
+    delete findProduct.category_id;
+    delete findProduct.sub_category_id;
+
+    // brand cleanup
     if (findProduct?.brand_id) {
       findProduct.brand_id = {
-        _id: findProduct?.brand_id?._id,
-        brand_name: findProduct?.brand_id?.brand_name,
+        _id: findProduct.brand_id._id,
+        brand_name: findProduct.brand_id.brand_name,
       };
     }
 
-    let avarage_review_ratting: any = 0;
-    let total_review_ratting: any = 0;
-
-    const averageReview = await ReviewModel.aggregate([
-      {
-        $match: {
-          review_product_id: targetProductId,
-        },
-      },
-      {
-        $group: {
-          _id: "$review_product_id",
-          averageRating: { $avg: "$review_ratting" },
-          totalReviews: { $sum: 1 },
-        },
-      },
-    ]);
-
-    if (averageReview.length > 0) {
-      avarage_review_ratting = averageReview[0].averageRating;
-      total_review_ratting = averageReview[0].totalReviews;
-      // console.log(`Average Rating: ${averageReview[0].averageRating}`);
-      // console.log(`Total Reviews: ${averageReview[0].totalReviews}`);
+    // cart quantity
+    if (cartItem?.quantity) {
+      findProduct.cartQuantity = cartItem.quantity;
     }
 
-    findProduct.avarage_review_ratting = avarage_review_ratting;
-    findProduct.total_review_ratting = total_review_ratting;
+    // variation attach
+    if (findProduct?.is_variation && cartItem?.variation_id) {
+      findProduct.variations = variationById.get(cartItem.variation_id) || null;
+    }
 
-    productDetails?.push({
-      ...findProduct,
-    });
+    // review attach
+    const review = reviewMap.get(productIdStr);
+    findProduct.avarage_review_ratting = review?.averageRating || 0;
+    findProduct.total_review_ratting = review?.totalReviews || 0;
+
+    productDetails.push(findProduct);
   }
 
   return productDetails;
