@@ -1000,18 +1000,49 @@ export const findAProductDetails: RequestHandler = async (
 ): Promise<IProductInterface | any> => {
   try {
     const product_slug = req.params.product_slug;
-    const result: IProductInterface[] | any =
-      await findAProductDetailsServices(product_slug);
-    return sendResponse<IProductInterface>(res, {
-      statusCode: httpStatus.OK,
+    const result: any = await findAProductDetailsServices(product_slug);
+
+    // redirect_slug আসলে 301 পাঠাও
+    if (result?.redirect_slug && !result?.data) {
+      return res.status(301).json({
+        statusCode: 301,
+        success: true,
+        message: "Product moved permanently",
+        redirect_slug: result.redirect_slug,
+      });
+    }
+
+    // ✅ result.data unwrap — double nesting fix
+    return res.status(200).json({
+      statusCode: 200,
       success: true,
       message: "Product Found Successfully !",
-      data: result,
+      data: result?.data,
     });
   } catch (error: any) {
     next(error);
   }
 };
+
+// export const findAProductDetails: RequestHandler = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ): Promise<IProductInterface | any> => {
+//   try {
+//     const product_slug = req.params.product_slug;
+//     const result: IProductInterface[] | any =
+//       await findAProductDetailsServices(product_slug);
+//     return sendResponse<IProductInterface>(res, {
+//       statusCode: httpStatus.OK,
+//       success: true,
+//       message: "Product Found Successfully !",
+//       data: result,
+//     });
+//   } catch (error: any) {
+//     next(error);
+//   }
+// };
 
 // Find cart Product
 export const findCartProduct: RequestHandler = async (
