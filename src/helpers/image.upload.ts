@@ -1,5 +1,3 @@
-
-
 import {
   DeleteObjectCommand,
   ObjectCannedACL,
@@ -13,20 +11,30 @@ const path = require("path");
 const uuid = require("uuid");
 
 // ================= AWS Config (DigitalOcean Spaces) ===================
-const region = "sgp1"; // তোমার space এর region
-const endpoint = "https://sgp1.digitaloceanspaces.com"; // DO এর endpoint
+// Digital Ocean space object
+// const region = "sgp1"; // তোমার space এর region
+// const endpoint = "https://sgp1.digitaloceanspaces.com"; // DO এর endpoint
+// accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
+// secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
+// const SpaceName = "artisen-leather";
+// const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+
+const region = process.env.S3_REGION!;
+const endpoint = process.env.S3_ENDPOINT!;
 const s3 = new S3Client({
   region,
   endpoint,
   credentials: {
-    accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
-    secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
+    // accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
+    // secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
+    accessKeyId: process.env.S3_ACCESS_KEY!,
+    secretAccessKey: process.env.S3_SECRET_KEY!,
   },
 });
 
 // তোমার Space name
-const SpaceName = "artisen-leather";
-
+// const SpaceName = "artisen-leather";
+const SpaceName = process.env.S3_BUCKET!;
 // ================= Multer Config ===================
 const storage = multer.diskStorage({
   destination: "uploads/",
@@ -126,8 +134,9 @@ const uploadToSpaces = async (file: any) => {
     const { Key } = uploadParams;
 
     // ✅ CDN URL ব্যবহার করছি (origin বাদ দিয়ে)
-    const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+    // const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
 
+    const Location = `${process.env.S3_ENDPOINT}/${SpaceName}/${Key}`;
     const sendData = {
       Location, // frontend এ use হবে
       Key, // future delete এর জন্য দরকার
