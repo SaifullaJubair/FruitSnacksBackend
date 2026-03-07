@@ -24,6 +24,7 @@ const endpoint = process.env.S3_ENDPOINT!;
 const s3 = new S3Client({
   region,
   endpoint,
+  forcePathStyle: true,
   credentials: {
     // accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
     // secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
