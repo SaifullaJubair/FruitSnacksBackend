@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
-const uri = `mongodb+srv://saifullajubair6:o89AfmHshyzDnAi0@cluster0.xxqcwqo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-
+// const uri = `mongodb+srv://saifullajubair6:o89AfmHshyzDnAi0@cluster0.xxqcwqo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = process.env.MONGO_URI as string;
 function connectDB() {
   mongoose.set("strictQuery", false);
   const time = new Date().toLocaleTimeString();
