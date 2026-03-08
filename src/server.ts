@@ -20,7 +20,7 @@ function connectDB() {
         time,
         ":",
         date,
-        ": Database is connected Successfully"
+        ": Database is connected Successfully",
       );
     })
     .catch((err: Error) => {

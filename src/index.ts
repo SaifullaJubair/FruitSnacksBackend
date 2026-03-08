@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express, { Application, NextFunction, Request, Response } from "express";
 import cors from "cors";
 import connectDB from "./server";

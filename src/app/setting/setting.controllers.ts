@@ -84,15 +84,13 @@ export const getZoneData: RequestHandler = async (
 
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: process.env.PATHAO_CLIENT_ID,
           client_secret: process.env.PATHAO_CLIENT_SECRET,
           grant_type: "password",
-          username: process.env.PATHAO_USERNAME,
-          password: process.env.PATHAO_PASSWORD,
+          username: process.env.PATHAO_CLIENT_EMAIL, 
+          password: process.env.PATHAO_CLIENT_PASSWORD, 
         }),
       },
     );
