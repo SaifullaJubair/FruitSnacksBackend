@@ -98,6 +98,7 @@ export const getZoneData: RequestHandler = async (
     );
 
     const result = await response.json();
+    console.log("Pathao token result:", JSON.stringify(result));
     // city data
     const zoneData = await fetch(
       `https://api-hermes.pathao.com/aladdin/api/v1/cities/${city_id}/zone-list`,
@@ -112,6 +113,8 @@ export const getZoneData: RequestHandler = async (
 
     // Parse zoneData
     const zoneResult = await zoneData.json();
+    console.log("Zone API response:", JSON.stringify(zoneResult));
+
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
