@@ -137,7 +137,8 @@ const uploadToSpaces = async (file: any) => {
     // ✅ CDN URL ব্যবহার করছি (origin বাদ দিয়ে)
     // const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
 
-    const Location = `${process.env.S3_ENDPOINT}/${SpaceName}/${Key}`;
+    // const Location = `${process.env.S3_ENDPOINT}/${SpaceName}/${Key}`;
+    const Location = `${process.env.S3_PUBLIC_URL}:${process.env.S3_BUCKET}/${Key}`;
     const sendData = {
       Location, // frontend এ use হবে
       Key, // future delete এর জন্য দরকার
