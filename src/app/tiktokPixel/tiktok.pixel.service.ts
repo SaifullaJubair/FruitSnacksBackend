@@ -36,8 +36,7 @@ export const sendTikTokEvent = async (data: ITikTokEventData) => {
   try {
     const payload = {
       event_source: "web",
-      event_source_id: pixelId, // ✅ v1.3 এ এটাই সঠিক field
-      partner_name: "TikTok_Conversions", // optional but recommended
+      event_source_id: pixelId,
       data: [
         {
           event: data.event_name,
