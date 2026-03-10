@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  checkUserPhone,
   deleteAUser,
   findAllDashboardUser,
   postForgotPasswordUser,
@@ -30,8 +31,12 @@ router.route("/login").post(postLogUser);
 // forgot password
 router.route("/forgetPassword").post(postForgotPasswordUser);
 
+// check user phone
+router.route("/check_phone").get(checkUserPhone);
+
 // verify User OTP
 router.route("/verifyOTP").post(verifyUserOTP);
+
 // update User OTP and resend otp
 router.route("/resend_otp").post(postUserResendCode);
 

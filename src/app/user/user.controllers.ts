@@ -173,6 +173,42 @@ export const postLogUser: RequestHandler = async (
   }
 };
 
+// ── Check User ────────────────────────────────────────────
+
+export const checkUserPhone: RequestHandler = async (req, res, next) => {
+  try {
+    const { phone } = req.query;
+
+    if (!phone) {
+      throw new ApiError(400, "Phone number required!");
+    }
+
+    const findUser: any = await UserModel.findOne({ user_phone: phone });
+
+    if (!findUser) {
+      return sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "User not found",
+        data: { exists: false, verified: false },
+      });
+    }
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "User found",
+      data: {
+        exists: true,
+        verified: findUser?.user_verified === true,
+        has_password: !!findUser?.user_password,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 //  ── Verify OTP ───────────────────────────────────────
 export const verifyUserOTP: RequestHandler = async (req, res, next) => {
