@@ -1,4 +1,3 @@
-
 export interface IUserInterface {
   _id?: any;
   user_password?: string;
@@ -13,6 +12,9 @@ export interface IUserInterface {
   user_status?: "active" | "in-active";
   wallet_amount?: number;
   forgot_otp?: number;
+  otp_expires_at?: Date; // ✅ OTP expiry
+  user_type?: "guest" | "registered"; // ✅ guest or registered
+  user_verified?: boolean; // ✅ password set করেছে কিনা
 }
 
 export const userSearchableField = [
@@ -23,4 +25,5 @@ export const userSearchableField = [
   "user_country",
   "user_division",
   "user_district",
+  "user_type",
 ];

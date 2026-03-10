@@ -53,7 +53,10 @@ const findOrCreateUser = async (
   requestData: any,
   session: mongoose.ClientSession,
 ) => {
-  if (!requestData?.need_user_create) return;
+  if (!requestData?.need_user_create) {
+    requestData.user_created = false;
+    return;
+  }
 
   const userCheck: any = await UserModel.findOne({
     user_phone: requestData?.customer_phone,
@@ -61,6 +64,7 @@ const findOrCreateUser = async (
 
   if (userCheck) {
     requestData.customer_id = userCheck?._id?.toString();
+    requestData.user_created = false; // ✅ existing user — not new
     return;
   }
 
@@ -73,6 +77,8 @@ const findOrCreateUser = async (
     user_address: requestData?.billing_address,
     user_status: "active",
     wallet_amount: 0,
+    user_type: "guest", // ✅
+    user_verified: false, // ✅
   };
 
   if (requestData?.user_password) {
@@ -88,6 +94,9 @@ const findOrCreateUser = async (
         );
       },
     );
+    // password দিলে verified ধরো
+    userCreateData.user_verified = true;
+    userCreateData.user_type = "registered";
   }
 
   const result: IUserInterface | any = await postSingleOrderUserServices(
@@ -96,6 +105,7 @@ const findOrCreateUser = async (
   );
   if (!result) throw new ApiError(400, "User Added Failed !");
   requestData.customer_id = result?._id?.toString();
+  requestData.user_created = true; // ✅ brand new user
 };
 
 // ================================================================
@@ -252,7 +262,11 @@ export const postOrder: any = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Order Create Successfully !",
-      data: { order_id: result?._id, invoice_id: requestData?.invoice_id },
+      data: {
+        order_id: result?._id,
+        invoice_id: requestData?.invoice_id,
+        user_created: requestData?.user_created ?? false, // ✅
+      },
     });
   } catch (error) {
     await session.abortTransaction();
@@ -349,7 +363,11 @@ export const postSingleOrder: any = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Order Create Successfully !",
-      data: { order_id: result?._id, invoice_id: requestData?.invoice_id },
+      data: {
+        order_id: result?._id,
+        invoice_id: requestData?.invoice_id,
+        user_created: requestData?.user_created ?? false, // ✅
+      },
     });
   } catch (error) {
     await session.abortTransaction();

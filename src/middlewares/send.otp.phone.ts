@@ -1,27 +1,51 @@
+// src/middlewares/send.otp.phone.ts
 import axios from "axios";
-import { IAuthenticationInterface } from "../app/authentication/authentication.interface";
-import AuthenticationModel from "../app/authentication/authentication.model";
 require("dotenv").config();
 
 export const SendPhoneOTP = async (
-  otp: number | any,
-  number: string | any,
-  user_name: string
-) => {
+  otp: number,
+  number: string,
+  user_name: string,
+): Promise<boolean> => {
   try {
-    const phoneCredentialsData: IAuthenticationInterface | any =
-      await AuthenticationModel.find({});
+    const apiKey = process.env.BULKSMS_API_KEY;
+    const senderId = process.env.BULKSMS_SENDER_ID;
 
-    const phoneCredentials = phoneCredentialsData[0];
-    const response = await axios.get(
-      `https://sms.rapidsms.xyz/request.php?user_id=${phoneCredentials?.otp_phone_user}&password=${phoneCredentials?.otp_phone_password}&number=${number}&message=Hii,%20${user_name}%20${phoneCredentials?.otp_phone_body}%20<b><u>${otp}</u></b>`
-    );
-    if (response?.data?.status == "success") {
-      return true;
-    } else {
+    if (!apiKey || !senderId) {
+      console.warn(
+        "BulkSMS: BULKSMS_API_KEY or BULKSMS_SENDER_ID not set in .env",
+      );
       return false;
     }
-  } catch (error) {
+
+    // BulkSMS BD format — OTP message
+    const message = `Artisan Leather: Your OTP is ${otp}. Valid for 10 mins. For security, do not share this code with anyone.`;
+    // number format: 8801XXXXXXXXX
+    const formattedNumber = number.startsWith("+")
+      ? number.replace("+", "")
+      : number.startsWith("88")
+        ? number
+        : `88${number}`;
+
+    const response = await axios.get(`http://bulksmsbd.net/api/smsapi`, {
+      params: {
+        api_key: apiKey,
+        type: "text",
+        number: formattedNumber,
+        senderid: senderId,
+        message: message,
+      },
+    });
+
+    // BulkSMS success code = 202
+    if (response?.data?.response_code === 202) {
+      return true;
+    } else {
+      console.error("BulkSMS error:", response?.data);
+      return false;
+    }
+  } catch (error: any) {
+    console.error("SendPhoneOTP error:", error?.message);
     return false;
   }
 };

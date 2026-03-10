@@ -8,6 +8,7 @@ import {
   postUserResendCode,
   updateforgotPasswordUsersChangeNewPassword,
   updateUser,
+  verifyUserOTP,
 } from "./user.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -29,6 +30,8 @@ router.route("/login").post(postLogUser);
 // forgot password
 router.route("/forgetPassword").post(postForgotPasswordUser);
 
+// verify User OTP
+router.route("/verifyOTP").post(verifyUserOTP);
 // update User OTP and resend otp
 router.route("/resend_otp").post(postUserResendCode);
 
