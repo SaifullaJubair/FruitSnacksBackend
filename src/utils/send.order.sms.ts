@@ -45,10 +45,10 @@ export const sendOrderSMS_GuestUnverified = async (
   invoice_id: string,
 ): Promise<void> => {
   const message =
-    `${SITE_TITLE}:\n` +
-    `Thanks for your order! Invoice: ${invoice_id}.\n` +
-    `Your account is ready.\n` +
-    `Set your password:\n` +
+    `${SITE_TITLE}: Thanks for your order!\n` +
+    `Invoice: ${invoice_id}\n` +
+    // `Your account is ready.\n` +
+    `Set a password to view your orders:\n` +
     `${SITE_URL}/set-password?phone=${phoneForURL(phone)}`;
   await sendSMS(phone, message);
 };
@@ -60,8 +60,8 @@ export const sendOrderSMS_VerifiedGuest = async (
   tracking_id: string,
 ): Promise<void> => {
   const message =
-    `${SITE_TITLE}:\n` +
-    `Thanks for your order! Invoice: ${invoice_id}.\n` +
+    `${SITE_TITLE}: Thanks for your order!\n` +
+    `Invoice: ${invoice_id}\n` +
     `Track your order:\n` +
     `${SITE_URL}/orders/order-tracking/${tracking_id}`;
   await sendSMS(phone, message);
@@ -73,8 +73,8 @@ export const sendOrderSMS_LoggedIn = async (
   invoice_id: string,
 ): Promise<void> => {
   const message =
-    `${SITE_TITLE}:\n` +
-    `Thanks for your order! Invoice: ${invoice_id}.\n` +
+    `${SITE_TITLE}: Thanks for your order!\n` +
+    `Invoice: ${invoice_id}\n` +
     `Check order history:\n` +
     `${SITE_URL}/user-profile?tab=purchase-history`;
   await sendSMS(phone, message);
