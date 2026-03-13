@@ -60,6 +60,11 @@ const findOrCreateUser = async (
   session: mongoose.ClientSession,
 ) => {
   if (!requestData?.need_user_create) {
+    // ✅ Logged in user — DB থেকে user_verified নিয়ে আসো
+    const loggedInUser: any = await UserModel.findOne({
+      _id: requestData?.customer_id,
+    }).session(session);
+    requestData.user_verified = loggedInUser?.user_verified ?? false;
     requestData.user_created = false;
     return;
   }
@@ -70,7 +75,8 @@ const findOrCreateUser = async (
 
   if (userCheck) {
     requestData.customer_id = userCheck?._id?.toString();
-    requestData.user_created = false; // ✅ existing user — not new
+    requestData.user_created = false;
+    requestData.user_verified = userCheck?.user_verified ?? false; // ✅
     return;
   }
 
@@ -83,8 +89,8 @@ const findOrCreateUser = async (
     user_address: requestData?.billing_address,
     user_status: "active",
     wallet_amount: 0,
-    user_type: "guest", // ✅
-    user_verified: false, // ✅
+    user_type: "guest",
+    user_verified: false,
   };
 
   if (requestData?.user_password) {
@@ -100,7 +106,6 @@ const findOrCreateUser = async (
         );
       },
     );
-    // password দিলে verified ধরো
     userCreateData.user_verified = true;
     userCreateData.user_type = "registered";
   }
@@ -110,8 +115,10 @@ const findOrCreateUser = async (
     session,
   );
   if (!result) throw new ApiError(400, "User Added Failed !");
+
   requestData.customer_id = result?._id?.toString();
-  requestData.user_created = true; // ✅ brand new user
+  requestData.user_created = true;
+  requestData.user_verified = userCreateData.user_verified; // ✅
 };
 
 // ================================================================
@@ -267,9 +274,8 @@ export const postOrder: any = async (
       const phone = requestData?.customer_phone;
       const invoice_id = requestData?.invoice_id;
       const user_verified = requestData?.user_verified ?? false;
-      // is_logged_in: frontend sends customer_id only when logged in
-      const is_logged_in =
-        !!requestData?.customer_id && !requestData?.user_created;
+      // need_user_create=false মানে logged in user
+      const is_logged_in = !requestData?.need_user_create;
 
       if (phone && invoice_id) {
         if (!user_verified) {
@@ -389,8 +395,8 @@ export const postSingleOrder: any = async (
       const phone = requestData?.customer_phone;
       const invoice_id = requestData?.invoice_id;
       const user_verified = requestData?.user_verified ?? false;
-      const is_logged_in =
-        !!requestData?.customer_id && !requestData?.user_created;
+      // need_user_create=false মানে logged in user
+      const is_logged_in = !requestData?.need_user_create;
 
       if (phone && invoice_id) {
         if (!user_verified) {
@@ -422,6 +428,7 @@ export const postSingleOrder: any = async (
     next(error);
   }
 };
+
 // ================================================================
 // GET Order Tracking Info
 // ================================================================
