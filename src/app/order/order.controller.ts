@@ -25,6 +25,12 @@ import { postSingleOrderUserServices } from "../user/user.services";
 import UserModel from "../user/user.model";
 import mongoose from "mongoose";
 import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
+import {
+  sendOrderSMS_GuestUnverified,
+  sendOrderSMS_LoggedIn,
+  sendOrderSMS_VerifiedGuest,
+} from "../../utils/send.order.sms";
+
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 
@@ -159,7 +165,7 @@ const handleCouponUsage = async (
 };
 
 // ================================================================
-// POST Order (Main)
+// POST Order (Main — Add to Cart)
 // ================================================================
 export const postOrder: any = async (
   req: Request,
@@ -221,13 +227,12 @@ export const postOrder: any = async (
     await session.commitTransaction();
     session.endSession();
 
-    // Server side Purchase event — silent fail
+    // ── Meta Purchase event (silent fail) ────────────────────────────────────
     try {
       const clientIp =
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
         req.socket?.remoteAddress ||
         "";
-      const clientUserAgent = req.headers["user-agent"] || "";
 
       await sendMetaEvent({
         event_name: "Purchase",
@@ -240,7 +245,7 @@ export const postOrder: any = async (
           fn: requestData?.customer_name,
           external_id: requestData?.customer_id,
           client_ip_address: clientIp,
-          client_user_agent: clientUserAgent,
+          client_user_agent: req.headers["user-agent"] || "",
           fbc: requestData?.fbc,
           fbp: requestData?.fbp,
         },
@@ -255,9 +260,31 @@ export const postOrder: any = async (
           order_id: result?._id?.toString(),
         },
       });
-    } catch (e) {
-      // Silent fail — order already created
-    }
+    } catch (_) {}
+
+    // ── SMS (silent fail) ─────────────────────────────────────────────────────
+    try {
+      const phone = requestData?.customer_phone;
+      const invoice_id = requestData?.invoice_id;
+      const user_verified = requestData?.user_verified ?? false;
+      // is_logged_in: frontend sends customer_id only when logged in
+      const is_logged_in =
+        !!requestData?.customer_id && !requestData?.user_created;
+
+      if (phone && invoice_id) {
+        if (!user_verified) {
+          // Case 1: Fresh guest OR returning unverified guest
+          await sendOrderSMS_GuestUnverified(phone, invoice_id);
+        } else if (user_verified && !is_logged_in) {
+          // Case 2: Verified but placed order without logging in
+          await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
+        } else {
+          // Case 3: Logged-in verified user
+          await sendOrderSMS_LoggedIn(phone, invoice_id);
+        }
+      }
+    } catch (_) {}
+
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -265,7 +292,7 @@ export const postOrder: any = async (
       data: {
         order_id: result?._id,
         invoice_id: requestData?.invoice_id,
-        user_created: requestData?.user_created ?? false, // ✅
+        user_created: requestData?.user_created ?? false,
       },
     });
   } catch (error) {
@@ -322,7 +349,8 @@ export const postSingleOrder: any = async (
 
     await session.commitTransaction();
     session.endSession();
-    // ✅ Server side Purchase event — silent fail
+
+    // ── Meta Purchase event (silent fail) ────────────────────────────────────
     try {
       const clientIp =
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
@@ -354,19 +382,38 @@ export const postSingleOrder: any = async (
           order_id: result?._id?.toString(),
         },
       });
-    } catch (e) {
-      // Silent fail
-    }
+    } catch (_) {}
+
+    // ── SMS (silent fail) ─────────────────────────────────────────────────────
+    try {
+      const phone = requestData?.customer_phone;
+      const invoice_id = requestData?.invoice_id;
+      const user_verified = requestData?.user_verified ?? false;
+      const is_logged_in =
+        !!requestData?.customer_id && !requestData?.user_created;
+
+      if (phone && invoice_id) {
+        if (!user_verified) {
+          // Case 1: Fresh guest OR returning unverified guest
+          await sendOrderSMS_GuestUnverified(phone, invoice_id);
+        } else if (user_verified && !is_logged_in) {
+          // Case 2: Verified but placed order without logging in
+          await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
+        } else {
+          // Case 3: Logged-in verified user
+          await sendOrderSMS_LoggedIn(phone, invoice_id);
+        }
+      }
+    } catch (_) {}
 
     return sendResponse(res, {
-      // ✅ <IOrderInterface> সরানো
       statusCode: httpStatus.OK,
       success: true,
       message: "Order Create Successfully !",
       data: {
         order_id: result?._id,
         invoice_id: requestData?.invoice_id,
-        user_created: requestData?.user_created ?? false, // ✅
+        user_created: requestData?.user_created ?? false,
       },
     });
   } catch (error) {
@@ -375,7 +422,6 @@ export const postSingleOrder: any = async (
     next(error);
   }
 };
-
 // ================================================================
 // GET Order Tracking Info
 // ================================================================
