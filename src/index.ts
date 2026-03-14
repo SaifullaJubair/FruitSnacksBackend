@@ -23,10 +23,16 @@ const corsOptions = {
     "http://localhost:3001",
     "http://admin.artisenleather.com",
     "http://www.admin.artisenleather.com",
+    "http://dev-admin.artisenleather.com",
+    "http://www.dev-admin.artisenleather.com",
     "https://artisenleather.com",
     "https://www.artisenleather.com",
+    "https://dev.artisenleather.com",
+    "https://www.dev.artisenleather.com",
     "https://admin.artisenleather.com",
     "https://www.admin.artisenleather.com",
+    "https://dev-admin.artisenleather.com",
+    "https://www.dev-admin.artisenleather.com",
     "https://artisan-lather-frontend.vercel.app",
   ], // Allow only this origin
   credentials: true, // Allow credentials
