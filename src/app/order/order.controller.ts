@@ -825,3 +825,59 @@ export const updateOrder: RequestHandler = async (
     next(error);
   }
 };
+
+// ===============================================================
+// PATCH Update Order Delivery Info
+// ================================================================
+
+export const updateOrderDeliveryInfo: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { order_id } = req.params;
+    const {
+      delivery_name,
+      delivery_phone,
+      delivery_alt_phone,
+      delivery_address,
+      delivery_note,
+    } = req.body;
+
+    // শুধু delivery fields update করব — order_status বা অন্য কিছু না
+    const updateData: any = {};
+    if (delivery_name !== undefined) updateData.delivery_name = delivery_name;
+    if (delivery_phone !== undefined)
+      updateData.delivery_phone = delivery_phone;
+    if (delivery_alt_phone !== undefined)
+      updateData.delivery_alt_phone = delivery_alt_phone;
+    if (delivery_address !== undefined)
+      updateData.delivery_address = delivery_address;
+    if (delivery_note !== undefined) updateData.delivery_note = delivery_note;
+
+    if (Object.keys(updateData).length === 0) {
+      throw new ApiError(400, "No delivery fields provided to update");
+    }
+
+    updateData.order_updated_by = (req as any).userId;
+
+    const result = await OrderModel.updateOne(
+      { _id: order_id },
+      { $set: updateData },
+      { runValidators: true },
+    );
+
+    if (result.matchedCount === 0) throw new ApiError(404, "Order Not Found!");
+    // if (result.modifiedCount === 0)
+    // throw new ApiError(400, "Delivery Info Update Failed!");
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Delivery Info Updated Successfully!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

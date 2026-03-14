@@ -44,6 +44,13 @@ export interface IOrderInterface {
   steadfast_tracking_code?: string;
   steadfast_status?: string;
   steadfast_tracking_message?: string;
+  // ── Delivery override fields (admin editable) ─────────────────────────────
+  // Courier এ পাঠানোর সময় এগুলো থাকলে use হবে, না থাকলে original billing data
+  delivery_name?: string; // recipient name override
+  delivery_phone?: string; // recipient phone override
+  delivery_alt_phone?: string; // alternative phone (Steadfast support করে)
+  delivery_address?: string; // address override
+  delivery_note?: string; // courier note / delivery instruction
 }
 
 export const orderSearchableField = [

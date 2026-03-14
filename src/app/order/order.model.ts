@@ -154,6 +154,22 @@ const orderSchema = new Schema<IOrderInterface>(
     steadfast_tracking_message: {
       type: String,
     },
+    // ── Delivery override fields ───────────────────────────────────────────────
+    delivery_name: {
+      type: String,
+    },
+    delivery_phone: {
+      type: String,
+    },
+    delivery_alt_phone: {
+      type: String,
+    },
+    delivery_address: {
+      type: String,
+    },
+    delivery_note: {
+      type: String,
+    },
   },
   {
     timestamps: true,
