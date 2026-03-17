@@ -11,6 +11,7 @@ import {
   postSingleOrder,
   updateOrder,
   cancelSteadfastOrder,
+  updateOrderDeliveryInfo, // ✅ নতুন import
 } from "./order.controller";
 
 const router = express.Router();
@@ -39,6 +40,12 @@ router.route("/pathao").get(verifyToken("order_show"), getPathaoOrders);
 
 // Order tracking (frontend — no auth)
 router.route("/order_tracking").post(getOrderTrackingInfo);
+
+// ✅ Update delivery info (admin only)
+// ⚠️ /:order_id এর আগে রাখতে হবে নইলে match হয়ে যাবে
+router
+  .route("/delivery-info/:order_id")
+  .patch(verifyToken("order_update"), updateOrderDeliveryInfo);
 
 // Order details with products
 // ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard

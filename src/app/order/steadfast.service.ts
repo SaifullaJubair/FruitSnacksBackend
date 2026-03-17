@@ -7,7 +7,6 @@ import ProductModel from "../product/product.model";
 import VariationModel from "../variation/variation.model";
 import { steadfastStatusMap } from "./webhook/webhook.controller";
 
-// TEST VERSION — hardcoded keys
 const STEADFAST_BASE_URL = "https://portal.packzy.com/api/v1";
 const STEADFAST_API_KEY = process.env.STEADFAST_API_KEY;
 const STEADFAST_SECRET_KEY = process.env.STEADFAST_SECRET_KEY;
@@ -16,6 +15,10 @@ const steadfastHeaders = {
   "Secret-Key": STEADFAST_SECRET_KEY,
   "Content-Type": "application/json",
 };
+
+// ── Helper: phone normalize (01XXXXXXXXX format) ─────────────────────────────
+const normalizePhone = (phone: string): string =>
+  phone.replace(/^\+?88/, "").replace(/\D/g, "");
 
 // Steadfast এ order পাঠানো
 export const sendOrderToSteadfastService = async (
@@ -42,14 +45,29 @@ export const sendOrderToSteadfastService = async (
     );
   }
 
-  const payload = {
+  // ── Delivery override — admin set করলে সেটা, না হলে original ──────────────
+  const recipientName =
+    order.delivery_name || order.customer_id?.user_name || "Customer";
+  const recipientPhone = order.delivery_phone || order.customer_phone;
+  const altPhone = order.delivery_alt_phone || "";
+  const recipientAddress =
+    order.delivery_address ||
+    `${order.billing_address}, ${order.billing_city}, ${order.billing_state}, ${order.billing_country}`;
+  const note = order.delivery_note || "";
+
+  const payload: any = {
     invoice: order.invoice_id,
-    recipient_name: order.customer_id?.user_name || "Customer",
-    recipient_phone: order.customer_phone,
-    recipient_address: `${order.billing_address}, ${order.billing_city}, ${order.billing_state}, ${order.billing_country}`,
+    recipient_name: recipientName,
+    recipient_phone: normalizePhone(recipientPhone),
+    recipient_address: recipientAddress,
     cod_amount: order.grand_total_amount,
-    note: "",
+    note,
   };
+
+  // alternative_phone — Steadfast optional field
+  if (altPhone) {
+    payload.alternative_phone = normalizePhone(altPhone);
+  }
 
   console.log("Steadfast payload:", payload);
 
@@ -70,7 +88,6 @@ export const sendOrderToSteadfastService = async (
 
   const consignment = response.data?.consignment;
 
-  // ✅ Edge case — consignment না আসলে
   if (!consignment?.consignment_id) {
     throw new ApiError(
       500,
@@ -98,8 +115,6 @@ export const sendOrderToSteadfastService = async (
 
   return consignment;
 };
-
-
 
 // ================================================================
 // Steadfast bulk send
@@ -133,7 +148,6 @@ export const bulkSendToSteadfastService = async (
   return results;
 };
 
-
 // Steadfast tracking
 export const trackSteadfastOrderService = async (
   consignment_id: string,
@@ -156,10 +170,9 @@ export const getSteadfastBalanceService = async (): Promise<any> => {
   return response.data;
 };
 
-
 // ================================================================
-// Steadfast status sync — DB তে manually update করো
-// ================================================================ 
+// Steadfast status sync
+// ================================================================
 export const syncSteadfastOrderService = async (
   order_id: string,
 ): Promise<any> => {
@@ -186,23 +199,17 @@ export const syncSteadfastOrderService = async (
     " " +
     new Date().toLocaleTimeString();
 
-  const updateData: any = {
-    steadfast_status: steadfastStatus,
-  };
+  const updateData: any = { steadfast_status: steadfastStatus };
 
   if (newOrderStatus) {
     updateData.order_status = newOrderStatus;
 
-    if (newOrderStatus === "processing" && !order.processing_time) {
+    if (newOrderStatus === "processing" && !order.processing_time)
       updateData.processing_time = timeNow;
-    }
-    if (newOrderStatus === "shipped" && !order.shipped_time) {
+    if (newOrderStatus === "shipped" && !order.shipped_time)
       updateData.shipped_time = timeNow;
-    }
     if (newOrderStatus === "delivered") {
       updateData.delivered_time = timeNow;
-
-      // শুধু fully delivered হলে quantity কমাও
       if (
         steadfastStatus === "delivered" &&
         order.order_status !== "delivered"
@@ -210,7 +217,6 @@ export const syncSteadfastOrderService = async (
         const orderProducts = await OrderProductModel.find({
           order_id: order._id.toString(),
         });
-
         for (const op of orderProducts) {
           if (!op.variation_id) {
             await ProductModel.updateOne(
@@ -226,16 +232,10 @@ export const syncSteadfastOrderService = async (
         }
       }
     }
-    if (newOrderStatus === "cancel") {
-      updateData.cancel_time = timeNow;
-    }
+    if (newOrderStatus === "cancel") updateData.cancel_time = timeNow;
   }
 
   await OrderModel.updateOne({ _id: order_id }, { $set: updateData });
 
-  return {
-    steadfast_status: steadfastStatus,
-    order_status: newOrderStatus,
-  };
+  return { steadfast_status: steadfastStatus, order_status: newOrderStatus };
 };
-
