@@ -37,6 +37,7 @@ import PageSeoRouter from "../app/pageSeo/pageSeo.route";
 import TikTokPixelRouter from "../app/tiktokPixel/tiktok.pixel.route";
 import { ThemeRoutes } from "../app/theme/theme.routes";
 import { FaqTemplateRoutes } from "../app/faq_template/faq_template.routes";
+import { VariationRoutes } from "../app/variation/variation.routes";
 
 const router = express.Router();
 
@@ -180,6 +181,7 @@ const moduleRoutes = [
   { path: "/page-seo", route: PageSeoRouter },
   { path: "/theme", route: ThemeRoutes },
   { path: "/faq-template", route: FaqTemplateRoutes },
+  { path: "/variation", route: VariationRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
