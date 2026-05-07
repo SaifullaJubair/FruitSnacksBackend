@@ -152,7 +152,7 @@ export const deleteAAuthenticationInfo = async (
 export const logoutUser: RequestHandler = (req, res, next) => {
   try {
     // Clear the cookie
-    res.cookie("artisan_lather_token", "", {
+    res.cookie("fruit_snacks_token", "", {
       httpOnly: true,
       secure: true,
       sameSite: "none",

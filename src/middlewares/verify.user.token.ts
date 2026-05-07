@@ -16,7 +16,7 @@ export const verifyUserToken = async (
   next: NextFunction,
 ): Promise<any> => {
   try {
-    const token = req.cookies?.artisan_lather_token;
+    const token = req.cookies?.fruit_snacks_token;
     if (!token) throw new ApiError(401, "Login required!");
 
     const decoded: any = await promisify(jwt.verify)(token, JWT_SECRET);

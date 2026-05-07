@@ -21,19 +21,19 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:4173",
     "http://localhost:3001",
-    "http://admin.artisenleather.com",
-    "http://www.admin.artisenleather.com",
-    "http://dev-admin.artisenleather.com",
-    "http://www.dev-admin.artisenleather.com",
-    "https://artisenleather.com",
-    "https://www.artisenleather.com",
-    "https://dev.artisenleather.com",
-    "https://www.dev.artisenleather.com",
-    "https://admin.artisenleather.com",
-    "https://www.admin.artisenleather.com",
-    "https://dev-admin.artisenleather.com",
-    "https://www.dev-admin.artisenleather.com",
-    "https://artisan-lather-frontend.vercel.app",
+    "http://admin.fruitsnacksbd.com",
+    "http://www.admin.fruitsnacksbd.com",
+    "http://dev-admin.fruitsnacksbd.com",
+    "http://www.dev-admin.fruitsnacksbd.com",
+    "https://fruitsnacksbd.com",
+    "https://www.fruitsnacksbd.com",
+    "https://dev.fruitsnacksbd.com",
+    "https://www.dev.fruitsnacksbd.com",
+    "https://admin.fruitsnacksbd.com",
+    "https://www.admin.fruitsnacksbd.com",
+    "https://dev-admin.fruitsnacksbd.com",
+    "https://www.dev-admin.fruitsnacksbd.com",
+    "https://fruitsnacks-frontend.vercel.app",
   ], // Allow only this origin
   credentials: true, // Allow credentials
 };
@@ -43,7 +43,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get("/", async (req: Request, res: Response) => {
-  res.send("Artisan Leather Server is working!");
+  res.send("FruitSnacks Server is working!");
 });
 
 // Import All Api
@@ -140,6 +140,6 @@ app.listen(port, () => {
     time,
     ":",
     date,
-    `: Artisan Leather server listening on port ${port}`,
+    `: FruitSnacks server listening on port ${port}`,
   );
 });

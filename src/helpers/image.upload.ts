@@ -16,7 +16,7 @@ const uuid = require("uuid");
 // const endpoint = "https://sgp1.digitaloceanspaces.com"; // DO এর endpoint
 // accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
 // secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
-// const SpaceName = "artisen-leather";
+// const SpaceName = "fruit-snacks";
 // const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
 
 const region = process.env.S3_REGION!;
@@ -34,7 +34,7 @@ const s3 = new S3Client({
 });
 
 // তোমার Space name
-// const SpaceName = "artisen-leather";
+// const SpaceName = "fruit-snacks";
 const SpaceName = process.env.S3_BUCKET!;
 // ================= Multer Config ===================
 const storage = multer.diskStorage({
@@ -123,7 +123,7 @@ const uploadToSpaces = async (file: any) => {
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `artisen_leather_images/${file.filename}`, // DO তে ফোল্ডার + filename
+    Key: `fruit_snacks_images/${file.filename}`, // DO তে ফোল্ডার + filename
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL, // Public read access
     ContentType: contentType,
@@ -196,7 +196,7 @@ const VideoUploader = async (file: any) => {
 
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `artisen_leather_videos/${file.filename}`, // ✅ ভিডিও ফোল্ডারে সেভ হবে
+    Key: `fruit_snacks_videos/${file.filename}`, // ✅ ভিডিও ফোল্ডারে সেভ হবে
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL,
     ContentType: contentType, // ✅ ডাইনামিক কনটেন্ট টাইপ

@@ -135,7 +135,7 @@ export const postLogUser: RequestHandler = async (
     const token = jwt.sign({ user_phone }, process.env.ACCESS_TOKEN, {
       expiresIn: "365d",
     });
-    res.cookie("artisan_lather_token", token, {
+    res.cookie("fruit_snacks_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "none",

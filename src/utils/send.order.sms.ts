@@ -3,8 +3,8 @@ import axios from "axios";
 
 const BULKSMS_API_KEY = process.env.BULKSMS_API_KEY!;
 const BULKSMS_SENDER_ID = process.env.BULKSMS_SENDER_ID!;
-const SITE_URL = process.env.SITE_URL || "https://artisenleather.com";
-const SITE_TITLE = process.env.SITE_TITLE || "Artisan Leather";
+const SITE_URL = process.env.SITE_URL || "https://fruitsnacksbd.com";
+const SITE_TITLE = process.env.SITE_TITLE || "FruitSnacks";
 
 // +8801799607660 → 8801799607660
 const formatPhone = (phone: string): string => {

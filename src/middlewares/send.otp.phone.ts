@@ -19,7 +19,7 @@ export const SendPhoneOTP = async (
     }
 
     // BulkSMS BD format — OTP message
-    const message = `Artisan Leather: Your OTP is ${otp}. Valid for 10 mins. For security, do not share this code with anyone.`;
+    const message = `FruitSnacks: Your OTP is ${otp}. Valid for 10 mins. For security, do not share this code with anyone.`;
     // number format: 8801XXXXXXXXX
     const formattedNumber = number.startsWith("+")
       ? number.replace("+", "")

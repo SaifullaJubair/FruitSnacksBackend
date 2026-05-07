@@ -245,7 +245,7 @@ export const postOrder: any = async (
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
         event_source_url:
-          req.headers?.referer || "https://artisenleather.com/cart",
+          req.headers?.referer || "https://fruitsnacksbd.com/cart",
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,
@@ -366,7 +366,7 @@ export const postSingleOrder: any = async (
       await sendMetaEvent({
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
-        event_source_url: req.headers?.referer || "https://artisenleather.com",
+        event_source_url: req.headers?.referer || "https://fruitsnacksbd.com",
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,

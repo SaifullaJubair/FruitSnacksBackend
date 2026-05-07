@@ -17,7 +17,7 @@ export const getMeUser: RequestHandler = async (
   next: NextFunction,
 ) => {
   try {
-    const token = await req.cookies?.artisan_lather_token;
+    const token = await req.cookies?.fruit_snacks_token;
 
     if (!token) {
       throw new ApiError(400, "User get failed !");

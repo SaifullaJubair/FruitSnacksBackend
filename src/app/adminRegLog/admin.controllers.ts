@@ -23,7 +23,7 @@ export const getMeAdmin: RequestHandler = async (
   next: NextFunction,
 ) => {
   try {
-    const token = await req.cookies?.artisan_lather_token;
+    const token = await req.cookies?.fruit_snacks_token;
 
     if (!token) {
       throw new ApiError(400, "Admin get failed !");
@@ -137,8 +137,8 @@ export const postLogAdmin: RequestHandler = async (
       const token = jwt.sign({ admin_phone }, process.env.ACCESS_TOKEN, {
         expiresIn: "365d",
       });
-      // res.cookie("artisan_lather_token", token); //according to chatgpt for access cookies separate domain i have to use like this
-      res.cookie("artisan_lather_token", token, {
+      // res.cookie("fruit_snacks_token", token); //according to chatgpt for access cookies separate domain i have to use like this
+      res.cookie("fruit_snacks_token", token, {
         httpOnly: true, // নিরাপত্তার জন্য
         secure: true, // https connection এর জন্য অবশ্যই true লাগবে
         sameSite: "none", // cross-domain এর জন্য required
