@@ -40,6 +40,7 @@ export const findAProductDetailsServices = async (
           path: "specifications.specification_id",
           model: "specifications", // ✅ fix — আগে "attributes" ছিল
         },
+        { path: "theme_id", model: "themes" },
       ])
       .select(
         "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt",

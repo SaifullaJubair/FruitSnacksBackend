@@ -35,6 +35,8 @@ import { CartRoutes } from "../app/cart/cart.routes";
 import { MetaPixelRoutes } from "../app/metaPixel/meta.pixel.routes";
 import PageSeoRouter from "../app/pageSeo/pageSeo.route";
 import TikTokPixelRouter from "../app/tiktokPixel/tiktok.pixel.route";
+import { ThemeRoutes } from "../app/theme/theme.routes";
+import { FaqTemplateRoutes } from "../app/faq_template/faq_template.routes";
 
 const router = express.Router();
 
@@ -176,6 +178,8 @@ const moduleRoutes = [
   { path: "/meta-pixel", route: MetaPixelRoutes },
   { path: "/tiktok-pixel", route: TikTokPixelRouter },
   { path: "/page-seo", route: PageSeoRouter },
+  { path: "/theme", route: ThemeRoutes },
+  { path: "/faq-template", route: FaqTemplateRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

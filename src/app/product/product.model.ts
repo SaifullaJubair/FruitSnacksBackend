@@ -1,5 +1,29 @@
 import { Schema, model } from "mongoose";
 import { IProductInterface } from "./product.interface";
+import ThemeModel from "../theme/theme.model";
+
+const adjustThemeUsage = async (themeId: any, delta: number) => {
+  if (!themeId) return;
+  try {
+    await ThemeModel.updateOne(
+      { _id: themeId },
+      [
+        {
+          $set: {
+            used_in_products: {
+              $max: [{ $add: ["$used_in_products", delta] }, 0],
+            },
+          },
+        },
+        {
+          $set: { is_deletable: { $eq: ["$used_in_products", 0] } },
+        },
+      ],
+    );
+  } catch (e) {
+    console.warn("[product] theme usage counter update failed", e);
+  }
+};
 
 // Product Schema
 const productSchema = new Schema<IProductInterface>(
@@ -290,6 +314,52 @@ const productSchema = new Schema<IProductInterface>(
     timestamps: true,
   },
 );
+
+// Theme usage counter — keep themes.used_in_products in sync
+productSchema.post("save", async function (doc: any) {
+  if (doc.theme_id) {
+    await adjustThemeUsage(doc.theme_id, +1);
+  }
+});
+
+productSchema.post("findOneAndDelete", async function (doc: any) {
+  if (doc?.theme_id) {
+    await adjustThemeUsage(doc.theme_id, -1);
+  }
+});
+
+productSchema.post("deleteOne", { document: true, query: false }, async function (this: any) {
+  if (this?.theme_id) {
+    await adjustThemeUsage(this.theme_id, -1);
+  }
+});
+
+// Track theme changes via findOneAndUpdate
+productSchema.pre("findOneAndUpdate", async function () {
+  const update: any = this.getUpdate();
+  const newThemeId = update?.theme_id ?? update?.$set?.theme_id;
+  if (newThemeId) {
+    const existing: any = await this.model.findOne(this.getQuery()).lean();
+    if (existing && String(existing.theme_id) !== String(newThemeId)) {
+      // stash old + new on options for post hook
+      this.setOptions({
+        ...(this.getOptions() || {}),
+        _prevThemeId: existing.theme_id,
+        _newThemeId: newThemeId,
+      });
+    }
+  }
+});
+
+productSchema.post("findOneAndUpdate", async function () {
+  const opts: any = this.getOptions();
+  if (opts?._prevThemeId) {
+    await adjustThemeUsage(opts._prevThemeId, -1);
+  }
+  if (opts?._newThemeId) {
+    await adjustThemeUsage(opts._newThemeId, +1);
+  }
+});
 
 const ProductModel = model<IProductInterface>("products", productSchema);
 

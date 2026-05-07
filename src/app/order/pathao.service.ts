@@ -132,6 +132,38 @@ export const sendOrderToPathaoService = async (
 
   const accessToken = await getPathaoAccessToken();
 
+  // ── Compute item_weight (kg) and item_quantity from order line items ───────
+  // Each variation may carry `variation_weight_grams`. Fallback per item: 500g.
+  const orderProducts = await OrderProductModel.find({ order_id: order._id })
+    .populate({ path: "variation_id", select: "variation_weight_grams variation_name" })
+    .lean();
+
+  let totalGrams = 0;
+  let totalQty = 0;
+  const missingWeightItems: string[] = [];
+
+  for (const op of orderProducts) {
+    const qty = op.product_quantity || 1;
+    totalQty += qty;
+    const variation: any = op.variation_id;
+    const grams = variation?.variation_weight_grams;
+    if (typeof grams === "number" && grams > 0) {
+      totalGrams += grams * qty;
+    } else {
+      totalGrams += 500 * qty; // fallback 500g per unit
+      missingWeightItems.push(variation?.variation_name || op.product_id?.toString());
+    }
+  }
+
+  if (missingWeightItems.length) {
+    console.warn(
+      `[pathao] Missing variation_weight_grams for: ${missingWeightItems.join(", ")} — using 500g fallback per unit. Update variation weight in admin panel.`,
+    );
+  }
+
+  const item_weight = Math.max(0.5, totalGrams / 1000);
+  const item_quantity = Math.max(1, totalQty);
+
   const payload = {
     store_id: process.env.PATHAO_STORE_ID,
     merchant_order_id: order.invoice_id,
@@ -144,8 +176,8 @@ export const sendOrderToPathaoService = async (
     delivery_type: 48,
     item_type: 2,
     special_instruction: specialNote,
-    item_quantity: 1,
-    item_weight: 0.5,
+    item_quantity,
+    item_weight,
     amount_to_collect: order.grand_total_amount,
     item_description: `Order ${order.invoice_id}`,
   };
