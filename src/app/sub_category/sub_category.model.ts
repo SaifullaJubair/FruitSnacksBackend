@@ -44,6 +44,11 @@ const subcategorySchema = new Schema<ISubCategoryInterface>(
       type: Schema.Types.ObjectId,
       ref: "admins",
     },
+    default_theme_id: {
+      type: Schema.Types.ObjectId,
+      ref: "themes",
+      default: null,
+    },
   },
   {
     timestamps: true,

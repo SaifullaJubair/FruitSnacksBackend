@@ -77,4 +77,14 @@ export interface IRoleInterface {
   customer_update?: true | false;
   customer_delete?: true | false;
   customer_show?: true | false;
+
+  // Dynamic Product Page System
+  theme_show?: true | false;
+  theme_create?: true | false;
+  theme_update?: true | false;
+  theme_delete?: true | false;
+  faq_template_show?: true | false;
+  faq_template_create?: true | false;
+  faq_template_update?: true | false;
+  faq_template_delete?: true | false;
 }

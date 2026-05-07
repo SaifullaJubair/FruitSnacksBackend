@@ -300,6 +300,40 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+
+    // ===== Dynamic Product Page System =====
+    theme_show: {
+      type: Boolean,
+      default: false,
+    },
+    theme_create: {
+      type: Boolean,
+      default: false,
+    },
+    theme_update: {
+      type: Boolean,
+      default: false,
+    },
+    theme_delete: {
+      type: Boolean,
+      default: false,
+    },
+    faq_template_show: {
+      type: Boolean,
+      default: false,
+    },
+    faq_template_create: {
+      type: Boolean,
+      default: false,
+    },
+    faq_template_update: {
+      type: Boolean,
+      default: false,
+    },
+    faq_template_delete: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

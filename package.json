@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@types/chroma-js": "^3.1.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/multer": "^1.4.12",
@@ -27,6 +28,7 @@
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "bkash-payment-gateway": "^2.0.1",
+    "chroma-js": "^3.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

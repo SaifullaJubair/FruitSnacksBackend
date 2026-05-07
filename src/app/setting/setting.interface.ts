@@ -88,4 +88,17 @@ export interface ISettingInterface {
 
   redx_enabled?: boolean;
   redx_api_key?: string;
+
+  // ✅ Announcement Bar (top of page, 3 items in design)
+  announcement_bar?: IAnnouncementBarItem[];
+}
+
+export interface IAnnouncementBarItem {
+  text: string;
+  icon?: string;
+}
+
+export interface ITrustPoint {
+  logo?: string;
+  title?: string;
 }

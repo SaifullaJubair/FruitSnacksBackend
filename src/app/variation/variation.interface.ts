@@ -18,4 +18,8 @@ export interface IVariationInterface {
   variation_video?: string;
   variation_video_key?: string;
   variation_sku?: string;
+
+  // Dynamic Product Page System
+  variation_weight_grams?: number | null;
+  variation_badge_text?: string | null;
 }

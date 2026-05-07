@@ -95,6 +95,15 @@ const settingSchema = new Schema<ISettingInterface>(
 
     redx_enabled: { type: Boolean, default: false },
     redx_api_key: { type: String },
+
+    // ✅ Announcement Bar (3-item rolling banner at top of page)
+    announcement_bar: [
+      {
+        _id: false,
+        text: { type: String, required: true },
+        icon: { type: String },
+      },
+    ],
   },
   { timestamps: true },
 );

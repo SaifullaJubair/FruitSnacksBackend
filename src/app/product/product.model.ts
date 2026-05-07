@@ -194,6 +194,97 @@ const productSchema = new Schema<IProductInterface>(
       type: Boolean,
       default: true, // Default value can be added
     },
+
+    // ===== Dynamic Product Page System =====
+
+    theme_id: {
+      type: Schema.Types.ObjectId,
+      ref: "themes",
+      index: true,
+    },
+    theme_overrides: {
+      type: {
+        colors: {
+          primary: { type: String },
+          page_bg: { type: String },
+          accent: { type: String },
+        },
+        button_style: {
+          border_radius: { type: String },
+          variant: {
+            type: String,
+            enum: ["filled", "outlined", "gradient"],
+          },
+        },
+      },
+      default: undefined,
+      _id: false,
+    },
+
+    short_description: { type: String, maxlength: 200 },
+    badge_text: { type: String },
+
+    short_features: [
+      {
+        _id: false,
+        icon_url: { type: String },
+        icon_key: { type: String },
+        text: { type: String },
+      },
+    ],
+    process_steps: [
+      {
+        _id: false,
+        icon_url: { type: String },
+        icon_key: { type: String },
+        text: { type: String },
+      },
+    ],
+
+    benefits: [{ type: String }],
+
+    use_cases: [
+      {
+        _id: false,
+        icon_url: { type: String },
+        icon_key: { type: String },
+        text: { type: String },
+      },
+    ],
+
+    nutrition: {
+      type: {
+        per_serving: String,
+        calories: String,
+        protein: String,
+        carbohydrate: String,
+        fiber: String,
+        sugar: String,
+        fat: String,
+        vitamin_a: String,
+        vitamin_c: String,
+        iron: String,
+        calcium: String,
+        origin: String,
+        shelf_life: String,
+        certifications: [String],
+      },
+      default: undefined,
+      _id: false,
+    },
+
+    faqs: [
+      {
+        _id: false,
+        question: { type: String, required: true },
+        answer: { type: String, required: true },
+      },
+    ],
+
+    og_image: { type: String },
+    og_image_key: { type: String },
+    og_title: { type: String },
+    og_description: { type: String },
   },
   {
     timestamps: true,

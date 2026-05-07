@@ -48,6 +48,46 @@ export interface metakeywordssArray {
   keyword?: string;
 }
 
+export interface IconTextItem {
+  icon_url?: string;
+  icon_key?: string;
+  text?: string;
+}
+
+export interface IProductNutrition {
+  per_serving?: string;
+  calories?: string;
+  protein?: string;
+  carbohydrate?: string;
+  fiber?: string;
+  sugar?: string;
+  fat?: string;
+  vitamin_a?: string;
+  vitamin_c?: string;
+  iron?: string;
+  calcium?: string;
+  origin?: string;
+  shelf_life?: string;
+  certifications?: string[];
+}
+
+export interface IProductFaq {
+  question: string;
+  answer: string;
+}
+
+export interface IProductThemeOverrides {
+  colors?: {
+    primary?: string;
+    page_bg?: string;
+    accent?: string;
+  };
+  button_style?: {
+    border_radius?: string;
+    variant?: "filled" | "outlined" | "gradient";
+  };
+}
+
 export interface IProductInterface {
   _id?: any;
   product_name: string;
@@ -88,6 +128,30 @@ export interface IProductInterface {
   product_campaign_id?: Types.ObjectId | ICampaignInterface;
   product_supplier_id?: Types.ObjectId | ISupplierInterface;
   trending_product: true | false;
+
+  // Dynamic theming
+  theme_id?: Types.ObjectId;
+  theme_overrides?: IProductThemeOverrides;
+
+  // Hero
+  short_description?: string;
+  badge_text?: string;
+
+  // Below-hero icon rows (max 4)
+  short_features?: IconTextItem[];
+  process_steps?: IconTextItem[];
+
+  // Sections
+  benefits?: string[];
+  use_cases?: IconTextItem[];
+  nutrition?: IProductNutrition;
+  faqs?: IProductFaq[];
+
+  // Open Graph
+  og_image?: string;
+  og_image_key?: string;
+  og_title?: string;
+  og_description?: string;
 }
 
 export const productSearchableField = [
@@ -95,6 +159,8 @@ export const productSearchableField = [
   "product_slug",
   "product_status",
   "description",
+  "short_description",
+  "badge_text",
   "unit",
   "meta_title",
   "meta_description",

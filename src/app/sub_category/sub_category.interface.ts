@@ -13,6 +13,7 @@ export interface ISubCategoryInterface {
   category_id: Types.ObjectId | ICategoryInterface;
   sub_category_publisher_id: Types.ObjectId | IAdminInterface;
   sub_category_updated_by?: Types.ObjectId | IAdminInterface;
+  default_theme_id?: Types.ObjectId | null;
 }
 
 export const subcategorySearchableField = [

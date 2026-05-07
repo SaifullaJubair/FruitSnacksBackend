@@ -51,6 +51,14 @@ const variationSchema = new Schema<IVariationInterface>(
     variation_sku: {
       type: String
     },
+    variation_weight_grams: {
+      type: Number,
+      default: null,
+    },
+    variation_badge_text: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true, // Automatically add createdAt and updatedAt fields
