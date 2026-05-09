@@ -6,7 +6,7 @@
  * with MONGO_URI set in env).
  *
  * 1. Inserts a "Neutral Default" theme if none exists with that slug.
- * 2. Adds the new theme_*/faq_template_* permission flags to every role
+ * 2. Adds the new theme and faq_template permission flags to every role
  *    (defaults false; super-admin role gets true if it can be detected
  *    by name containing "super").
  */
