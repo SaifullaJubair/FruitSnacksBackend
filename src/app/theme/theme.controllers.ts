@@ -81,11 +81,11 @@ export const findAllThemes: RequestHandler = async (
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
-    return sendResponse<IThemeInterface>(res, {
+    return sendResponse<IThemeInterface[]>(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "Themes fetched successfully",
-      data: result.data,
+      data: result.data as any,
       totalData: result.total,
     });
   } catch (error) {

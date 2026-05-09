@@ -46,11 +46,11 @@ export const findAllFaqTemplates: RequestHandler = async (
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
-    return sendResponse<IFaqTemplateInterface>(res, {
+    return sendResponse<IFaqTemplateInterface[]>(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "FAQ templates fetched",
-      data: result.data,
+      data: result.data as any,
       totalData: result.total,
     });
   } catch (error) {
