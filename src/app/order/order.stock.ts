@@ -132,3 +132,23 @@ export const restockOrder = async (
   );
   return true;
 };
+
+/**
+ * Phase F — increment `sold_count` on each product line of an order. Called at
+ * placement (after decrementStockForLines so failed-stock orders aren't
+ * counted). Uses the order's line quantity so a qty-3 order bumps sold_count
+ * by 3, not 1.
+ */
+export const bumpSoldCounts = async (
+  lines: StockLine[],
+  session: mongoose.ClientSession,
+): Promise<void> => {
+  for (const line of lines) {
+    const qty = Math.max(1, Number(line?.product_quantity) || 1);
+    await ProductModel.updateOne(
+      { _id: line.product_id },
+      { $inc: { sold_count: qty } },
+      { session },
+    );
+  }
+};

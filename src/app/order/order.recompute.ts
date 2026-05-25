@@ -23,7 +23,10 @@ import ProductModel from "../product/product.model";
 import VariationModel from "../variation/variation.model";
 import CampaignModel from "../campaign/campaign.model";
 import CouponModel from "../coupon/coupon.model";
+import CouponUsedModel from "../coupon/coupon_used/coupon.used.model";
+import SettingModel from "../setting/setting.model";
 import { resolveProductPrice } from "../product/product.price.resolver";
+import { findActiveFlashForProduct } from "../flashsale/flashsale.services";
 import ApiError from "../../errors/ApiError";
 import mongoose from "mongoose";
 
@@ -59,6 +62,17 @@ export interface RecomputedOrder {
   discount_amount: number; // coupon discount
   shipping_cost: number; // passed through from client (B1 scope)
   grand_total_amount: number; // sub_total − discount + shipping
+  /**
+   * Phase C3 — advance/partial payment. Set ONLY when the client requested an
+   * advance (`advance_amount` + `advance_method` in the request, both validated
+   * against the server-side settings). Order is then saved with
+   * `payment_method:"cod"` + `advance_amount = X` + `payment_status:"unpaid"`,
+   * and the controller separately initiates `advance_method` for the advance
+   * amount. On advance-paid the order flips to `payment_status:"partial"`;
+   * once delivery confirms COD-rest received it flips to `"paid"`.
+   */
+  advance_amount?: number;
+  advance_method?: "sslcommerz" | "manual_mfs" | "bank_transfer";
 }
 
 /**
@@ -103,10 +117,28 @@ export const recomputeOrderTotals = async (
       }
     }
 
+    // Phase E: flash sale lookup happens HERE so the resolver stays sync.
+    const flashSale = await findActiveFlashForProduct(product_id, session);
+
     // Base price (product / variation discount-aware) — single source of truth.
-    const resolved = resolveProductPrice(product, { variation });
+    const resolved = resolveProductPrice(product, { variation, flashSale });
     let unit_regular = resolved.regular_price;
     let unit_final = resolved.final_price;
+
+    // Phase E: tier pricing — if buying qty meets a tier and the tier price
+    // is lower than current final, apply it (best-price-wins for the buyer).
+    const tiers: any[] = product?.tier_prices || [];
+    if (tiers.length > 0) {
+      const sorted = [...tiers]
+        .filter((t) => Number(t?.min_qty) > 0 && Number(t?.price) > 0)
+        .sort((a, b) => b.min_qty - a.min_qty); // largest qty first
+      for (const t of sorted) {
+        if (quantity >= Number(t.min_qty) && Number(t.price) < unit_final) {
+          unit_final = Number(t.price);
+          break;
+        }
+      }
+    }
 
     // Campaign layer (server-side). Only honor an ACTIVE campaign that actually
     // lists this product — the client cannot fabricate a campaign price.
@@ -159,7 +191,26 @@ export const recomputeOrderTotals = async (
       : null;
     const inWindow =
       (!start || now >= start) && (!end || now <= new Date(end.getTime() + 86400000));
-    const couponValid = coupon && coupon.coupon_status === "active" && inWindow;
+
+    // Phase E coupon hardening — per-user usage cap + total-available cap.
+    // `coupon_use_per_person` = max uses per customer (0 / undefined = unlimited).
+    // `coupon_available` = remaining global stock (decremented by handleCouponUsage).
+    let usageOk = true;
+    if (coupon && requestData?.customer_id) {
+      const perPerson = Number(coupon.coupon_use_per_person) || 0;
+      if (perPerson > 0) {
+        const used: any = await q(
+          CouponUsedModel.findOne({
+            coupon_id: coupon._id,
+            customer_id: requestData.customer_id,
+          }),
+        );
+        if (used && Number(used.used) >= perPerson) usageOk = false;
+      }
+      if (Number(coupon.coupon_available) <= 0) usageOk = false;
+    }
+    const couponValid =
+      coupon && coupon.coupon_status === "active" && inWindow && usageOk;
 
     if (couponValid) {
       if (coupon.coupon_type === "percent") {
@@ -179,11 +230,50 @@ export const recomputeOrderTotals = async (
   const shipping_cost = Number(requestData?.shipping_cost) || 0;
   const grand_total_amount = sub_total_amount - discount_amount + shipping_cost;
 
+  // ── Phase C3: advance/partial payment ────────────────────────────────────
+  // If the client asked for advance, validate it against the settings (enabled
+  // + method in the allow-list + amount ≥ min%). Caps the advance at the grand
+  // total in case the client overshoots. Result is forwarded so the controller
+  // knows to initiate the advance gateway for just `advance_amount`.
+  let advance_amount: number | undefined;
+  let advance_method:
+    | "sslcommerz"
+    | "manual_mfs"
+    | "bank_transfer"
+    | undefined;
+  const reqAdvanceAmount = Number(requestData?.advance_amount) || 0;
+  const reqAdvanceMethod = requestData?.advance_method as string | undefined;
+  if (reqAdvanceAmount > 0 && reqAdvanceMethod) {
+    const setting: any = await q(SettingModel.findOne({}));
+    if (!setting?.advance_payment_enabled) {
+      throw new ApiError(400, "Advance payment is not enabled.");
+    }
+    const allowed = (setting?.advance_payment_methods || []) as string[];
+    if (!allowed.includes(reqAdvanceMethod)) {
+      throw new ApiError(
+        400,
+        `Advance method "${reqAdvanceMethod}" is not allowed.`,
+      );
+    }
+    const minPct = Number(setting?.advance_payment_min_percent) || 0;
+    const minAmount = Math.ceil((grand_total_amount * minPct) / 100);
+    if (reqAdvanceAmount < minAmount) {
+      throw new ApiError(
+        400,
+        `Advance must be at least ${minPct}% (${minAmount}).`,
+      );
+    }
+    advance_amount = Math.min(reqAdvanceAmount, grand_total_amount);
+    advance_method = reqAdvanceMethod as any;
+  }
+
   return {
     order_products: lines,
     sub_total_amount,
     discount_amount,
     shipping_cost,
     grand_total_amount,
+    advance_amount,
+    advance_method,
   };
 };

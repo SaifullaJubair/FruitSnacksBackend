@@ -54,10 +54,12 @@ const productSchema = new Schema<IProductInterface>(
     // Single leaf category in the nested tree. category_path = ancestor ids
     // (root → … → parent of this leaf) copied from the category at assign time,
     // enabling subtree filtering ("all products under node X") without joins.
+    // Phase L: category is now OPTIONAL — small sellers / single-item shops
+    // shouldn't need to invent a category just to publish a product. Subtree
+    // filter (`category_path`) gracefully handles the missing case.
     category_id: {
       type: Schema.Types.ObjectId,
       ref: "categories",
-      required: true,
       index: true,
     },
     category_path: [
@@ -343,6 +345,65 @@ const productSchema = new Schema<IProductInterface>(
     og_image_key: { type: String },
     og_title: { type: String },
     og_description: { type: String },
+
+    // ── Phase F: additive fields ──────────────────────────────────────────────
+    video_link: { type: String },
+    condition: {
+      type: String,
+      enum: ["new", "used", "refurbished"],
+      default: "new",
+    },
+    sold_count: { type: Number, default: 0 },
+    view_count: { type: Number, default: 0 },
+    product_weight_grams: { type: Number },
+    product_dimensions: {
+      length: { type: Number },
+      width: { type: Number },
+      height: { type: Number },
+    },
+    custom_fields: [
+      {
+        _id: false,
+        label: { type: String, required: true },
+        value: { type: String, required: true },
+        icon_key: { type: String },
+      },
+    ],
+    qr_code: { type: String },
+    qr_code_image: { type: String },
+    qr_code_image_key: { type: String },
+    product_type: {
+      type: String,
+      enum: [
+        "simple",
+        "variable",
+        "digital",
+        "combo",
+        "preorder",
+        "subscription",
+      ],
+      default: "simple",
+    },
+    bundle_items: [
+      {
+        _id: false,
+        product_id: { type: Schema.Types.ObjectId, ref: "products" },
+        quantity: { type: Number, default: 1 },
+      },
+    ],
+    download_url: { type: String },
+    license_key: { type: String },
+    available_from: { type: Date },
+    billing_interval: { type: String, enum: ["monthly", "yearly"] },
+    // Phase E — tier pricing (qty↑ → price↓). Resolver picks the lowest tier
+    // whose min_qty ≤ ordered quantity.
+    tier_prices: [
+      {
+        _id: false,
+        min_qty: { type: Number, required: true },
+        price: { type: Number, required: true },
+      },
+    ],
   },
   {
     timestamps: true,

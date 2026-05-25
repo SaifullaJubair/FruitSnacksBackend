@@ -132,6 +132,7 @@ const settingSchema = new Schema<ISettingInterface>(
     ],
 
     bank_transfer_enabled: { type: Boolean, default: false },
+    bank_transfer_instruction: { type: String },
     bank_accounts: [
       {
         _id: false,
@@ -143,11 +144,16 @@ const settingSchema = new Schema<ISettingInterface>(
       },
     ],
 
-    // SSLCommerz stub (full integration = Phase C1, future session)
+    // SSLCommerz (Phase C1 shipped; secrets live in .env now).
     sslcommerz_enabled: { type: Boolean, default: false },
-    sslcommerz_store_id: { type: String },
-    sslcommerz_store_password: { type: String },
+    sslcommerz_store_id: { type: String }, // deprecated
+    sslcommerz_store_password: { type: String }, // deprecated
     sslcommerz_sandbox: { type: Boolean, default: true },
+
+    // C3 — advance / partial payment.
+    advance_payment_enabled: { type: Boolean, default: false },
+    advance_payment_min_percent: { type: Number, default: 20 },
+    advance_payment_methods: [{ type: String }],
   },
   { timestamps: true },
 );

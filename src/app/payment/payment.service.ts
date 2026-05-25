@@ -15,14 +15,17 @@ import { restockOrder } from "../order/order.stock";
 import { Gateway, PaymentInitResult, PaymentMethod } from "./payment.types";
 import { codGateway } from "./gateways/cod.gateway";
 import { manualMfsGateway } from "./gateways/manual_mfs.gateway";
+import { sslcommerzGateway } from "./gateways/sslcommerz.gateway";
+import { bankTransferGateway } from "./gateways/bank_transfer.gateway";
 import { IOrderInterface } from "../order/order.interface";
 
 // One source of truth — registry of all supported gateways.
 const gateways: Record<PaymentMethod, Gateway> = {
   cod: codGateway,
   manual_mfs: manualMfsGateway,
-  // sslcommerz + bank_transfer: stubs intentionally absent until C1/C4.
-} as any;
+  sslcommerz: sslcommerzGateway,
+  bank_transfer: bankTransferGateway,
+};
 
 const resolveGateway = (method?: PaymentMethod): Gateway => {
   const m = (method || "cod") as PaymentMethod;
@@ -44,6 +47,30 @@ export const initiatePayment = async (
 };
 
 /**
+ * Phase C3 — initiate a separate payment flow for the ADVANCE amount only
+ * (so the order itself stays `payment_method:"cod"` while the advance gets
+ * charged via a real gateway). We pass a synthetic order object where
+ * `grand_total_amount = advance_amount` so the gateway initiates for the
+ * right amount, and `payment_method` is the chosen advance method.
+ */
+export const initiateAdvancePayment = async (
+  order: Partial<IOrderInterface>,
+  advance_method: PaymentMethod,
+  advance_amount: number,
+): Promise<PaymentInitResult> => {
+  const setting: any = await SettingModel.findOne({}).lean();
+  const gateway = resolveGateway(advance_method);
+  return gateway.initiate(
+    {
+      ...order,
+      payment_method: advance_method,
+      grand_total_amount: advance_amount,
+    },
+    setting || {},
+  );
+};
+
+/**
  * Customer submits their MFS trxId (or bank reference) after sending money.
  * Flips status to "pending" (awaiting admin verify). Public — gated by the
  * caller knowing the order id (typical e-commerce pattern; phone-match check
@@ -51,7 +78,14 @@ export const initiatePayment = async (
  */
 export const submitTransaction = async (
   order_id: string,
-  body: { transaction_id: string; method_name?: string; payer_number?: string },
+  body: {
+    transaction_id: string;
+    method_name?: string;
+    payer_number?: string;
+    // Phase C4: optional deposit-slip screenshot (S3 URL + key for later delete).
+    screenshot_url?: string;
+    screenshot_key?: string;
+  },
 ) => {
   if (!body?.transaction_id) {
     throw new ApiError(400, "transaction_id is required.");
@@ -74,6 +108,8 @@ export const submitTransaction = async (
         "payment_meta.submitted_at": new Date().toISOString(),
         "payment_meta.method_name": body.method_name,
         "payment_meta.payer_number": body.payer_number,
+        "payment_meta.screenshot_url": body.screenshot_url,
+        "payment_meta.screenshot_key": body.screenshot_key,
       },
     },
   );
@@ -108,16 +144,34 @@ export const verifyPayment = async (
     };
 
     if (body.decision === "paid") {
-      const amount =
+      // Phase C3 partial flow: a COD order with a pending advance flips to
+      // "partial" first (only the advance was paid online). A subsequent
+      // "paid" call (e.g. courier confirms COD-rest received) flips it the
+      // rest of the way to fully paid.
+      const isAdvanceLeg =
+        order.payment_method === "cod" &&
+        Number(order.advance_amount) > 0 &&
+        order.payment_status !== "partial" &&
+        order.payment_status !== "paid";
+
+      const totalOwed = Number(order.grand_total_amount) || 0;
+      const advanceOwed = Number(order.advance_amount) || 0;
+      const incoming =
         typeof body.paid_amount === "number"
           ? body.paid_amount
-          : Number(order.grand_total_amount) || 0;
+          : isAdvanceLeg
+            ? advanceOwed
+            : totalOwed - Number(order.paid_amount || 0);
+
+      const newPaidAmount = Number(order.paid_amount || 0) + incoming;
+      const newStatus = newPaidAmount >= totalOwed ? "paid" : "partial";
+
       await OrderModel.updateOne(
         { _id: order_id },
         {
           $set: {
-            payment_status: "paid",
-            paid_amount: amount,
+            payment_status: newStatus,
+            paid_amount: newPaidAmount,
             paid_at: now,
             ...verifyTrail,
           },

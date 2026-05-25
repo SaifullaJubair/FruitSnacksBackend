@@ -29,9 +29,16 @@ import {
   sendOrderSMS_VerifiedGuest,
 } from "../../utils/send.order.sms";
 import { recomputeOrderTotals } from "./order.recompute";
-import { decrementStockForLines, restockOrder } from "./order.stock";
+import {
+  decrementStockForLines,
+  restockOrder,
+  bumpSoldCounts,
+} from "./order.stock";
 import { getCurrencyCode } from "../setting/setting.services";
-import { initiatePayment } from "../payment/payment.service";
+import {
+  initiatePayment,
+  initiateAdvancePayment,
+} from "../payment/payment.service";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -195,6 +202,14 @@ export const postOrder: any = async (
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.grand_total_amount = recomputed.grand_total_amount;
 
+    // Phase C3: when client requested a valid advance, force the order to
+    // record itself as "cod" + advance_amount; the advance leg is charged
+    // separately below (post-commit) via the requested advance gateway.
+    if (recomputed.advance_amount && recomputed.advance_method) {
+      requestData.payment_method = "cod";
+      requestData.advance_amount = recomputed.advance_amount;
+    }
+
     requestData.invoice_id = await generateInvoiceId();
     const result: any = await postOrderServices(requestData, session);
     if (!result) throw new ApiError(400, "Order Create Failed !");
@@ -224,6 +239,8 @@ export const postOrder: any = async (
 
     // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
     await decrementStockForLines(recomputed.order_products, session);
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
+    await bumpSoldCounts(recomputed.order_products, session);
 
     await handleCouponUsage(requestData, session);
 
@@ -305,12 +322,22 @@ export const postOrder: any = async (
 
     // ── Phase C: hand off to the chosen payment gateway (post-commit so a
     // gateway hiccup doesn't roll back the order). For COD this is a no-op.
+    // Phase C3: if an advance was requested, initiate the advance gateway for
+    // ONLY the advance_amount (order itself stays cod for the rest).
     let payment_init: any = { kind: "none" };
     try {
-      payment_init = await initiatePayment({
-        ...requestData,
-        _id: result?._id,
-      });
+      if (recomputed.advance_amount && recomputed.advance_method) {
+        payment_init = await initiateAdvancePayment(
+          { ...requestData, _id: result?._id },
+          recomputed.advance_method,
+          recomputed.advance_amount,
+        );
+      } else {
+        payment_init = await initiatePayment({
+          ...requestData,
+          _id: result?._id,
+        });
+      }
     } catch (e: any) {
       payment_init = { kind: "none", error: e?.message || "init failed" };
     }
@@ -384,6 +411,8 @@ export const postSingleOrder: any = async (
 
     // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
     await decrementStockForLines(recomputed.order_products, session);
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
+    await bumpSoldCounts(recomputed.order_products, session);
 
     await handleCouponUsage(requestData, session);
 
@@ -449,12 +478,22 @@ export const postSingleOrder: any = async (
 
     // ── Phase C: hand off to the chosen payment gateway (post-commit so a
     // gateway hiccup doesn't roll back the order). For COD this is a no-op.
+    // Phase C3: if an advance was requested, initiate the advance gateway for
+    // ONLY the advance_amount (order itself stays cod for the rest).
     let payment_init: any = { kind: "none" };
     try {
-      payment_init = await initiatePayment({
-        ...requestData,
-        _id: result?._id,
-      });
+      if (recomputed.advance_amount && recomputed.advance_method) {
+        payment_init = await initiateAdvancePayment(
+          { ...requestData, _id: result?._id },
+          recomputed.advance_method,
+          recomputed.advance_amount,
+        );
+      } else {
+        payment_init = await initiatePayment({
+          ...requestData,
+          _id: result?._id,
+        });
+      }
     } catch (e: any) {
       payment_init = { kind: "none", error: e?.message || "init failed" };
     }

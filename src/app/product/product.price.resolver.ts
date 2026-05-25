@@ -97,12 +97,22 @@ export const resolveProductPrice = (
       : productRegular;
   }
 
-  // ── Later layers slot in HERE (Phase B), each adjusting `final_price` ──
-  // if (opts.campaign)  final_price = applyCampaign(final_price, opts.campaign);
-  // if (opts.flashSale) final_price = applyFlashSale(final_price, opts.flashSale);
-  // if (opts.offer)     final_price = applyOffer(final_price, opts.offer);
-  // if (opts.coupon)    final_price = applyCoupon(final_price, opts.coupon);
-  // if (opts.comboPack) final_price = applyComboPack(final_price, opts.comboPack);
+  // ── Phase E: flash sale layer (active flash sale beats campaign + base) ──
+  // FE/`flashsale.services` does the lookup; we just apply the math here so
+  // the resolver stays pure + sync. `flash_price_type: "fixed"` = absolute
+  // price; `"percent"` = % off the current final_price.
+  const fs: any = (opts as any)?.flashSale;
+  if (fs && typeof fs.flash_price === "number") {
+    if (fs.flash_price_type === "percent") {
+      final_price = Math.round(final_price - (final_price * fs.flash_price) / 100);
+    } else {
+      // fixed = absolute target price
+      final_price = fs.flash_price;
+    }
+  }
+
+  // Later layers (campaign/offer/coupon/comboPack) intentionally still inline
+  // in the recompute step — they require DB lookups + per-order context.
 
   const has_discount = final_price < regular_price;
 

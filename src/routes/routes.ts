@@ -37,6 +37,8 @@ import { FaqTemplateRoutes } from "../app/faq_template/faq_template.routes";
 import { TrustPointRoutes } from "../app/trustPoint/trustPoint.routes";
 import { VariationRoutes } from "../app/variation/variation.routes";
 import { PaymentRoutes } from "../app/payment/payment.routes";
+import { FlashSaleRoutes } from "../app/flashsale/flashsale.routes";
+import { WalletRoutes } from "../app/wallet/wallet.routes";
 
 const router = express.Router();
 
@@ -174,6 +176,8 @@ const moduleRoutes = [
   { path: "/faq-template", route: FaqTemplateRoutes },
   { path: "/trust-point", route: TrustPointRoutes },
   { path: "/variation", route: VariationRoutes },
+  { path: "/flash-sale", route: FlashSaleRoutes },
+  { path: "/wallet", route: WalletRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

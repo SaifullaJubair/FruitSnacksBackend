@@ -107,15 +107,30 @@ export interface ISettingInterface {
   manual_mfs_methods?: IManualMfsMethod[];
   manual_mfs_instruction?: string; // shared note above the methods list
 
-  // C4 (stub fields now) — manual bank transfer + screenshot upload.
+  // C4 — manual bank transfer + screenshot upload (shipped Phase C4).
   bank_transfer_enabled?: boolean;
   bank_accounts?: IBankAccount[];
+  bank_transfer_instruction?: string;
 
-  // C1 (stub fields now) — SSLCommerz integration (cards + bKash + Nagad + Rocket).
+  // C1 — SSLCommerz integration (cards + bKash + Nagad + Rocket). Secrets are
+  // read from .env (SSLCOMMERZ_STORE_ID + SSLCOMMERZ_STORE_PASSWORD); these
+  // settings fields toggle on/off + sandbox-vs-live from the admin UI.
   sslcommerz_enabled?: boolean;
+  /** @deprecated read from .env at runtime; kept for back-compat. */
   sslcommerz_store_id?: string;
+  /** @deprecated read from .env at runtime; kept for back-compat. */
   sslcommerz_store_password?: string;
   sslcommerz_sandbox?: boolean;
+
+  // C3 — advance / partial payment. Customer pays X% online to confirm the
+  // order; the rest is collected COD on delivery. Order doc gets
+  // `payment_method:"cod"` + `advance_amount=X`; the chosen advance method
+  // (e.g. sslcommerz) is initiated separately for just the advance.
+  advance_payment_enabled?: boolean;
+  advance_payment_min_percent?: number; // e.g. 20 → must pre-pay ≥20%
+  advance_payment_methods?: Array<
+    "sslcommerz" | "manual_mfs" | "bank_transfer"
+  >;
 }
 
 export interface IManualMfsMethod {

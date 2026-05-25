@@ -97,7 +97,8 @@ export interface IProductInterface {
   product_slug_history?: string[];
   product_sku?: string;
   product_status: "active" | "in-active";
-  category_id: Types.ObjectId | ICategoryInterface;
+  // Phase L: category is OPTIONAL — products can publish without one.
+  category_id?: Types.ObjectId | ICategoryInterface;
   category_path?: Types.ObjectId[];
   brand_id?: Types.ObjectId | IBrandInterface;
   attributes_details?: attributesArray[];
@@ -165,6 +166,57 @@ export interface IProductInterface {
   og_image_key?: string;
   og_title?: string;
   og_description?: string;
+
+  // ── Phase F: additive fields (cheap; some need logic later, all ready now) ─
+  /** YouTube/Vimeo embed URL — ADDITIONAL cheap option alongside main_video upload. */
+  video_link?: string;
+  /** Item condition. Default "new". Used by storefront filter + reseller flow. */
+  condition?: "new" | "used" | "refurbished";
+  /** Lifetime units sold — incremented on each successful order placement. */
+  sold_count?: number;
+  /** Lifetime PDP view count — incremented on storefront PDP fetch. */
+  view_count?: number;
+  /** Shipping weight (grams) at product level (variations may override). */
+  product_weight_grams?: number;
+  /** Shipping dimensions in cm. */
+  product_dimensions?: { length?: number; width?: number; height?: number };
+  /** Friendly free-form spec rows the merchant wants to show beyond attributes. */
+  custom_fields?: Array<{ label: string; value: string; icon_key?: string }>;
+  /** QR code payload (defaults to product_slug) + generated image URL. */
+  qr_code?: string;
+  qr_code_image?: string;
+  qr_code_image_key?: string;
+  /**
+   * Product type — what the order/checkout/fulfillment flow should do with
+   * this product. `simple` = current single-product behaviour (default);
+   * `variable` = uses variation_axes (Phase A); the rest are scaffolds whose
+   * fields are present now so the storefront / checkout can be extended later
+   * without a model migration.
+   */
+  product_type?:
+    | "simple"
+    | "variable"
+    | "digital"
+    | "combo"
+    | "preorder"
+    | "subscription";
+  /** combo type: child products bundled inside this one. */
+  bundle_items?: Array<{
+    product_id: Types.ObjectId;
+    quantity: number;
+  }>;
+  /** digital type: download URL + optional license key. */
+  download_url?: string;
+  license_key?: string;
+  /** preorder type: earliest date orders ship. */
+  available_from?: Date | string;
+  /** subscription type: how often the buyer is billed. */
+  billing_interval?: "monthly" | "yearly";
+
+  // Phase E — tier pricing (bulk discount; qty↑ → price↓). Resolver chooses
+  // the lowest-applicable tier when the buyer's qty meets `min_qty`. Sorted
+  // by min_qty ascending in `recompute` so we can break early.
+  tier_prices?: Array<{ min_qty: number; price: number }>;
 }
 
 export const productSearchableField = [

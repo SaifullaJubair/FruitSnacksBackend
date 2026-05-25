@@ -1197,3 +1197,71 @@ export const findLowStock: RequestHandler = async (
     next(error);
   }
 };
+
+// ================================================================
+// POST Generate QR (Phase F)
+// ================================================================
+// Body: { product_id? OR text? } — generates a QR data-URL. If product_id is
+// passed, also persists it onto the product as `qr_code_image` so the next
+// PDP fetch already has it. Lets the admin click "Generate QR" once.
+export const generateProductQr: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { product_id, text } = req.body || {};
+    let payload = text as string | undefined;
+    let product: any = null;
+    if (product_id) {
+      product = await ProductModel.findById(product_id).select(
+        "product_slug qr_code",
+      );
+      if (!product) throw new ApiError(404, "Product not found");
+      payload = product.qr_code || product.product_slug;
+    }
+    if (!payload) throw new ApiError(400, "product_id or text required");
+    const dataUrl = await QRCode.toDataURL(payload);
+    if (product) {
+      await ProductModel.updateOne(
+        { _id: product._id },
+        { $set: { qr_code: payload, qr_code_image: dataUrl } },
+      );
+    }
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "QR generated.",
+      data: { qr_code: payload, qr_code_image: dataUrl },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ================================================================
+// POST Bump View Count (Phase F)
+// ================================================================
+// Lightweight public endpoint storefront PDP calls fire-and-forget after a
+// page view. No throttling at the DB layer — relies on FE deduping per session.
+export const bumpProductViewCount: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { product_id } = req.body || {};
+    if (!product_id) throw new ApiError(400, "product_id required");
+    await ProductModel.updateOne(
+      { _id: product_id },
+      { $inc: { view_count: 1 } },
+    );
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "View counted.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

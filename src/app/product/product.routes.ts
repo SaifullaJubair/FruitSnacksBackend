@@ -19,6 +19,8 @@ import {
   updateProduct,
   patchProductPageContent,
   findLowStock,
+  generateProductQr,
+  bumpProductViewCount,
 } from "./product.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -63,6 +65,10 @@ router.route("/ecommerce_choice_product").get(findECommerceChoiceProduct);
 
 // get low-stock products & variations (admin)
 router.route("/low_stock").get(verifyToken("product_show"), findLowStock);
+
+// Phase F: generate QR for a product (admin) + bump view count (public)
+router.route("/qr").post(verifyToken("product_update"), generateProductQr);
+router.route("/view-count").post(bumpProductViewCount);
 
 // get all dashboard product
 router.route("/dashboard").get(verifyToken("product_show"), findAllDashboardProduct);
