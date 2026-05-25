@@ -96,6 +96,41 @@ export interface ISettingInterface {
   offer_enabled?: boolean;
   offer_text?: string;
   offer_end_at?: Date | string;
+
+  // ✅ Payment methods (Phase C) — per-gateway toggles + config. cod is on
+  // by default for legacy compatibility; other methods opt-in via admin.
+  cod_enabled?: boolean;
+
+  // C2 — Manual MFS (customer pays to merchant's bkash/nagad number, sends
+  // trxId, admin verifies). manual_mfs_methods[] = the displayable list.
+  manual_mfs_enabled?: boolean;
+  manual_mfs_methods?: IManualMfsMethod[];
+  manual_mfs_instruction?: string; // shared note above the methods list
+
+  // C4 (stub fields now) — manual bank transfer + screenshot upload.
+  bank_transfer_enabled?: boolean;
+  bank_accounts?: IBankAccount[];
+
+  // C1 (stub fields now) — SSLCommerz integration (cards + bKash + Nagad + Rocket).
+  sslcommerz_enabled?: boolean;
+  sslcommerz_store_id?: string;
+  sslcommerz_store_password?: string;
+  sslcommerz_sandbox?: boolean;
+}
+
+export interface IManualMfsMethod {
+  name: string; // "bKash", "Nagad", "Rocket", ...
+  number: string; // the merchant's receiving number
+  account_type?: "personal" | "agent" | "merchant";
+  instruction?: string; // per-method instruction (optional)
+}
+
+export interface IBankAccount {
+  bank_name: string;
+  branch?: string;
+  account_name: string;
+  account_number: string;
+  routing?: string;
 }
 
 export interface IAnnouncementBarItem {

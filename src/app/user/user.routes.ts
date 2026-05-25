@@ -10,6 +10,8 @@ import {
   updateforgotPasswordUsersChangeNewPassword,
   updateUser,
   verifyUserOTP,
+  refreshUser,
+  logoutUserOwn,
 } from "./user.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -27,6 +29,10 @@ router.route("/user_create").post(verifyToken("user_create"), postUser);
 
 // user login
 router.route("/login").post(postLogUser);
+
+// Phase D: refresh access token (reads refresh cookie) + logout
+router.route("/refresh").post(refreshUser);
+router.route("/logout").post(logoutUserOwn);
 
 // forgot password
 router.route("/forgetPassword").post(postForgotPasswordUser);

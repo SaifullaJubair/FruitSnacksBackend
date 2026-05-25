@@ -18,6 +18,22 @@ import OrderModel from "../order/order.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import OfferOrderModel from "../offerOrder/offerOrder.model";
 import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
+import {
+  signUserAccess,
+  signUserRefresh,
+  setAccessCookie,
+  setRefreshCookie,
+  clearAuthCookies,
+} from "../../utils/auth.tokens";
+import {
+  generateOtp,
+  buildOtpFields,
+  verifyOtp,
+  isWithinSendCooldown,
+  secondsUntilCooldownEnds,
+  otpClearFields,
+  OTP_MAX_ATTEMPTS,
+} from "../../utils/auth.otp";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 const jwt = require("jsonwebtoken");
@@ -132,15 +148,13 @@ export const postLogUser: RequestHandler = async (
       if (!isPasswordValid) throw new ApiError(400, "Password does not match!");
     }
 
-    const token = jwt.sign({ user_phone }, process.env.ACCESS_TOKEN, {
-      expiresIn: "365d",
-    });
-    res.cookie("fruit_snacks_token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-    });
+    // Phase D: token now carries _id (skip per-request phone lookup).
+    // Access 30d (cart UX) + 90d refresh — see utils/auth.tokens.
+    const _id = String(findUser._id);
+    const access = signUserAccess({ _id, user_phone });
+    const refresh = signUserRefresh({ _id, user_phone });
+    setAccessCookie(res, "user", access);
+    setRefreshCookie(res, refresh);
 
     // Meta CAPI Login event
     try {
@@ -210,7 +224,7 @@ export const checkUserPhone: RequestHandler = async (req, res, next) => {
 };
 
 
-//  ── Verify OTP ───────────────────────────────────────
+//  ── Verify OTP (Phase D: bcrypt + attempt cap) ─────────────────────────────
 export const verifyUserOTP: RequestHandler = async (req, res, next) => {
   try {
     const { user_phone, user_otp } = req.body;
@@ -222,12 +236,24 @@ export const verifyUserOTP: RequestHandler = async (req, res, next) => {
     const findUser: any = await UserModel.findOne({ user_phone });
     if (!findUser) throw new ApiError(400, "User not found!");
 
-    if (findUser?.forgot_otp != user_otp) {
-      throw new ApiError(400, "OTP does not match!");
-    }
-
     if (findUser?.otp_expires_at && new Date() > new Date(findUser.otp_expires_at)) {
       throw new ApiError(400, "OTP has expired. Please request a new one.");
+    }
+
+    if ((findUser.otp_attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+      throw new ApiError(
+        429,
+        "Too many wrong attempts. Please request a new OTP.",
+      );
+    }
+
+    const ok = await verifyOtp(user_otp, findUser.forgot_otp);
+    if (!ok) {
+      await UserModel.updateOne(
+        { user_phone },
+        { $inc: { otp_attempts: 1 } },
+      );
+      throw new ApiError(400, "OTP does not match!");
     }
 
     return sendResponse(res, {
@@ -239,21 +265,31 @@ export const verifyUserOTP: RequestHandler = async (req, res, next) => {
     next(error);
   }
 };
-// ── Resend OTP ─────────────────────────────────────────────────────────────────
+// ── Resend OTP (Phase D: 6-digit, hashed, rate-limited) ───────────────────────
 export const postUserResendCode: RequestHandler = async (req, res, next) => {
   try {
     const { user_phone, user_name } = req.body;
-    const user_otp = Math.floor(1000 + Math.random() * 9000);
-    const otp_expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    if (!user_phone) throw new ApiError(400, "Phone required!");
+
+    const user: any = await UserModel.findOne({ user_phone });
+    if (!user) throw new ApiError(404, "User not found!");
+
+    if (isWithinSendCooldown(user.otp_sent_at)) {
+      const wait = secondsUntilCooldownEnds(user.otp_sent_at);
+      throw new ApiError(429, `Please wait ${wait}s before requesting another OTP.`);
+    }
+
+    const otp = generateOtp();
+    const otpFields = await buildOtpFields(otp);
 
     const updateOTP = await UserModel.updateOne(
       { user_phone },
-      { forgot_otp: user_otp, otp_expires_at },
+      otpFields,
       { runValidators: true },
     );
 
     if (updateOTP?.modifiedCount > 0) {
-      await SendPhoneOTP(user_otp, user_phone, user_name);
+      await SendPhoneOTP(otp as any, user_phone, user_name);
       return sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
@@ -267,7 +303,7 @@ export const postUserResendCode: RequestHandler = async (req, res, next) => {
   }
 };
 
-// ── Forgot Password — OTP পাঠাও ───────────────────────────────────────────────
+// ── Forgot Password — OTP পাঠাও (Phase D: 6-digit hashed + rate-limit) ───────
 export const postForgotPasswordUser: RequestHandler = async (
   req,
   res,
@@ -279,14 +315,19 @@ export const postForgotPasswordUser: RequestHandler = async (
     const findUser: any = await UserModel.findOne({ user_phone });
     if (!findUser) throw new ApiError(400, "Customer not found!");
 
-    const user_otp = Math.floor(1000 + Math.random() * 9000);
-    const otp_expires_at = new Date(Date.now() + 10 * 60 * 1000); // ✅ 10 min expiry
+    if (isWithinSendCooldown(findUser.otp_sent_at)) {
+      const wait = secondsUntilCooldownEnds(findUser.otp_sent_at);
+      throw new ApiError(429, `Please wait ${wait}s before requesting another OTP.`);
+    }
 
-    await SendPhoneOTP(user_otp, user_phone, findUser?.user_name);
+    const otp = generateOtp();
+    const otpFields = await buildOtpFields(otp);
+
+    await SendPhoneOTP(otp as any, user_phone, findUser?.user_name);
 
     const forgetOTPSave = await UserModel.updateOne(
       { user_phone },
-      { forgot_otp: user_otp, otp_expires_at },
+      otpFields,
       { runValidators: true },
     );
 
@@ -305,7 +346,7 @@ export const postForgotPasswordUser: RequestHandler = async (
   }
 };
 
-// ── Set New Password (Forgot + Guest both) ─────────────────────────────────────
+// ── Set New Password (Phase D: bcrypt OTP + attempt cap + full clear) ────────
 export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
   async (req, res, next) => {
     try {
@@ -314,16 +355,27 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
       const findUser: any = await UserModel.findOne({ user_phone });
       if (!findUser) throw new ApiError(400, "User not found");
 
-      // ✅ OTP match check
-      if (findUser?.forgot_otp != user_otp)
-        throw new ApiError(400, "OTP does not match!");
-
-      // ✅ OTP expiry check
       if (
         findUser?.otp_expires_at &&
         new Date() > new Date(findUser.otp_expires_at)
       ) {
         throw new ApiError(400, "OTP has expired. Please request a new one.");
+      }
+
+      if ((findUser.otp_attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+        throw new ApiError(
+          429,
+          "Too many wrong attempts. Please request a new OTP.",
+        );
+      }
+
+      const ok = await verifyOtp(user_otp, findUser.forgot_otp);
+      if (!ok) {
+        await UserModel.updateOne(
+          { user_phone },
+          { $inc: { otp_attempts: 1 } },
+        );
+        throw new ApiError(400, "OTP does not match!");
       }
 
       const hash = await bcrypt.hash(user_password, saltRounds);
@@ -332,10 +384,9 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
         { user_phone },
         {
           user_password: hash,
-          forgot_otp: null, // ✅ OTP clear
-          otp_expires_at: null, // ✅ expiry clear
-          user_verified: true, // ✅ verified mark
-          user_type: "registered", // ✅ registered mark
+          ...otpClearFields(),
+          user_verified: true,
+          user_type: "registered",
         },
         { runValidators: true },
       );
@@ -462,6 +513,60 @@ export const deleteAUser: RequestHandler = async (req, res, next) => {
       throw new ApiError(400, "User Delete Failed!");
     }
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// ── Refresh access token (Phase D, D2) ────────────────────────────────────────
+export const refreshUser: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const {
+      verifyTokenAsync,
+      COOKIE_NAMES,
+    } = require("../../utils/auth.tokens");
+    const token = req.cookies?.[COOKIE_NAMES.REFRESH];
+    if (!token) throw new ApiError(401, "No refresh token.");
+
+    const decoded: any = await verifyTokenAsync(token);
+    if (decoded?.kind !== "refresh" || decoded?.who !== "user") {
+      throw new ApiError(401, "Invalid refresh token.");
+    }
+
+    const user: any = await UserModel.findById(decoded._id);
+    if (!user || user.user_status !== "active") {
+      throw new ApiError(401, "User not active.");
+    }
+
+    const _id = String(user._id);
+    const access = signUserAccess({ _id, user_phone: user.user_phone });
+    const refresh = signUserRefresh({ _id, user_phone: user.user_phone });
+    setAccessCookie(res, "user", access);
+    setRefreshCookie(res, refresh);
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Token refreshed.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── User logout — clears both cookies (Phase D, D2) ───────────────────────────
+export const logoutUserOwn: RequestHandler = (req, res, next) => {
+  try {
+    clearAuthCookies(res);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Logged out.",
+    });
+  } catch (error) {
     next(error);
   }
 };

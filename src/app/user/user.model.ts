@@ -18,10 +18,15 @@ const userSchema = new Schema<IUserInterface>(
       default: "active",
     },
     wallet_amount: { type: Number, default: 0 },
-    forgot_otp: { type: Number },
-
-    // ✅ OTP expiry — 10 minutes
+    // Phase D: now stores a bcrypt HASH of the 6-digit OTP (was raw 4-digit
+    // Number). Schema is String so old number values are still readable during
+    // rollout; the new flow always writes hashes and the verify-helper
+    // detects hash vs. raw and rejects appropriately.
+    forgot_otp: { type: String },
     otp_expires_at: { type: Date },
+    // Phase D: rate-limit + attempt cap to stop OTP brute-force.
+    otp_sent_at: { type: Date },
+    otp_attempts: { type: Number, default: 0 },
 
     // ✅ User type & verified status
     user_type: {

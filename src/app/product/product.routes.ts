@@ -18,6 +18,7 @@ import {
   postProduct,
   updateProduct,
   patchProductPageContent,
+  findLowStock,
 } from "./product.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -59,6 +60,9 @@ router.route("/related_product").get(findRelatedProduct);
 
 // find all EcommerceChoice product
 router.route("/ecommerce_choice_product").get(findECommerceChoiceProduct);
+
+// get low-stock products & variations (admin)
+router.route("/low_stock").get(verifyToken("product_show"), findLowStock);
 
 // get all dashboard product
 router.route("/dashboard").get(verifyToken("product_show"), findAllDashboardProduct);

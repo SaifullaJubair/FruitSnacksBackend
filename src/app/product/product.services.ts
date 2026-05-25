@@ -3096,3 +3096,42 @@ export const deleteProductServices = async (
   );
   return Product;
 };
+
+// Low-stock list (Phase B, B4). Returns simple products AND variations whose
+// current stock has fallen to or below their alert threshold. Computed at query
+// time (always accurate — no stored flag to drift). Only items with a positive
+// alert threshold count, so products that never set one are never flagged.
+export const findLowStockServices = async (): Promise<{
+  products: any[];
+  variations: any[];
+}> => {
+  // Simple (non-variation) products at/under their alert quantity.
+  const products = await ProductModel.find({
+    is_variation: { $ne: true },
+    product_alert_quantity: { $gt: 0 },
+    $expr: { $lte: ["$product_quantity", "$product_alert_quantity"] },
+  })
+    .select(
+      "product_name product_slug main_image product_quantity product_alert_quantity",
+    )
+    .sort({ product_quantity: 1 })
+    .lean();
+
+  // Variations at/under their alert quantity, with parent product info.
+  const variations = await VariationModel.find({
+    variation_alert_quantity: { $gt: 0 },
+    $expr: { $lte: ["$variation_quantity", "$variation_alert_quantity"] },
+  })
+    .select(
+      "variation_name variation_quantity variation_alert_quantity product_id",
+    )
+    .populate({
+      path: "product_id",
+      model: "products",
+      select: "product_name product_slug main_image",
+    })
+    .sort({ variation_quantity: 1 })
+    .lean();
+
+  return { products, variations };
+};

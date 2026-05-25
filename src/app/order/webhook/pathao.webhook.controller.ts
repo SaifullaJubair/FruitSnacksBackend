@@ -2,9 +2,7 @@
 import { Request, Response } from "express";
 import crypto from "crypto";
 import OrderModel from "../order.model";
-import OrderProductModel from "../../orderProducts/orderProduct.model";
-import ProductModel from "../../product/product.model";
-import VariationModel from "../../variation/variation.model";
+import { restockOrder } from "../order.stock";
 
 const PATHAO_WEBHOOK_SECRET = process.env.PATHAO_WEBHOOK_SECRET || "";
 
@@ -150,31 +148,18 @@ export const pathaoWebhookController = async (req: Request, res: Response) => {
         order.order_status !== "delivered"
       ) {
         updateData.delivered_time = timeNow;
-
-        // ── Inventory কমাও ────────────────────────────────────
-        const orderProducts = await OrderProductModel.find({
-          order_id: order._id.toString(),
-        });
-
-        for (const op of orderProducts) {
-          if (!op.variation_id) {
-            await ProductModel.updateOne(
-              { _id: op.product_id },
-              { $inc: { product_quantity: -op.product_quantity } },
-            );
-          } else {
-            await VariationModel.updateOne(
-              { _id: op.variation_id },
-              { $inc: { variation_quantity: -op.product_quantity } },
-            );
-          }
-        }
+        // Stock already decremented at placement (B2) — no decrement here.
       }
       if (newOrderStatus === "cancel") updateData.cancel_time = timeNow;
       if (newOrderStatus === "return") updateData.return_time = timeNow;
     }
 
     await OrderModel.updateOne({ _id: order._id }, { $set: updateData });
+
+    // Restock on cancel/return (idempotent via order.stock_restored).
+    if (newOrderStatus === "cancel" || newOrderStatus === "return") {
+      await restockOrder(order._id);
+    }
 
     console.log(
       `Pathao webhook: order ${merchant_order_id} updated → pathao: ${order_status}, db: ${newOrderStatus}`,

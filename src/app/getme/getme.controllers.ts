@@ -7,25 +7,30 @@ import OrderModel from "../order/order.model";
 import OfferOrderModel from "../offerOrder/offerOrder.model";
 import ReviewModel from "../review/review.model";
 import { findTrendingProductServices } from "../product/product.services";
-const { promisify } = require("util");
-const jwt = require("jsonwebtoken");
+import UserModel from "../user/user.model";
+import { verifyTokenAsync, COOKIE_NAMES } from "../../utils/auth.tokens";
 
-// get a user
+// get a user (Phase D: central token helper; _id preferred, phone fallback)
 export const getMeUser: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const token = await req.cookies?.fruit_snacks_token;
+    const token = req.cookies?.[COOKIE_NAMES.ACCESS];
+    if (!token) throw new ApiError(401, "User get failed !");
 
-    if (!token) {
-      throw new ApiError(400, "User get failed !");
+    const decode: any = await verifyTokenAsync(token);
+    if (decode?.kind && decode.kind !== "access") {
+      throw new ApiError(401, "Refresh token cannot be used as access.");
     }
-    const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
-    // const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
+    if (decode?.who && decode.who !== "user") {
+      throw new ApiError(401, "Not a user token.");
+    }
 
-    const user = await findUserInfoServices(decode?.user_phone);
+    const user = decode?._id
+      ? await UserModel.findById(decode._id).select("-user_password -forgot_otp")
+      : await findUserInfoServices(decode?.user_phone);
 
     if (user) {
       return sendResponse(res, {
@@ -35,7 +40,7 @@ export const getMeUser: RequestHandler = async (
         data: user,
       });
     }
-    throw new ApiError(400, "User get failed !");
+    throw new ApiError(404, "User not found !");
   } catch (error) {
     next(error);
   }

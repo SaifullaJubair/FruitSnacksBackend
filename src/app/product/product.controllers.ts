@@ -26,6 +26,7 @@ import {
   postProductServices,
   updateProductServices,
   updateProductPageContentServices,
+  findLowStockServices,
 } from "./product.services";
 import QRCode from "qrcode";
 import VariationModel from "../variation/variation.model";
@@ -1171,6 +1172,27 @@ export const deleteAProductInfo = async (
     } else {
       throw new ApiError(400, "Product delete failed !");
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ================================================================
+// GET Low-Stock Products & Variations (Phase B, B4)
+// ================================================================
+export const findLowStock: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await findLowStockServices();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Low stock items found successfully !",
+      data: result,
+    });
   } catch (error) {
     next(error);
   }

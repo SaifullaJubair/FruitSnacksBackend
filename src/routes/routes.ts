@@ -36,6 +36,7 @@ import { ThemeRoutes } from "../app/theme/theme.routes";
 import { FaqTemplateRoutes } from "../app/faq_template/faq_template.routes";
 import { TrustPointRoutes } from "../app/trustPoint/trustPoint.routes";
 import { VariationRoutes } from "../app/variation/variation.routes";
+import { PaymentRoutes } from "../app/payment/payment.routes";
 
 const router = express.Router();
 
@@ -67,6 +68,10 @@ const moduleRoutes = [
   {
     path: "/order",
     route: OrderRoutes,
+  },
+  {
+    path: "/payment",
+    route: PaymentRoutes,
   },
   {
     path: "/webhook",

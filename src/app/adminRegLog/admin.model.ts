@@ -50,6 +50,11 @@ const adminSchema = new Schema<IAdminInterface>(
       type: Schema.Types.ObjectId,
       ref: "admins",
     },
+    // Phase D — admin self password-reset OTP fields.
+    forgot_otp: { type: String },
+    otp_expires_at: { type: Date },
+    otp_sent_at: { type: Date },
+    otp_attempts: { type: Number, default: 0 },
   },
   {
     timestamps: true,

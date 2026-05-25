@@ -111,6 +111,43 @@ const settingSchema = new Schema<ISettingInterface>(
     offer_enabled: { type: Boolean, default: false },
     offer_text: { type: String },
     offer_end_at: { type: Date },
+
+    // ✅ Payment methods (Phase C)
+    cod_enabled: { type: Boolean, default: true },
+
+    manual_mfs_enabled: { type: Boolean, default: false },
+    manual_mfs_instruction: { type: String },
+    manual_mfs_methods: [
+      {
+        _id: false,
+        name: { type: String, required: true },
+        number: { type: String, required: true },
+        account_type: {
+          type: String,
+          enum: ["personal", "agent", "merchant"],
+          default: "personal",
+        },
+        instruction: { type: String },
+      },
+    ],
+
+    bank_transfer_enabled: { type: Boolean, default: false },
+    bank_accounts: [
+      {
+        _id: false,
+        bank_name: { type: String, required: true },
+        branch: { type: String },
+        account_name: { type: String, required: true },
+        account_number: { type: String, required: true },
+        routing: { type: String },
+      },
+    ],
+
+    // SSLCommerz stub (full integration = Phase C1, future session)
+    sslcommerz_enabled: { type: Boolean, default: false },
+    sslcommerz_store_id: { type: String },
+    sslcommerz_store_password: { type: String },
+    sslcommerz_sandbox: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

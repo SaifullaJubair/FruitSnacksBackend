@@ -10,6 +10,14 @@ export const getSettingServices = async (): Promise<
   return getSetting || [];
 };
 
+// Currency code from settings (singleton). Falls back to "BDT" when unset.
+export const getCurrencyCode = async (): Promise<string> => {
+  const setting: any = await SettingModel.findOne({})
+    .select("currency_code")
+    .lean();
+  return setting?.currency_code || "BDT";
+};
+
 // Create A Setting
 export const postSettingServices = async (
   data: ISettingInterface
