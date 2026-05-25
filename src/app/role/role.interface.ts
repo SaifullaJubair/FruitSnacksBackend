@@ -87,4 +87,6 @@ export interface IRoleInterface {
   faq_template_create?: true | false;
   faq_template_update?: true | false;
   faq_template_delete?: true | false;
+  trust_point_show?: true | false;
+  trust_point_update?: true | false;
 }

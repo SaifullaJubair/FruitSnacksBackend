@@ -17,6 +17,7 @@ import {
   findTrendingProduct,
   postProduct,
   updateProduct,
+  patchProductPageContent,
 } from "./product.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -26,6 +27,12 @@ router
   .post(verifyToken("product_create"), FileUploadHelper.ImageUpload.any(), postProduct)
   .patch(verifyToken("product_update"), FileUploadHelper.ImageUpload.any(), updateProduct)
   .delete(verifyToken("product_delete"), deleteAProductInfo);
+
+// Partial JSON update for the themed Page Content form (no file upload).
+// Declared before "/:product_slug" so it isn't swallowed by that param route.
+router
+  .route("/page-content")
+  .patch(verifyToken("product_update"), patchProductPageContent);
 
 // check product barcode
 router.route("/check_product_barcode").post(checkProductBarcode);

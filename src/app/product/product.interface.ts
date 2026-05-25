@@ -1,16 +1,9 @@
 import { Types } from "mongoose";
 import { ICategoryInterface } from "../category/category.interface";
-import { ISubCategoryInterface } from "../sub_category/sub_category.interface";
-import { IChildCategoryInterface } from "../child_category/child_category.interface";
 import { IBrandInterface } from "../brand/brand.interface";
 import { IAdminInterface } from "../adminRegLog/admin.interface";
 import { ICampaignInterface } from "../campaign/campaign.interface";
 import { ISupplierInterface } from "../supplier/supplier.interface";
-import {
-  attributeValuesArray,
-  IAttributeInterface,
-} from "../attribute/attribute.interface";
-import { ISpecificationInterface } from "../specification/specification.interface";
 
 interface attribute_valuesArray {
   attribute_value_name?: string;
@@ -22,21 +15,21 @@ export interface attributesArray {
   attribute_values?: attribute_valuesArray[];
 }
 
-// interface specification_valuesArray {
-//   specification_value_id?: Types.ObjectId | attributeValuesArray;
-// }
-
-// export interface specificationsArray {
-//   specification_id?: Types.ObjectId | IAttributeInterface;
-//   specification_values?: specification_valuesArray[];
-// }
-
-interface specification_valuesArray {
-  specification_value_id?: Types.ObjectId; // ✅ শুধু ObjectId
+// ── Structured attribute engine (Phase 1) ──────────────────────────────────
+// One source of truth = the `attributes` collection. A product links to chosen
+// attribute values by id; this drives BOTH the PDP spec table AND the filter
+// facets (so sidebar + match never desync). Distinct from the legacy free-text
+// `attributes_details` snapshot above (kept for display until consumers migrate).
+export interface IProductAttribute {
+  attribute_id?: Types.ObjectId; // → attributes._id
+  value_ids?: Types.ObjectId[]; // → attributes.attribute_values[]._id (chosen)
 }
 
-export interface specificationsArray {
-  specification_id?: Types.ObjectId | ISpecificationInterface; // ✅
+// Which attributes drive variation combinations (a subset of product_attributes).
+// e.g. RAM + Color are axes; "Warranty: 1yr" may be a spec-only attribute.
+export interface IVariantAxis {
+  attribute_id?: Types.ObjectId; // → attributes._id
+  is_mandatory?: boolean; // must the buyer pick a value on this axis?
 }
 
 export interface otherimagesArray {
@@ -54,26 +47,35 @@ export interface IconTextItem {
   text?: string;
 }
 
+export interface INutritionRow {
+  label?: string;
+  value?: string;
+}
+
+export interface INutritionInfoTile {
+  label?: string;
+  value?: string;
+  icon_key?: string;
+}
+
 export interface IProductNutrition {
-  per_serving?: string;
-  calories?: string;
-  protein?: string;
-  carbohydrate?: string;
-  fiber?: string;
-  sugar?: string;
-  fat?: string;
-  vitamin_a?: string;
-  vitamin_c?: string;
-  iron?: string;
-  calcium?: string;
-  origin?: string;
-  shelf_life?: string;
-  certifications?: string[];
+  per_serving?: string; // optional heading suffix (e.g. "প্রতি ১০০g")
+  rows?: INutritionRow[]; // free-form nutrient table
+  info_tiles?: INutritionInfoTile[]; // free-form info tiles (label+value+icon)
 }
 
 export interface IProductFaq {
   question: string;
   answer: string;
+}
+
+export interface IProductFloatingImage {
+  asset_url?: string;
+  asset_key?: string;
+  vertical?: string; // "10".."85" or "" for auto
+  side?: "left" | "right";
+  layer?: "behind" | "front";
+  size?: "sm" | "md" | "lg";
 }
 
 export interface IProductThemeOverrides {
@@ -96,11 +98,13 @@ export interface IProductInterface {
   product_sku?: string;
   product_status: "active" | "in-active";
   category_id: Types.ObjectId | ICategoryInterface;
-  sub_category_id?: Types.ObjectId | ISubCategoryInterface;
-  child_category_id?: Types.ObjectId | IChildCategoryInterface;
+  category_path?: Types.ObjectId[];
   brand_id?: Types.ObjectId | IBrandInterface;
-  specifications?: specificationsArray[];
   attributes_details?: attributesArray[];
+  // Structured attribute engine (Phase 1) — drives spec table + filter facets.
+  product_attributes?: IProductAttribute[];
+  // Which attributes form variation combinations.
+  variant_axes?: IVariantAxis[];
   barcode?: string;
   barcode_image?: string;
   description: string;
@@ -136,6 +140,14 @@ export interface IProductInterface {
   // Hero
   short_description?: string;
   badge_text?: string;
+  hero_corner_badge?: string;
+  video_title?: string;
+  benefits_side_image?: string;
+  benefits_side_image_key?: string;
+  use_cases_side_image?: string;
+  use_cases_side_image_key?: string;
+  faq_side_image?: string;
+  faq_side_image_key?: string;
 
   // Below-hero icon rows (max 4)
   short_features?: IconTextItem[];
@@ -146,6 +158,7 @@ export interface IProductInterface {
   use_cases?: IconTextItem[];
   nutrition?: IProductNutrition;
   faqs?: IProductFaq[];
+  floating_images?: IProductFloatingImage[];
 
   // Open Graph
   og_image?: string;

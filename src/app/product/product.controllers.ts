@@ -25,6 +25,7 @@ import {
   findTrendingProductServices,
   postProductServices,
   updateProductServices,
+  updateProductPageContentServices,
 } from "./product.services";
 import QRCode from "qrcode";
 import VariationModel from "../variation/variation.model";
@@ -41,9 +42,24 @@ import {
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import OfferOrderModel from "../offerOrder/offerOrder.model";
 import OfferModel from "../offer/offer.model";
+import CategoryModel from "../category/category.model";
 
 // Path to the upload folder
 const uploadDir = path.join(__dirname, "../../../uploads");
+
+// Build a product's category_path = full ancestor chain root → … → leaf
+// (inclusive of the chosen leaf), so a subtree query `{ category_path: X }`
+// matches every product at or below node X. Returns [] if no/invalid category.
+const resolveProductCategoryPath = async (
+  category_id: any,
+): Promise<Types.ObjectId[]> => {
+  if (!category_id) return [];
+  const category: any = await CategoryModel.findById(category_id)
+    .select("_id category_path")
+    .lean();
+  if (!category) return [];
+  return [...(category.category_path ?? []), category._id];
+};
 
 // find Trending product
 export const findTrendingProduct: RequestHandler = async (
@@ -377,6 +393,13 @@ export const postProduct: RequestHandler = async (
       //     requestData?.barcode ? requestData?.barcode : barcode
       //   );
       // }
+      // Resolve the nested-tree category_path for the chosen leaf category:
+      // full chain root → … → leaf (inclusive), so subtree filtering by any
+      // ancestor id matches this product. See category_path convention in 0.2.
+      const category_path = await resolveProductCategoryPath(
+        requestData?.category_id,
+      );
+
       // Create product object
       const productData: any = {
         product_name: requestData?.product_name,
@@ -384,27 +407,16 @@ export const postProduct: RequestHandler = async (
         // product_sku: requestData?.product_sku,
         product_status: requestData?.product_status as "active" | "in-active",
         category_id: requestData?.category_id,
-        sub_category_id: requestData?.sub_category_id
-          ? requestData?.sub_category_id
-          : undefined,
-        child_category_id: requestData?.child_category_id
-          ? requestData?.child_category_id
-          : undefined,
+        category_path,
         brand_id: requestData?.brand_id ? requestData?.brand_id : undefined,
-        specifications:
-          requestData?.specifications?.map(
-            (spec?: { specification_id: any; specification_values: any }) => ({
-              specification_id: spec?.specification_id,
-              specification_values:
-                spec?.specification_values?.map(
-                  (value: { specification_value_id: any }) => ({
-                    specification_value_id: value?.specification_value_id
-                      ? value?.specification_value_id
-                      : undefined,
-                  }),
-                ) ?? [],
-            }),
-          ) ?? [],
+        // Phase-1 structured attribute payload (single source of truth for
+        // PDP spec table + filter facets). Admin StepOneVariation emits these.
+        product_attributes: Array.isArray(requestData?.product_attributes)
+          ? requestData.product_attributes
+          : Object.values(requestData?.product_attributes ?? {}),
+        variant_axes: Array.isArray(requestData?.variant_axes)
+          ? requestData.variant_axes
+          : Object.values(requestData?.variant_axes ?? {}),
         attributes_details: Object.values(requestData?.attributes_details ?? {})
           .filter(
             (att: any) =>
@@ -564,6 +576,38 @@ export const postProduct: RequestHandler = async (
   }
 };
 
+// Partial update for the themed Page Content form. Accepts a plain JSON body
+// with only page-content fields (+ _id) and updates just those — never touches
+// price/stock/category/name. Separate from updateProduct, which is the
+// multipart full-edit handler that rebuilds the whole document.
+export const patchProductPageContent: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { _id, ...rest } = req.body || {};
+    if (!_id) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Product _id is required");
+    }
+    const adminId = (req as any)?.user?._id;
+    const result = await updateProductPageContentServices(_id, {
+      ...rest,
+      product_updated_by: adminId,
+    });
+    if (!result || (result as any).matchedCount === 0) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
+    }
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Page content updated",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // update product data
 export const updateProduct: RequestHandler = async (
   req: Request,
@@ -622,7 +666,11 @@ export const updateProduct: RequestHandler = async (
       //   }
       // }
 
-      const files = req?.files as Express.Multer.File[];
+      // Multer only populates req.files for multipart/form-data requests. A
+      // plain application/json PATCH (e.g. the admin Page Content form, which
+      // sends no files) leaves req.files undefined — default to [] so the
+      // .find()/.filter() calls below don't throw.
+      const files = (req?.files as Express.Multer.File[]) || [];
 
       // Array to store main_image data
       let main_image;
@@ -719,6 +767,13 @@ export const updateProduct: RequestHandler = async (
 
       requestData.is_variation = requestData?.is_variation;
 
+      // Recompute category_path on update (PATCH /product is a full rebuild —
+      // see [[product-update-route-is-full-rebuild]]), so the chosen leaf's
+      // ancestor chain is re-derived each save.
+      const category_path = await resolveProductCategoryPath(
+        requestData.category_id,
+      );
+
       // Create product object
       const productData: any = {
         product_name: requestData.product_name,
@@ -726,27 +781,17 @@ export const updateProduct: RequestHandler = async (
         // product_sku: requestData.product_sku,
         product_status: requestData.product_status as "active" | "in-active",
         category_id: requestData.category_id,
-        sub_category_id: requestData.sub_category_id
-          ? requestData.sub_category_id
-          : undefined,
-        child_category_id: requestData.child_category_id
-          ? requestData.child_category_id
-          : undefined,
+        category_path,
         brand_id: requestData.brand_id ? requestData.brand_id : undefined,
-        specifications:
-          requestData.specifications?.map(
-            (spec: { specification_id: any; specification_values: any }) => ({
-              specification_id: spec.specification_id,
-              specification_values:
-                spec.specification_values?.map(
-                  (value: { specification_value_id: any }) => ({
-                    specification_value_id: value.specification_value_id
-                      ? value.specification_value_id
-                      : undefined,
-                  }),
-                ) ?? [],
-            }),
-          ) ?? [],
+        // Phase-1 structured attribute payload (additive — spec table + filter
+        // facets read from product_attributes; variant_axes drives the
+        // variation matrix). PATCH is a full rebuild so always rewrite both.
+        product_attributes: Array.isArray(requestData.product_attributes)
+          ? requestData.product_attributes
+          : Object.values(requestData.product_attributes ?? {}),
+        variant_axes: Array.isArray(requestData.variant_axes)
+          ? requestData.variant_axes
+          : Object.values(requestData.variant_axes ?? {}),
         description: requestData.description ?? "",
         trending_product:
           requestData?.trending_product === "true" ||

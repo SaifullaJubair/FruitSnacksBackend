@@ -43,6 +43,34 @@ const categorySchema = new Schema<ICategoryInterface>(
       type: Boolean,
       enum: [true, false],
     },
+
+    // ── Nested tree (self-referencing, infinite depth) ──
+    parent_id: {
+      type: Schema.Types.ObjectId,
+      ref: "categories",
+      default: null,
+      index: true,
+    },
+    // Ordered ancestor ids (root → … → immediate parent). Lets us fetch a
+    // whole subtree with `category_path: thisId` and build breadcrumbs.
+    category_path: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "categories",
+      },
+    ],
+    depth: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    // Per-category default theme (previously lived on subcategories).
+    default_theme_id: {
+      type: Schema.Types.ObjectId,
+      ref: "themes",
+      default: null,
+    },
+
     category_publisher_id: {
       type: Schema.Types.ObjectId,
       ref: "admins",

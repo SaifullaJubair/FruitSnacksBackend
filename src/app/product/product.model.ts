@@ -51,57 +51,25 @@ const productSchema = new Schema<IProductInterface>(
       enum: ["active", "in-active"],
       default: "active",
     },
+    // Single leaf category in the nested tree. category_path = ancestor ids
+    // (root → … → parent of this leaf) copied from the category at assign time,
+    // enabling subtree filtering ("all products under node X") without joins.
     category_id: {
       type: Schema.Types.ObjectId,
       ref: "categories",
       required: true,
+      index: true,
     },
-    sub_category_id: {
-      type: Schema.Types.ObjectId,
-      ref: "subcategories",
-    },
-    child_category_id: {
-      type: Schema.Types.ObjectId,
-      ref: "childcategories",
-    },
+    category_path: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "categories",
+      },
+    ],
     brand_id: {
       type: Schema.Types.ObjectId,
       ref: "brands",
     },
-    // specifications: [
-    //   {
-    //     specification_id: {
-    //       type: Schema.Types.ObjectId,
-    //       ref: "attributes",
-    //     },
-    //     specification_values: [
-    //       {
-    //         specification_value_id: {
-    //           type: Schema.Types.ObjectId,
-    //           ref: "attributes",
-    //         },
-    //       },
-    //     ],
-    //   },
-    // ],
-
-    // Fix — এভাবে করো
-    specifications: [
-      {
-        specification_id: {
-          type: Schema.Types.ObjectId,
-          ref: "specifications", // ✅
-        },
-        specification_values: [
-          {
-            specification_value_id: {
-              type: Schema.Types.ObjectId,
-              ref: "specifications", // ✅
-            },
-          },
-        ],
-      },
-    ],
     attributes_details: [
       {
         attribute_name: {
@@ -119,6 +87,42 @@ const productSchema = new Schema<IProductInterface>(
         ],
       },
     ],
+
+    // ── Structured attribute engine (Phase 1) ──
+    // Chosen attribute values by id (→ attributes collection). Single source of
+    // truth for both the PDP spec table and the filter facets. value_ids is
+    // indexed so the filter can match products by value without a join.
+    product_attributes: [
+      {
+        _id: false,
+        attribute_id: {
+          type: Schema.Types.ObjectId,
+          ref: "attributes",
+          index: true,
+        },
+        value_ids: [
+          {
+            type: Schema.Types.ObjectId,
+            index: true,
+          },
+        ],
+      },
+    ],
+    // Which attributes form variation combinations (subset of product_attributes).
+    variant_axes: [
+      {
+        _id: false,
+        attribute_id: {
+          type: Schema.Types.ObjectId,
+          ref: "attributes",
+        },
+        is_mandatory: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
+
     barcode: {
       type: String,
     },
@@ -247,6 +251,19 @@ const productSchema = new Schema<IProductInterface>(
 
     short_description: { type: String, maxlength: 200 },
     badge_text: { type: String },
+    // Small badge overlaid on the hero image corner (e.g. "নতুন", "বেস্ট সেলার").
+    hero_corner_badge: { type: String },
+    // Custom heading for the VideoSection ("দেখুন কিভাবে তৈরি হয়" area).
+    video_title: { type: String },
+    // Optional accent images sitting next to the Benefits / Use Cases cards.
+    // Fall back to main_image on the storefront when not set. _key fields are
+    // the S3 keys (used for deletion).
+    benefits_side_image: { type: String },
+    benefits_side_image_key: { type: String },
+    use_cases_side_image: { type: String },
+    use_cases_side_image_key: { type: String },
+    faq_side_image: { type: String },
+    faq_side_image_key: { type: String },
 
     short_features: [
       {
@@ -276,22 +293,25 @@ const productSchema = new Schema<IProductInterface>(
       },
     ],
 
+    // Fully free-form nutrition: admin adds any rows (table) + info tiles.
     nutrition: {
       type: {
-        per_serving: String,
-        calories: String,
-        protein: String,
-        carbohydrate: String,
-        fiber: String,
-        sugar: String,
-        fat: String,
-        vitamin_a: String,
-        vitamin_c: String,
-        iron: String,
-        calcium: String,
-        origin: String,
-        shelf_life: String,
-        certifications: [String],
+        per_serving: String, // optional heading shown next to "পুষ্টি তথ্য"
+        rows: [
+          {
+            _id: false,
+            label: { type: String },
+            value: { type: String },
+          },
+        ],
+        info_tiles: [
+          {
+            _id: false,
+            label: { type: String },
+            value: { type: String },
+            icon_key: { type: String },
+          },
+        ],
       },
       default: undefined,
       _id: false,
@@ -302,6 +322,20 @@ const productSchema = new Schema<IProductInterface>(
         _id: false,
         question: { type: String, required: true },
         answer: { type: String, required: true },
+      },
+    ],
+
+    // Per-product floating accent images (transparent PNG/WebP). Placement is
+    // percentage-based so it stays responsive. vertical = "" → auto-distribute.
+    floating_images: [
+      {
+        _id: false,
+        asset_url: { type: String },
+        asset_key: { type: String },
+        vertical: { type: String }, // "10" | "25" | "40" | "55" | "70" | "85" | "" (auto)
+        side: { type: String, enum: ["left", "right"], default: "left" },
+        layer: { type: String, enum: ["behind", "front"], default: "behind" },
+        size: { type: String, enum: ["sm", "md", "lg"], default: "md" },
       },
     ],
 

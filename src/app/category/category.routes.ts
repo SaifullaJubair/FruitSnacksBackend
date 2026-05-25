@@ -3,7 +3,9 @@ import {
   deleteACategoryInfo,
   findAllCategory,
   findAllDashboardCategory,
-  getCategorySubChildCategory,
+  getCategoryBreadcrumb,
+  getCategoryChildren,
+  getCategoryTree,
   getSixFeaturedCategory,
   postCategory,
   updateCategory,
@@ -34,13 +36,19 @@ router
   )
   .delete(verifyToken("category_delete"), deleteACategoryInfo);
 
-// get banner category subCategory and childCategory
-router.route("/category_sub_child").get(getCategorySubChildCategory);
+// Full nested category tree (root nodes with nested children)
+router.route("/tree").get(getCategoryTree);
 
-// get six feature category
+// Featured categories for homepage (tree-aware: featured roots + their children)
 router.route("/feature_category").get(getSixFeaturedCategory);
 
-// get all category in dashboard
+// All categories for the dashboard (flat, paginated)
 router.route("/dashboard").get(verifyToken("category_show"), findAllDashboardCategory);
+
+// Breadcrumb (ancestors → node) for one node — keep above /children to avoid clash
+router.route("/breadcrumb/:id").get(getCategoryBreadcrumb);
+
+// Direct children of one node (drill-down). :id = node id, or "root".
+router.route("/children/:id").get(getCategoryChildren);
 
 export const CategoryRoutes = router;

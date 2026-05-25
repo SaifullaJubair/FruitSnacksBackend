@@ -101,9 +101,16 @@ const settingSchema = new Schema<ISettingInterface>(
       {
         _id: false,
         text: { type: String, required: true },
-        icon: { type: String },
+        icon: { type: String }, // legacy emoji/text (kept for back-compat)
+        icon_key: { type: String }, // curated icon (e.g. "lu:Truck")
+        icon_url: { type: String }, // custom uploaded SVG/PNG
       },
     ],
+
+    // ✅ Special offer banner (themed PDP "আজকের বিশেষ অফার" with live countdown)
+    offer_enabled: { type: Boolean, default: false },
+    offer_text: { type: String },
+    offer_end_at: { type: Date },
   },
   { timestamps: true },
 );

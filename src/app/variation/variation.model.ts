@@ -59,6 +59,26 @@ const variationSchema = new Schema<IVariationInterface>(
       type: String,
       default: null,
     },
+
+    // ── Combination-stock engine (Phase 1, additive) ──
+    // Sorted array of attribute_values._id (D2). Indexed so a chosen-combination
+    // lookup ({ product_id, combination: [sorted ids] }) is fast.
+    combination: [
+      {
+        type: Schema.Types.ObjectId,
+        index: true,
+      },
+    ],
+    // Price adjustment over the product base price (Phase 3 resolver adds this).
+    variation_price_delta: {
+      type: Number,
+      default: 0,
+    },
+    // Per-combination on/off toggle (out-of-catalog without deleting the row).
+    is_active: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true, // Automatically add createdAt and updatedAt fields

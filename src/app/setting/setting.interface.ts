@@ -91,11 +91,18 @@ export interface ISettingInterface {
 
   // ✅ Announcement Bar (top of page, 3 items in design)
   announcement_bar?: IAnnouncementBarItem[];
+
+  // ✅ Special offer banner (themed PDP "আজকের বিশেষ অফার" with live countdown)
+  offer_enabled?: boolean;
+  offer_text?: string;
+  offer_end_at?: Date | string;
 }
 
 export interface IAnnouncementBarItem {
   text: string;
-  icon?: string;
+  icon?: string; // legacy emoji/text (kept for back-compat)
+  icon_key?: string; // curated icon (e.g. "lu:Truck")
+  icon_url?: string; // custom uploaded SVG/PNG
 }
 
 export interface ITrustPoint {
