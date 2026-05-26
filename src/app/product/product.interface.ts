@@ -217,6 +217,14 @@ export interface IProductInterface {
   // the lowest-applicable tier when the buyer's qty meets `min_qty`. Sorted
   // by min_qty ascending in `recompute` so we can break early.
   tier_prices?: Array<{ min_qty: number; price: number }>;
+
+  // ── Phase H: future-proof field stubs ─────────────────────────────────────
+  /** Warehouse this product belongs to (default fallback at runtime). */
+  warehouse_id?: Types.ObjectId;
+  /** Customer-group prices — wholesale/vip can have a cheaper price than retail. */
+  group_prices?: Array<{ group: "wholesale" | "vip"; price: number }>;
+  /** Per-product VAT override (beats settings.vat_percentage when present + > 0). */
+  vat_percentage_override?: number;
 }
 
 export const productSearchableField = [

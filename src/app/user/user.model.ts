@@ -35,6 +35,16 @@ const userSchema = new Schema<IUserInterface>(
       default: "guest",
     },
     user_verified: { type: Boolean, default: false },
+
+    // Phase H — pricing tier this user belongs to.
+    customer_group: {
+      type: String,
+      enum: ["retail", "wholesale", "vip"],
+      default: "retail",
+    },
+
+    // Phase G3 — loyalty points balance.
+    loyalty_points: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

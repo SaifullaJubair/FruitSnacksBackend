@@ -18,6 +18,13 @@ export interface IUserInterface {
   otp_attempts?: number;
   user_type?: "guest" | "registered";
   user_verified?: boolean;
+
+  // Phase H — pricing tier this user belongs to. Resolver picks the matching
+  // `group_prices` entry on a product when this is not "retail".
+  customer_group?: "retail" | "wholesale" | "vip";
+
+  // Phase G3 — loyalty points balance (separate from wallet_amount currency).
+  loyalty_points?: number;
 }
 
 export const userSearchableField = [

@@ -39,6 +39,8 @@ import {
   initiatePayment,
   initiateAdvancePayment,
 } from "../payment/payment.service";
+import { markAbandonedCartRecoveredByPhone } from "../abandonedCart/abandonedCart.services";
+import { earnOnOrder } from "../loyalty/loyalty.services";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -200,6 +202,7 @@ export const postOrder: any = async (
     requestData.sub_total_amount = recomputed.sub_total_amount;
     requestData.discount_amount = recomputed.discount_amount;
     requestData.shipping_cost = recomputed.shipping_cost;
+    requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
 
     // Phase C3: when client requested a valid advance, force the order to
@@ -241,6 +244,15 @@ export const postOrder: any = async (
     await decrementStockForLines(recomputed.order_products, session);
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        recomputed.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
 
     await handleCouponUsage(requestData, session);
 
@@ -320,6 +332,15 @@ export const postOrder: any = async (
       }
     } catch (_) {}
 
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
+    try {
+      await markAbandonedCartRecoveredByPhone(
+        requestData?.customer_phone,
+        result?._id,
+      );
+    } catch (_) {}
+
     // ── Phase C: hand off to the chosen payment gateway (post-commit so a
     // gateway hiccup doesn't roll back the order). For COD this is a no-op.
     // Phase C3: if an advance was requested, initiate the advance gateway for
@@ -380,6 +401,7 @@ export const postSingleOrder: any = async (
     requestData.sub_total_amount = recomputed.sub_total_amount;
     requestData.discount_amount = recomputed.discount_amount;
     requestData.shipping_cost = recomputed.shipping_cost;
+    requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
 
     requestData.invoice_id = await generateInvoiceId();
@@ -413,6 +435,15 @@ export const postSingleOrder: any = async (
     await decrementStockForLines(recomputed.order_products, session);
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        recomputed.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
 
     await handleCouponUsage(requestData, session);
 
@@ -474,6 +505,15 @@ export const postSingleOrder: any = async (
           await sendOrderSMS_LoggedIn(phone, invoice_id);
         }
       }
+    } catch (_) {}
+
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
+    try {
+      await markAbandonedCartRecoveredByPhone(
+        requestData?.customer_phone,
+        result?._id,
+      );
     } catch (_) {}
 
     // ── Phase C: hand off to the chosen payment gateway (post-commit so a

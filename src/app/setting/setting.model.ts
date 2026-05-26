@@ -154,6 +154,15 @@ const settingSchema = new Schema<ISettingInterface>(
     advance_payment_enabled: { type: Boolean, default: false },
     advance_payment_min_percent: { type: Number, default: 20 },
     advance_payment_methods: [{ type: String }],
+
+    // Phase H — site-wide VAT percent. Default 0 = no tax.
+    vat_percentage: { type: Number, default: 0 },
+
+    // Phase G3 — loyalty points config.
+    loyalty_enabled: { type: Boolean, default: false },
+    loyalty_earn_rate: { type: Number, default: 0 },
+    loyalty_redeem_rate: { type: Number, default: 0 },
+    loyalty_max_redeem_percent: { type: Number, default: 50 },
   },
   { timestamps: true },
 );

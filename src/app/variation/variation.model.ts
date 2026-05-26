@@ -79,6 +79,9 @@ const variationSchema = new Schema<IVariationInterface>(
       type: Boolean,
       default: true,
     },
+
+    // Phase H: optional per-variation warehouse override.
+    warehouse_id: { type: Schema.Types.ObjectId, ref: "warehouses" },
   },
   {
     timestamps: true, // Automatically add createdAt and updatedAt fields

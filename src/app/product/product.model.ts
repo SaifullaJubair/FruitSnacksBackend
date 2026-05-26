@@ -404,6 +404,17 @@ const productSchema = new Schema<IProductInterface>(
         price: { type: Number, required: true },
       },
     ],
+
+    // ── Phase H: future-proof field stubs ──────────────────────────────────
+    warehouse_id: { type: Schema.Types.ObjectId, ref: "warehouses" },
+    group_prices: [
+      {
+        _id: false,
+        group: { type: String, enum: ["wholesale", "vip"], required: true },
+        price: { type: Number, required: true },
+      },
+    ],
+    vat_percentage_override: { type: Number },
   },
   {
     timestamps: true,

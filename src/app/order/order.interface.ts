@@ -81,6 +81,11 @@ export interface IOrderInterface {
   paid_at?: string;
   // Raw gateway/admin payload stash — keeps audit trail without schema bloat.
   payment_meta?: any;
+
+  // Phase H — VAT/tax amount on this order. Computed server-side as the sum
+  // of per-line tax (per-product override beats settings.vat_percentage),
+  // applied AFTER discount, BEFORE grand_total_amount.
+  vat_amount?: number;
 }
 
 export const orderSearchableField = [

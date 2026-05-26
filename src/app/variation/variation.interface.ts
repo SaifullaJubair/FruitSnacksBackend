@@ -32,4 +32,8 @@ export interface IVariationInterface {
   combination?: Types.ObjectId[];
   variation_price_delta?: number;
   is_active?: boolean;
+
+  // ── Phase H: optional warehouse override per variation (multi-warehouse
+  // stock placement). Null = inherits the product's warehouse_id.
+  warehouse_id?: Types.ObjectId;
 }

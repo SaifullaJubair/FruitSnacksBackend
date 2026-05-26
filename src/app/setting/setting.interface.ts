@@ -131,6 +131,21 @@ export interface ISettingInterface {
   advance_payment_methods?: Array<
     "sslcommerz" | "manual_mfs" | "bank_transfer"
   >;
+
+  // Phase H — site-wide VAT/tax percent applied at checkout. Default 0
+  // (no tax). Per-product `vat_percentage_override` beats this when set > 0.
+  vat_percentage?: number;
+
+  // Phase G3 — loyalty points configuration.
+  loyalty_enabled?: boolean;
+  // Earn: how many points the buyer gets per 1 unit of currency spent.
+  // e.g. earn_rate = 1 → 100tk order = 100 points.
+  loyalty_earn_rate?: number;
+  // Redeem: how many currency units 1 point is worth at checkout.
+  // e.g. redeem_rate = 0.01 → 100 points = 1tk discount.
+  loyalty_redeem_rate?: number;
+  // Optional cap so a single order can't be 100% paid with points.
+  loyalty_max_redeem_percent?: number;
 }
 
 export interface IManualMfsMethod {

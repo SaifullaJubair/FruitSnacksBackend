@@ -25,6 +25,7 @@ import CampaignModel from "../campaign/campaign.model";
 import CouponModel from "../coupon/coupon.model";
 import CouponUsedModel from "../coupon/coupon_used/coupon.used.model";
 import SettingModel from "../setting/setting.model";
+import UserModel from "../user/user.model";
 import { resolveProductPrice } from "../product/product.price.resolver";
 import { findActiveFlashForProduct } from "../flashsale/flashsale.services";
 import ApiError from "../../errors/ApiError";
@@ -54,6 +55,8 @@ export interface RecomputedLine {
   product_unit_price: number; // regular unit price incl. variation
   product_unit_final_price: number; // what buyer pays per unit (after discounts)
   product_grand_total_price: number; // final × quantity
+  /** Phase H — effective VAT pct used for this line (override > settings). */
+  vat_pct?: number;
 }
 
 export interface RecomputedOrder {
@@ -61,7 +64,14 @@ export interface RecomputedOrder {
   sub_total_amount: number; // Σ final × qty (pre coupon)
   discount_amount: number; // coupon discount
   shipping_cost: number; // passed through from client (B1 scope)
-  grand_total_amount: number; // sub_total − discount + shipping
+  /**
+   * Phase H — VAT/tax (sum of per-line tax). Per-line rate = product
+   * `vat_percentage_override` (if > 0) ELSE `settings.vat_percentage`. Tax
+   * base for each line = line_net_after_discount (proportional split when an
+   * order-level coupon discount is present). Settings VAT = 0 → 0 here.
+   */
+  vat_amount: number;
+  grand_total_amount: number; // sub_total − discount + vat + shipping
   /**
    * Phase C3 — advance/partial payment. Set ONLY when the client requested an
    * advance (`advance_amount` + `advance_method` in the request, both validated
@@ -89,6 +99,20 @@ export const recomputeOrderTotals = async (
   }
 
   const q = <T>(p: mongoose.Query<T, any>) => (session ? p.session(session) : p);
+
+  // Phase H — pull settings + customer once (cheap, reused across lines).
+  const setting: any = await q(SettingModel.findOne({}));
+  const defaultVatPct = Number(setting?.vat_percentage) || 0;
+
+  let customerGroup: "retail" | "wholesale" | "vip" = "retail";
+  if (requestData?.customer_id) {
+    const u: any = await q(
+      UserModel.findById(requestData.customer_id).select("customer_group"),
+    );
+    if (u?.customer_group === "wholesale" || u?.customer_group === "vip") {
+      customerGroup = u.customer_group;
+    }
+  }
 
   const lines: RecomputedLine[] = [];
   let sub_total_amount = 0;
@@ -140,6 +164,17 @@ export const recomputeOrderTotals = async (
       }
     }
 
+    // Phase H: customer-group price (wholesale/vip). Only applies when the
+    // user belongs to a non-retail group AND the product has a matching
+    // group_prices entry that beats the current final price (best-price-wins).
+    if (customerGroup !== "retail") {
+      const groupPrices: any[] = product?.group_prices || [];
+      const match = groupPrices.find((g: any) => g?.group === customerGroup);
+      if (match && Number(match.price) > 0 && Number(match.price) < unit_final) {
+        unit_final = Number(match.price);
+      }
+    }
+
     // Campaign layer (server-side). Only honor an ACTIVE campaign that actually
     // lists this product — the client cannot fabricate a campaign price.
     if (line?.campaign_id) {
@@ -164,6 +199,11 @@ export const recomputeOrderTotals = async (
     const grand = unit_final * quantity;
     sub_total_amount += grand;
 
+    // Phase H — effective per-line VAT pct (override beats settings when > 0).
+    const productVatOverride = Number(product?.vat_percentage_override);
+    const vat_pct =
+      productVatOverride > 0 ? productVatOverride : defaultVatPct;
+
     lines.push({
       product_id,
       variation_id,
@@ -174,6 +214,7 @@ export const recomputeOrderTotals = async (
       product_unit_price: unit_regular,
       product_unit_final_price: unit_final,
       product_grand_total_price: grand,
+      vat_pct,
     });
   }
 
@@ -228,7 +269,28 @@ export const recomputeOrderTotals = async (
 
   // Shipping: trust client for now (B1 scope — recompute later w/ delivery zone).
   const shipping_cost = Number(requestData?.shipping_cost) || 0;
-  const grand_total_amount = sub_total_amount - discount_amount + shipping_cost;
+
+  // Phase H — per-line VAT applied to (line_net_after_discount). The coupon
+  // discount is proportionally split across lines so the buyer is taxed only
+  // on what they actually pay. Sum is rounded once at the end (one rounding
+  // boundary keeps reports auditable).
+  let vat_amount = 0;
+  if (sub_total_amount > 0) {
+    for (const ln of lines) {
+      const pct = Number(ln.vat_pct) || 0;
+      if (pct <= 0) continue;
+      const lineShare =
+        sub_total_amount === 0
+          ? 0
+          : (ln.product_grand_total_price / sub_total_amount) * discount_amount;
+      const lineNet = ln.product_grand_total_price - lineShare;
+      vat_amount += (lineNet * pct) / 100;
+    }
+    vat_amount = Math.round(vat_amount);
+  }
+
+  const grand_total_amount =
+    sub_total_amount - discount_amount + vat_amount + shipping_cost;
 
   // ── Phase C3: advance/partial payment ────────────────────────────────────
   // If the client asked for advance, validate it against the settings (enabled
@@ -244,7 +306,7 @@ export const recomputeOrderTotals = async (
   const reqAdvanceAmount = Number(requestData?.advance_amount) || 0;
   const reqAdvanceMethod = requestData?.advance_method as string | undefined;
   if (reqAdvanceAmount > 0 && reqAdvanceMethod) {
-    const setting: any = await q(SettingModel.findOne({}));
+    // Phase H — reuse the settings doc we already fetched at the top.
     if (!setting?.advance_payment_enabled) {
       throw new ApiError(400, "Advance payment is not enabled.");
     }
@@ -272,6 +334,7 @@ export const recomputeOrderTotals = async (
     sub_total_amount,
     discount_amount,
     shipping_cost,
+    vat_amount,
     grand_total_amount,
     advance_amount,
     advance_method,

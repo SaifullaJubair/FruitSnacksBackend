@@ -39,6 +39,11 @@ import { VariationRoutes } from "../app/variation/variation.routes";
 import { PaymentRoutes } from "../app/payment/payment.routes";
 import { FlashSaleRoutes } from "../app/flashsale/flashsale.routes";
 import { WalletRoutes } from "../app/wallet/wallet.routes";
+import { WarehouseRoutes } from "../app/warehouse/warehouse.routes";
+import { WishlistRoutes } from "../app/wishlist/wishlist.routes";
+import { AbandonedCartRoutes } from "../app/abandonedCart/abandonedCart.routes";
+import { LoyaltyRoutes } from "../app/loyalty/loyalty.routes";
+import { ProductFeedRoutes } from "../app/productFeed/productFeed.routes";
 
 const router = express.Router();
 
@@ -178,6 +183,11 @@ const moduleRoutes = [
   { path: "/variation", route: VariationRoutes },
   { path: "/flash-sale", route: FlashSaleRoutes },
   { path: "/wallet", route: WalletRoutes },
+  { path: "/warehouse", route: WarehouseRoutes },
+  { path: "/wishlist", route: WishlistRoutes },
+  { path: "/abandoned-cart", route: AbandonedCartRoutes },
+  { path: "/loyalty", route: LoyaltyRoutes },
+  { path: "/product-feed", route: ProductFeedRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

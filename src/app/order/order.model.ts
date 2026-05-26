@@ -192,6 +192,9 @@ const orderSchema = new Schema<IOrderInterface>(
     advance_amount: { type: Number, default: 0 },
     paid_at: { type: String },
     payment_meta: { type: Schema.Types.Mixed },
+
+    // Phase H — VAT/tax recomputed server-side at placement.
+    vat_amount: { type: Number, default: 0 },
   },
   {
     timestamps: true,

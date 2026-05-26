@@ -1,5 +1,6 @@
 // src/middlewares/send.otp.phone.ts
 import axios from "axios";
+import SettingModel from "../app/setting/setting.model";
 require("dotenv").config();
 
 export const SendPhoneOTP = async (
@@ -8,12 +9,26 @@ export const SendPhoneOTP = async (
   user_name: string,
 ): Promise<boolean> => {
   try {
-    const apiKey = process.env.BULKSMS_API_KEY;
-    const senderId = process.env.BULKSMS_SENDER_ID;
+    // Phase G5 — prefer settings (admin-editable, no redeploy needed); fall
+    // back to .env for legacy deployments. Settings also carries an enabled
+    // toggle so admin can switch SMS off without unsetting credentials.
+    const setting: any = await SettingModel.findOne({})
+      .select("sms_enabled sms_api_key sms_sender_id")
+      .lean()
+      .catch(() => null);
+
+    if (setting && setting.sms_enabled === false) {
+      return false;
+    }
+
+    const apiKey =
+      (setting && setting.sms_api_key) || process.env.BULKSMS_API_KEY;
+    const senderId =
+      (setting && setting.sms_sender_id) || process.env.BULKSMS_SENDER_ID;
 
     if (!apiKey || !senderId) {
       console.warn(
-        "BulkSMS: BULKSMS_API_KEY or BULKSMS_SENDER_ID not set in .env",
+        "BulkSMS: api key / sender id missing (settings + .env both empty)",
       );
       return false;
     }
