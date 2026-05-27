@@ -83,6 +83,17 @@ export interface RecomputedOrder {
    */
   advance_amount?: number;
   advance_method?: "sslcommerz" | "manual_mfs" | "bank_transfer";
+  /**
+   * Phase G3 (F1b) — cart-side loyalty redemption applied during recompute.
+   * `loyalty_redeem_points` is the clamped value (min of: requested, balance,
+   * max-allowed-per-settings). `loyalty_redeem_amount` is its currency value
+   * (points × `settings.loyalty_redeem_rate`) and is already folded INTO
+   * `discount_amount`. Controller uses `loyalty_redeem_points` post-commit to
+   * fire `moveLoyalty(-points, "order_redeem")` against the user's ledger.
+   * Server-wins style: insufficient balance is silently capped, never rejected.
+   */
+  loyalty_redeem_points?: number;
+  loyalty_redeem_amount?: number;
 }
 
 /**
@@ -270,6 +281,51 @@ export const recomputeOrderTotals = async (
   // Shipping: trust client for now (B1 scope — recompute later w/ delivery zone).
   const shipping_cost = Number(requestData?.shipping_cost) || 0;
 
+  // ── Phase G3 (F1b): cart-side loyalty redeem ─────────────────────────────
+  // Buyer optionally asks to redeem `loyalty_redeem_points` at checkout. We
+  // CLAMP (never reject) by: their current balance, the
+  // `loyalty_max_redeem_percent` cap on post-coupon subtotal, and the
+  // settings-enabled flag. Resulting currency value is added to discount_amount
+  // (so VAT base also drops proportionally — the buyer is taxed only on what
+  // they actually pay). Controller fires moveLoyalty post-commit.
+  let loyalty_redeem_points = 0;
+  let loyalty_redeem_amount = 0;
+  const reqRedeemPoints = Math.max(
+    0,
+    Math.floor(Number(requestData?.loyalty_redeem_points) || 0),
+  );
+  if (reqRedeemPoints > 0 && setting?.loyalty_enabled && requestData?.customer_id) {
+    const redeemRate = Number(setting?.loyalty_redeem_rate) || 0;
+    if (redeemRate > 0) {
+      // Balance lookup (server-side trust path; user can't game this).
+      const userDoc: any = await q(
+        UserModel.findById(requestData.customer_id).select("loyalty_points"),
+      );
+      const balance = Math.max(0, Number(userDoc?.loyalty_points) || 0);
+
+      // Cap by max-redeem-percent on the post-coupon subtotal.
+      const maxPct = Number(setting?.loyalty_max_redeem_percent) || 0;
+      const postCouponBase = Math.max(0, sub_total_amount - discount_amount);
+      const maxAmountByPct = maxPct > 0 ? (postCouponBase * maxPct) / 100 : postCouponBase;
+      const maxPointsByPct = Math.floor(maxAmountByPct / redeemRate);
+
+      loyalty_redeem_points = Math.min(reqRedeemPoints, balance, maxPointsByPct);
+      loyalty_redeem_amount = Math.round(loyalty_redeem_points * redeemRate);
+
+      if (loyalty_redeem_amount > 0) {
+        discount_amount += loyalty_redeem_amount;
+        if (discount_amount > sub_total_amount) {
+          // Theoretical clamp — maxPointsByPct already caps below this.
+          discount_amount = sub_total_amount;
+        }
+      } else {
+        // Either balance was 0 or cap rounded to 0 points — reset both.
+        loyalty_redeem_points = 0;
+        loyalty_redeem_amount = 0;
+      }
+    }
+  }
+
   // Phase H — per-line VAT applied to (line_net_after_discount). The coupon
   // discount is proportionally split across lines so the buyer is taxed only
   // on what they actually pay. Sum is rounded once at the end (one rounding
@@ -338,5 +394,7 @@ export const recomputeOrderTotals = async (
     grand_total_amount,
     advance_amount,
     advance_method,
+    loyalty_redeem_points,
+    loyalty_redeem_amount,
   };
 };

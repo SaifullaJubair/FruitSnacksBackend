@@ -195,6 +195,10 @@ const orderSchema = new Schema<IOrderInterface>(
 
     // Phase H — VAT/tax recomputed server-side at placement.
     vat_amount: { type: Number, default: 0 },
+
+    // Phase G3 (F1b) cart-side loyalty redeem.
+    loyalty_redeem_points: { type: Number, default: 0 },
+    loyalty_redeem_amount: { type: Number, default: 0 },
   },
   {
     timestamps: true,

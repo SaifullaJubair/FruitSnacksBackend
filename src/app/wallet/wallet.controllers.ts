@@ -30,6 +30,31 @@ export const adminAdjustWallet: RequestHandler = async (
   }
 };
 
+// Admin viewer — pick any user_id, view their wallet ledger + balance. Mirrors
+// the F3 loyalty admin-history shape so the admin Wallet page reuses the same
+// render pattern as the Loyalty page.
+export const findAdminWalletHistory: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { user_id, page = 1, limit = 50 } = req.query as any;
+    if (!user_id) throw new ApiError(400, "user_id query param required");
+    const skip = (Number(page) - 1) * Number(limit);
+    const r = await findWalletHistoryServices(user_id, Number(limit), skip);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Wallet history (admin).",
+      data: { rows: r.rows, balance: r.balance },
+      totalData: r.total,
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 // User's own history (paginated).
 export const findMyWalletHistory: RequestHandler = async (
   req: Request,
@@ -46,7 +71,9 @@ export const findMyWalletHistory: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Wallet history.",
-      data: r.rows,
+      // F3 — wrap rows + balance together so storefront renders the balance
+      // card from one round-trip (matches /loyalty/history shape).
+      data: { rows: r.rows, balance: r.balance },
       totalData: r.total,
     });
   } catch (e) {

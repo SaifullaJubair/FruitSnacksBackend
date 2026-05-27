@@ -86,6 +86,15 @@ export interface IOrderInterface {
   // of per-line tax (per-product override beats settings.vat_percentage),
   // applied AFTER discount, BEFORE grand_total_amount.
   vat_amount?: number;
+
+  // ── Phase G3 cart-side redeem (F1b) ───────────────────────────────────────
+  // Loyalty points the buyer chose to redeem at checkout. Server clamps to
+  // (a) the user's balance and (b) `settings.loyalty_max_redeem_percent` × grand_total.
+  // The corresponding currency value goes into `discount_amount`. Persisted so
+  // post-commit `moveLoyalty(-points, "order_redeem")` is traceable + so the
+  // admin can see the redemption on the order detail page.
+  loyalty_redeem_points?: number;
+  loyalty_redeem_amount?: number;
 }
 
 export const orderSearchableField = [

@@ -40,7 +40,7 @@ import {
   initiateAdvancePayment,
 } from "../payment/payment.service";
 import { markAbandonedCartRecoveredByPhone } from "../abandonedCart/abandonedCart.services";
-import { earnOnOrder } from "../loyalty/loyalty.services";
+import { earnOnOrder, redeemOnOrder } from "../loyalty/loyalty.services";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -204,6 +204,11 @@ export const postOrder: any = async (
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
+    // admin can see them in PaymentInfoCard + so reports can split discount
+    // vs loyalty without spelunking the ledger.
+    requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
+    requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
 
     // Phase C3: when client requested a valid advance, force the order to
     // record itself as "cod" + advance_amount; the advance leg is charged
@@ -244,6 +249,17 @@ export const postOrder: any = async (
     await decrementStockForLines(recomputed.order_products, session);
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    try {
+      if (recomputed.loyalty_redeem_points) {
+        await redeemOnOrder(
+          requestData?.customer_id,
+          recomputed.loyalty_redeem_points,
+          requestData.invoice_id,
+          session,
+        );
+      }
+    } catch (_) {}
     // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
     try {
       await earnOnOrder(
@@ -403,6 +419,11 @@ export const postSingleOrder: any = async (
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
+    // admin can see them in PaymentInfoCard + so reports can split discount
+    // vs loyalty without spelunking the ledger.
+    requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
+    requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
 
     requestData.invoice_id = await generateInvoiceId();
     const result: any = await postOrderServices(requestData, session);
@@ -435,6 +456,17 @@ export const postSingleOrder: any = async (
     await decrementStockForLines(recomputed.order_products, session);
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    try {
+      if (recomputed.loyalty_redeem_points) {
+        await redeemOnOrder(
+          requestData?.customer_id,
+          recomputed.loyalty_redeem_points,
+          requestData.invoice_id,
+          session,
+        );
+      }
+    } catch (_) {}
     // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
     try {
       await earnOnOrder(

@@ -1,4 +1,5 @@
 import WishlistModel from "./wishlist.model";
+import UserModel from "../user/user.model";
 
 export const addToWishlistServices = async (
   user_id: any,
@@ -47,6 +48,57 @@ export const findMyWishlistServices = async (
         select: "variation_name variation_price variation_quantity",
       }),
     WishlistModel.countDocuments({ user_id }),
+  ]);
+  return { rows, total };
+};
+
+/**
+ * Admin viewer — list every wishlist row across all users.
+ * Optional `searchTerm` matches user_name OR user_phone (case-insensitive).
+ * Populates user (name + phone) + product (name + slug + image) + variation.
+ */
+export const findAdminWishlistServices = async (
+  limit = 50,
+  skip = 0,
+  searchTerm?: string,
+): Promise<{ rows: any[]; total: number }> => {
+  let userIdFilter: any = undefined;
+  if (searchTerm && searchTerm.trim()) {
+    const rx = { $regex: searchTerm.trim(), $options: "i" };
+    const matchingUsers = await UserModel.find({
+      $or: [{ user_name: rx }, { user_phone: rx }],
+    })
+      .select("_id")
+      .lean();
+    userIdFilter = { $in: matchingUsers.map((u: any) => u._id) };
+  }
+
+  const where: any = {};
+  if (userIdFilter) where.user_id = userIdFilter;
+
+  const [rows, total] = await Promise.all([
+    WishlistModel.find(where)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: "user_id",
+        model: "users",
+        select: "user_name user_phone customer_group",
+      })
+      .populate({
+        path: "product_id",
+        model: "products",
+        select:
+          "product_name product_slug product_price product_discount_price product_quantity main_image",
+      })
+      .populate({
+        path: "variation_id",
+        model: "variations",
+        select: "variation_name variation_price variation_quantity",
+      })
+      .lean(),
+    WishlistModel.countDocuments(where),
   ]);
   return { rows, total };
 };

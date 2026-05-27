@@ -43,6 +43,158 @@ import {
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import OfferOrderModel from "../offerOrder/offerOrder.model";
 import OfferModel from "../offer/offer.model";
+
+/**
+ * Parse a FormData-stringified value back into JS. Multer multipart wraps
+ * arrays/objects as strings; admin sends them via JSON.stringify. Falls back
+ * to the raw value if it's already an object/array (defensive — direct JSON
+ * callers, future fetch() bodies, etc.).
+ */
+const parseJsonField = (raw: any, fallback: any = undefined): any => {
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+/** Phase F+H field block — shared by postProduct + updateProduct. */
+const buildPhaseFHFields = (r: any): Record<string, any> => {
+  const out: Record<string, any> = {};
+
+  if (r?.video_link !== undefined) out.video_link = r.video_link || "";
+  if (r?.condition !== undefined && r.condition !== "") out.condition = r.condition;
+
+  if (r?.product_weight_grams !== undefined && r.product_weight_grams !== "") {
+    const n = parseFloat(r.product_weight_grams);
+    if (Number.isFinite(n)) out.product_weight_grams = n;
+  }
+
+  if (r?.product_dimensions !== undefined && r.product_dimensions !== "") {
+    const dims = parseJsonField(r.product_dimensions, null);
+    if (dims && typeof dims === "object") {
+      const sanitized: any = {};
+      ["length", "width", "height"].forEach((k) => {
+        const v = parseFloat(dims[k]);
+        if (Number.isFinite(v)) sanitized[k] = v;
+      });
+      if (Object.keys(sanitized).length) out.product_dimensions = sanitized;
+    }
+  }
+
+  if (r?.vat_percentage_override !== undefined && r.vat_percentage_override !== "") {
+    const n = parseFloat(r.vat_percentage_override);
+    if (Number.isFinite(n) && n >= 0) out.vat_percentage_override = n;
+  }
+
+  if (r?.warehouse_id !== undefined && r.warehouse_id !== "") {
+    out.warehouse_id = r.warehouse_id;
+  }
+
+  if (r?.tier_prices !== undefined && r.tier_prices !== "") {
+    const arr = parseJsonField(r.tier_prices, []);
+    if (Array.isArray(arr)) {
+      out.tier_prices = arr
+        .map((row: any) => ({
+          min_qty: parseInt(row?.min_qty),
+          price: parseFloat(row?.price),
+        }))
+        .filter(
+          (row) =>
+            Number.isFinite(row.min_qty) &&
+            row.min_qty > 0 &&
+            Number.isFinite(row.price) &&
+            row.price >= 0,
+        );
+    }
+  }
+
+  if (r?.group_prices !== undefined && r.group_prices !== "") {
+    const arr = parseJsonField(r.group_prices, []);
+    if (Array.isArray(arr)) {
+      out.group_prices = arr
+        .map((row: any) => ({
+          group: row?.group,
+          price: parseFloat(row?.price),
+        }))
+        .filter(
+          (row) =>
+            (row.group === "wholesale" || row.group === "vip") &&
+            Number.isFinite(row.price) &&
+            row.price >= 0,
+        );
+    }
+  }
+
+  // ── Phase F (A2c): product_type + per-type fields + custom_fields ────
+  const VALID_PRODUCT_TYPES = [
+    "simple",
+    "variable",
+    "digital",
+    "combo",
+    "preorder",
+    "subscription",
+  ];
+  if (r?.product_type !== undefined && r.product_type !== "") {
+    if (VALID_PRODUCT_TYPES.includes(r.product_type)) {
+      out.product_type = r.product_type;
+    }
+  }
+
+  // combo type
+  if (r?.bundle_items !== undefined && r.bundle_items !== "") {
+    const arr = parseJsonField(r.bundle_items, []);
+    if (Array.isArray(arr)) {
+      out.bundle_items = arr
+        .map((row: any) => ({
+          product_id: row?.product_id,
+          quantity: parseInt(row?.quantity),
+        }))
+        .filter(
+          (row) =>
+            row.product_id &&
+            Number.isFinite(row.quantity) &&
+            row.quantity > 0,
+        );
+    }
+  }
+
+  // digital type
+  if (r?.download_url !== undefined) out.download_url = r.download_url || "";
+  if (r?.license_key !== undefined) out.license_key = r.license_key || "";
+
+  // preorder type
+  if (r?.available_from !== undefined && r.available_from !== "") {
+    const d = new Date(r.available_from);
+    if (!Number.isNaN(d.getTime())) out.available_from = d;
+  }
+
+  // subscription type
+  if (
+    r?.billing_interval !== undefined &&
+    (r.billing_interval === "monthly" || r.billing_interval === "yearly")
+  ) {
+    out.billing_interval = r.billing_interval;
+  }
+
+  // Free-form spec rows (label + value + icon_key).
+  if (r?.custom_fields !== undefined && r.custom_fields !== "") {
+    const arr = parseJsonField(r.custom_fields, []);
+    if (Array.isArray(arr)) {
+      out.custom_fields = arr
+        .map((row: any) => ({
+          label: String(row?.label ?? "").trim(),
+          value: String(row?.value ?? "").trim(),
+          icon_key: row?.icon_key ? String(row.icon_key) : undefined,
+        }))
+        .filter((row) => row.label && row.value);
+    }
+  }
+
+  return out;
+};
 import CategoryModel from "../category/category.model";
 
 // Path to the upload folder
@@ -478,6 +630,8 @@ export const postProduct: RequestHandler = async (
             : requestData?.meta_keywords || [],
         product_publisher_id: requestData?.product_publisher_id,
         // product_supplier_id: requestData?.product_supplier_id || null,
+        // Phase F+H — additive fields wired from admin StepOne / ProductUpdate.
+        ...buildPhaseFHFields(requestData),
       };
 
       if (!productData?.main_image) {
@@ -832,6 +986,8 @@ export const updateProduct: RequestHandler = async (
         product_supplier_id: requestData.product_supplier_id,
         _id: requestData?._id,
         // barcode: requestData?.barcode ? requestData?.barcode : barcode,
+        // Phase F+H — additive fields wired from admin StepOne / ProductUpdate.
+        ...buildPhaseFHFields(requestData),
       };
 
       if (!productData?.main_image) {

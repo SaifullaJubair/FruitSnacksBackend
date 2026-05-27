@@ -57,6 +57,30 @@ export const moveLoyalty = async (
 };
 
 /**
+ * Phase G3 (F1b) — debit redeemed points after a successful placement. Called
+ * from the order controllers when the recompute step returned a positive
+ * `loyalty_redeem_points`. Server-wins style: balance was already inspected at
+ * recompute, so this only fires for the clamped value — but we still wrap in
+ * try/catch at the call site because a race could in theory drain the balance
+ * between recompute and commit. Silent no-op when points == 0.
+ */
+export const redeemOnOrder = async (
+  user_id: any,
+  points: number,
+  invoice_id: string,
+  session?: mongoose.ClientSession,
+): Promise<void> => {
+  if (!user_id || !points || points <= 0) return;
+  await moveLoyalty(
+    user_id,
+    -Math.floor(points),
+    "order_redeem",
+    { reason: "order redeem", reference_id: invoice_id },
+    session,
+  );
+};
+
+/**
  * Phase G3 — auto-earn points on a successful order. Called from placement.
  * Reads settings for enabled + earn_rate; silently no-ops when disabled.
  */

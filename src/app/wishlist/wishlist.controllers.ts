@@ -7,6 +7,7 @@ import {
   removeFromWishlistServices,
   findMyWishlistServices,
   syncWishlistServices,
+  findAdminWishlistServices,
 } from "./wishlist.services";
 
 const me = (req: Request): string => {
@@ -45,6 +46,24 @@ export const findMyWishlist: RequestHandler = async (req, res, next): Promise<an
     const r = await findMyWishlistServices(me(req), Number(limit), skip);
     return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Wishlist.", data: r.rows, totalData: r.total });
   } catch (e) { next(e); }
+};
+
+// Admin viewer — paginated wishlist across all users with optional name/phone search.
+export const findAdminWishlist: RequestHandler = async (req, res, next): Promise<any> => {
+  try {
+    const { page = 1, limit = 50, searchTerm } = req.query as any;
+    const skip = (Number(page) - 1) * Number(limit);
+    const r = await findAdminWishlistServices(Number(limit), skip, searchTerm);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Wishlist (admin).",
+      data: r.rows,
+      totalData: r.total,
+    });
+  } catch (e) {
+    next(e);
+  }
 };
 
 export const syncWishlist: RequestHandler = async (req, res, next): Promise<any> => {

@@ -64,3 +64,49 @@ export const findActiveFlashForProduct = async (
   const p = sale.products[0];
   return { flash_price: p.flash_price, flash_price_type: p.flash_price_type };
 };
+
+/**
+ * PDP-side helper (Phase E / F2): same active-flash lookup but returns the
+ * sale's countdown metadata (title + start_at + end_at) alongside the product
+ * entry. Used by `findAProductDetailsServices` so the storefront can render
+ * the flash badge + countdown without a second round-trip.
+ */
+export const findActiveFlashWithMetaForProduct = async (
+  product_id: any,
+): Promise<{
+  title: string;
+  start_at: Date;
+  end_at: Date;
+  product_entry: {
+    flash_price: number;
+    flash_price_type: "fixed" | "percent";
+    active?: boolean;
+  };
+} | null> => {
+  const now = new Date();
+  const sale: any = await FlashSaleModel.findOne({
+    status: "active",
+    start_at: { $lte: now },
+    end_at: { $gte: now },
+    "products.product_id": product_id,
+    "products.active": true,
+  })
+    .select("title start_at end_at products")
+    .lean();
+  if (!sale) return null;
+  const entry = (sale.products || []).find(
+    (p: any) =>
+      String(p.product_id) === String(product_id) && p.active !== false,
+  );
+  if (!entry) return null;
+  return {
+    title: sale.title,
+    start_at: sale.start_at,
+    end_at: sale.end_at,
+    product_entry: {
+      flash_price: entry.flash_price,
+      flash_price_type: entry.flash_price_type,
+      active: entry.active,
+    },
+  };
+};

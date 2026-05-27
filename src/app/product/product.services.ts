@@ -7,6 +7,10 @@ import OrderProductModel from "../orderProducts/orderProduct.model";
 import ReviewModel from "../review/review.model";
 import CategoryModel from "../category/category.model";
 import BrandModel from "../brand/brand.model";
+import {
+  findActiveFlashForProduct,
+  findActiveFlashWithMetaForProduct,
+} from "../flashsale/flashsale.services";
 
 // Create A Product
 export const postProductServices = async (
@@ -164,6 +168,18 @@ export const findAProductDetailsServices = async (
   findProduct.total_review_ratting =
     averageReview.length > 0 ? averageReview[0].totalReviews : 0;
   findProduct.total_order_count = total_order_count ?? 0;
+
+  // Phase E (F2) — attach the active flash sale row for this product so the
+  // PDP can render the countdown + flash price without a second round-trip.
+  // Returns null if nothing's active right now; FE renders normal price.
+  try {
+    const flashMeta = await findActiveFlashWithMetaForProduct(targetProductId);
+    if (flashMeta) {
+      findProduct.active_flash = flashMeta;
+    }
+  } catch (_) {
+    // Flash lookup is best-effort; never block PDP load on it.
+  }
 
   return { data: findProduct, redirect_slug: null };
 };
