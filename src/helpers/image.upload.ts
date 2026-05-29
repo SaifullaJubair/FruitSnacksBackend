@@ -207,8 +207,17 @@ const VideoUploader = async (file: any) => {
     const httpStatusCode = data?.$metadata?.httpStatusCode;
     const { Key } = uploadParams;
 
-    // ✅ CDN URL for videos
-    const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+    // ✅ Use the SAME public URL pattern as uploadToSpaces above. The old
+    // DigitalOcean Spaces CDN hostname (`<bucket>.<region>.cdn.digitalocean
+    // spaces.com`) was retired when the project migrated to Contabo Storage;
+    // hardcoding it here was leaving every video URL pointing at a domain
+    // that no longer resolves (browser → ERR_NAME_NOT_RESOLVED).
+    //
+    // Path segments are URL-encoded so filenames with spaces / commas /
+    // unicode (e.g. "Flow - May 22, 01-29 AM.mp4") resolve correctly. Slashes
+    // are preserved by splitting first.
+    const encodedKey = Key.split("/").map(encodeURIComponent).join("/");
+    const Location = `${process.env.S3_PUBLIC_URL}:${process.env.S3_BUCKET}/${encodedKey}`;
 
     fs.unlinkSync(file.path);
     const sendData = {

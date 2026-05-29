@@ -60,6 +60,64 @@ const parseJsonField = (raw: any, fallback: any = undefined): any => {
   }
 };
 
+/**
+ * Batch 2 C1 — multi-image per variation.
+ *
+ * Frontend sends two parallel arrays per row:
+ *   - File uploads:  variation_details[i][variation_images][j]  (multer multipart)
+ *   - Reused URLs:   variation_details[i][variation_images_urls][j]  (string body field)
+ *
+ * Server uploads the Files, then merges newly-uploaded URLs with the reused
+ * URLs into ONE final array. First element = primary (used wherever the old
+ * single `variation_image` field used to render). Also keeps the legacy single
+ * field in sync (= first image) for cart/order/courier back-compat until they
+ * migrate to read the array.
+ */
+const processVariationImages = async (
+  product: any,
+  index: number,
+  files: Express.Multer.File[],
+): Promise<void> => {
+  // Multer keeps the full bracketed fieldname (with the trailing index) intact,
+  // so the file.fieldname looks like `variation_details[0][variation_images][2]`.
+  // startsWith catches the whole `[j]` slice regardless of how many files there
+  // are. Anchor with the exact attribute prefix so we don't accidentally
+  // include `variation_details[0][variation_image]` (legacy single field).
+  const prefix = `variation_details[${index}][variation_images][`;
+  const newImageFiles = files.filter((file) =>
+    file.fieldname.startsWith(prefix),
+  );
+  const uploadedUrls: string[] = [];
+  const uploadedKeys: string[] = [];
+  for (const file of newImageFiles) {
+    const upload = await FileUploadHelper.uploadToSpaces(file);
+    if (upload?.Location) uploadedUrls.push(upload.Location);
+    if (upload?.Key) uploadedKeys.push(upload.Key);
+  }
+
+  // Reused-existing URLs come as form-field strings under [variation_images_urls].
+  // Express multer body parsing surfaces array-style fields as either array or
+  // a single string — defensive on both shapes.
+  const reusedRaw = product.variation_images_urls;
+  let reusedUrls: string[] = [];
+  if (Array.isArray(reusedRaw)) {
+    reusedUrls = reusedRaw.filter((u: unknown) => typeof u === "string" && u);
+  } else if (typeof reusedRaw === "string" && reusedRaw) {
+    reusedUrls = [reusedRaw];
+  }
+
+  const allUrls = [...uploadedUrls, ...reusedUrls];
+  if (allUrls.length > 0) {
+    product.variation_images = allUrls;
+    product.variation_images_keys = uploadedKeys; // only new uploads have S3 keys
+    // Legacy single field = first image (back-compat).
+    product.variation_image = allUrls[0];
+    product.variation_image_key = uploadedKeys[0] || product.variation_image_key;
+  }
+  // Drop the form-only helper field before passing to the model.
+  delete product.variation_images_urls;
+};
+
 /** Phase F+H field block — shared by postProduct + updateProduct. */
 const buildPhaseFHFields = (r: any): Record<string, any> => {
   const out: Record<string, any> = {};
@@ -685,6 +743,11 @@ export const postProduct: RequestHandler = async (
             product.variation_video = videoUpload.Location;
             product.variation_video_key = videoUpload.Key;
           }
+          // Batch 2 C1 — multi-image processing (variation_images[] +
+          // variation_images_urls[]). Overrides the single-image legacy when
+          // the frontend sends the new array shape; legacy still kicks in
+          // when only `variation_image` arrived (older callers).
+          await processVariationImages(product, index, files);
 
           updatedVariation_details.push(product);
         }
@@ -1068,22 +1131,32 @@ export const updateProduct: RequestHandler = async (
               product.variation_video = videoUpload.Location;
               product.variation_video_key = videoUpload.Key;
             }
+            // Batch 2 C1 — multi-image processing (variation_images[] +
+            // variation_images_urls[]). See helper for shape contract.
+            await processVariationImages(product, index, files);
 
             updatedVariation_details.push(product);
           }
 
           const successVariationUpload: any = [];
-          // Loop through each state in the array
+          // Loop through each state in the array.
+          // - Has _id → updateOne (admin edited an existing variation row)
+          // - No _id  → create a NEW variation doc (admin added a fresh
+          //              combination via axis tweak after the product was saved)
           for (const variationDetails of updatedVariation_details) {
-            // Call the service to save the state with merged data
-            const result: IVariationInterface | {} | any =
-              await VariationModel.updateOne(
+            if (variationDetails._id) {
+              const result: any = await VariationModel.updateOne(
                 { _id: variationDetails._id },
                 variationDetails,
                 { runValidators: true },
               );
-            if (result) {
-              successVariationUpload.push(result);
+              if (result) successVariationUpload.push(result);
+            } else {
+              // Strip any blank _id so Mongo generates a fresh one.
+              delete variationDetails._id;
+              variationDetails.product_id = requestData?._id;
+              const created: any = await VariationModel.create(variationDetails);
+              if (created) successVariationUpload.push(created);
             }
           }
           if (successVariationUpload.length > 0) {
@@ -1181,13 +1254,13 @@ export const findADashboardProduct: RequestHandler = async (
     const _id = req?.params?._id;
     const result: IProductInterface[] | any =
       await findADashboardProductServices(_id);
-    const total = await ProductModel.countDocuments();
+    // No totalData on single-fetch — the previous countDocuments() call was a
+    // wasted full-collection scan on every admin product edit open.
     return sendResponse<IProductInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "Product Found Successfully !",
       data: result,
-      totalData: total,
     });
   } catch (error: any) {
     next(error);

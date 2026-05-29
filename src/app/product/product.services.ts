@@ -11,6 +11,7 @@ import {
   findActiveFlashForProduct,
   findActiveFlashWithMetaForProduct,
 } from "../flashsale/flashsale.services";
+import { FileUploadHelper } from "../../helpers/image.upload";
 
 // Create A Product
 export const postProductServices = async (
@@ -3069,13 +3070,15 @@ export const findAllDashboardProductServices = async (
 export const findADashboardProductServices = async (
   _id: string,
 ): Promise<any | null> => {
-  // Step 1: Find the product by its ID and populate related fields
+  // Step 1: Find the product by its ID and populate related fields.
+  // SECURITY: explicitly strip admin_password (bcrypt hash) from any populated
+  // admin doc — older code leaked it via the publisher / updated_by populate.
   const findProduct = await ProductModel.findOne({ _id })
     .populate([
       { path: "category_id" },
       { path: "brand_id" },
-      { path: "product_publisher_id" },
-      { path: "product_updated_by" },
+      { path: "product_publisher_id", select: "-admin_password" },
+      { path: "product_updated_by", select: "-admin_password" },
     ])
     .select("-__v")
     .lean(); // Use .lean() to return a plain JavaScript object
@@ -3095,7 +3098,87 @@ export const findADashboardProductServices = async (
   return { ...findProduct };
 };
 
-// Delete a Product
+// ─────────────────────────────────────────────────────────────────────────────
+// Batch 2 D — within-product reference-counted image cleanup
+//
+// An S3 image URL may appear in MULTIPLE places on the same product:
+//   - product.main_image
+//   - product.other_images[].other_image
+//   - variation.variation_image (legacy single)
+//   - variation.variation_images[] (C1 multi)
+//
+// `collectAllProductImageUrls` returns the union (key + url) so callers can
+// either (a) delete every S3 object when the product is hard-deleted, or
+// (b) check "is this URL still referenced anywhere on this product?" before
+// deleting a specific S3 object after an image swap. Scope intentionally
+// within-product only — cross-product reuse is rare at single-shop scale.
+// ─────────────────────────────────────────────────────────────────────────────
+export const collectAllProductImageRefs = async (
+  productId: string,
+): Promise<{ urls: Set<string>; keys: Set<string> }> => {
+  const urls = new Set<string>();
+  const keys = new Set<string>();
+  const product = await ProductModel.findById(productId).lean();
+  if (!product) return { urls, keys };
+
+  if (product.main_image) urls.add(product.main_image);
+  if (product.main_image_key) keys.add(product.main_image_key);
+  if (product.size_chart) urls.add(product.size_chart);
+  if (product.size_chart_key) keys.add(product.size_chart_key);
+  // main_video has its own S3 key alongside the URL.
+  if (product.main_video) urls.add(product.main_video);
+  if (product.main_video_key) keys.add(product.main_video_key);
+  (product.other_images || []).forEach((o: any) => {
+    if (o?.other_image) urls.add(o.other_image);
+    if (o?.other_image_key) keys.add(o.other_image_key);
+  });
+
+  const variations = await VariationModel.find({ product_id: productId })
+    .select(
+      "variation_image variation_image_key variation_images variation_images_keys variation_video variation_video_key",
+    )
+    .lean();
+  variations.forEach((v: any) => {
+    if (v.variation_image) urls.add(v.variation_image);
+    if (v.variation_image_key) keys.add(v.variation_image_key);
+    (v.variation_images || []).forEach((u: string) => u && urls.add(u));
+    (v.variation_images_keys || []).forEach((k: string) => k && keys.add(k));
+    if (v.variation_video) urls.add(v.variation_video);
+    if (v.variation_video_key) keys.add(v.variation_video_key);
+  });
+
+  return { urls, keys };
+};
+
+// Check whether a specific URL is still referenced anywhere on this product
+// AFTER an in-memory edit (excluding the doc shape the caller already has —
+// they pass in the new product/variations state). Use to decide whether to
+// trigger an S3 delete on an image that's being swapped out.
+export const isImageStillReferenced = (
+  url: string,
+  nextProduct: any,
+  nextVariations: any[],
+): boolean => {
+  if (!url) return true; // nothing to delete anyway
+  if (nextProduct?.main_image === url) return true;
+  if ((nextProduct?.other_images || []).some((o: any) => o?.other_image === url))
+    return true;
+  for (const v of nextVariations || []) {
+    if (v?.variation_image === url) return true;
+    if ((v?.variation_images || []).includes(url)) return true;
+  }
+  return false;
+};
+
+// Delete a Product — cascades:
+//   1. Collect all S3 image/video keys (main + others + variation media)
+//   2. Best-effort S3 delete (don't throw on individual failures — orphan
+//      cleanup will catch leftovers monthly via a future cron)
+//   3. Delete all variations
+//   4. Delete the product doc
+//
+// Reference scope is within-product only (per owner decision 2026-05-30).
+// Cross-product checks are not done — single-shop scale rarely shares media.
 export const deleteProductServices = async (
   _id: string,
 ): Promise<IProductInterface | any> => {
@@ -3104,6 +3187,22 @@ export const deleteProductServices = async (
   if (!updateProductInfo) {
     throw new ApiError(404, "Product not found");
   }
+
+  // Collect every S3 key associated with this product BEFORE deleting docs.
+  const { keys } = await collectAllProductImageRefs(_id);
+  for (const key of keys) {
+    if (!key) continue;
+    try {
+      await FileUploadHelper.deleteFromSpaces(key);
+    } catch {
+      // Swallow — best-effort. A future monthly orphan-cleanup cron will
+      // catch anything that slipped through.
+    }
+  }
+
+  // Cascade variations (orphan rows otherwise).
+  await VariationModel.deleteMany({ product_id: _id });
+
   const Product = await ProductModel.deleteOne(
     { _id: _id },
     {

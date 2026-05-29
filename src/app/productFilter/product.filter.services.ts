@@ -85,9 +85,13 @@ export const findAllActiveSideFilteredDataServices = async (
   const productMatch = buildSubtreeMatch(categoryId);
 
   // 1) Discover which attribute_ids + value_ids exist on this subtree's products.
+  //    Batch 2 E6 — skip product_attributes entries the owner has untoggled
+  //    "Show in filter sidebar". `show_in_filter !== false` keeps legacy docs
+  //    (without the field) included since the schema default is true.
   const discovered = await ProductModel.aggregate([
     { $match: productMatch },
     { $unwind: "$product_attributes" },
+    { $match: { "product_attributes.show_in_filter": { $ne: false } } },
     {
       $group: {
         _id: "$product_attributes.attribute_id",

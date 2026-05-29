@@ -108,6 +108,15 @@ const productSchema = new Schema<IProductInterface>(
             index: true,
           },
         ],
+        // Batch 2 E6 — per-product, per-attribute "should this surface in the
+        // storefront filter sidebar?". Default true preserves legacy behaviour
+        // (every attribute appears in the filter). Admin can untoggle for
+        // internal-only attributes (e.g. Manufacturer, Batch number) so PDP
+        // spec table still shows it but filter sidebar skips it.
+        show_in_filter: {
+          type: Boolean,
+          default: true,
+        },
       },
     ],
     // Which attributes form variation combinations (subset of product_attributes).

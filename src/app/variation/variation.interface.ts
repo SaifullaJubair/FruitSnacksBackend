@@ -13,8 +13,10 @@ export interface IVariationInterface {
   variation_alert_quantity?: number;
   variation_barcode?: string;
   variation_barcode_image?: string;
-  variation_image?: string;
-  variation_image_key?: string;
+  variation_image?: string;        // legacy single
+  variation_image_key?: string;    // legacy single
+  variation_images?: string[];      // multi-image gallery (first = primary)
+  variation_images_keys?: string[]; // matching S3 keys for cleanup
   variation_video?: string;
   variation_video_key?: string;
   variation_sku?: string;

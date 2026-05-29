@@ -23,6 +23,11 @@ export interface attributesArray {
 export interface IProductAttribute {
   attribute_id?: Types.ObjectId; // → attributes._id
   value_ids?: Types.ObjectId[]; // → attributes.attribute_values[]._id (chosen)
+  // Batch 2 E6 — per-product override: whether this attribute appears in the
+  // storefront filter sidebar. Default true. Owner can untoggle for internal
+  // attributes (e.g. Manufacturer) that should remain on the PDP spec table
+  // only, not as a filterable facet.
+  show_in_filter?: boolean;
 }
 
 // Which attributes drive variation combinations (a subset of product_attributes).

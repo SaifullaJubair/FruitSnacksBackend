@@ -36,12 +36,28 @@ const variationSchema = new Schema<IVariationInterface>(
     variation_barcode_image: {
       type: String,
     },
+    // Legacy single image (kept for back-compat — cart/order still read it as
+    // the "primary" image when no array is present).
     variation_image: {
       type: String,
     },
     variation_image_key: {
       type: String,
     },
+    // Multi-image gallery — first element is the primary (used wherever the
+    // single legacy field used to render). Each element is an independent S3
+    // URL copied (NOT referenced) from the product media pool, so deleting a
+    // product main_image / other_image does not break the variation.
+    variation_images: [
+      {
+        type: String,
+      },
+    ],
+    variation_images_keys: [
+      {
+        type: String,
+      },
+    ],
     variation_video: {
       type: String,
     },
