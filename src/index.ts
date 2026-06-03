@@ -1,11 +1,19 @@
 import dotenv from "dotenv";
 dotenv.config();
+import { validateEnv } from "./utils/env";
+// F001: fail fast if required envs missing. Must run before any code reads
+// process.env (auth.tokens, server, S3 uploader).
+validateEnv();
+
 import express, { Application, NextFunction, Request, Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
+import pinoHttp from "pino-http";
 import connectDB from "./server";
 import httpStatus from "http-status";
 import routes from "./routes/routes";
 import globalErrorHandler from "./middlewares/global.error.handler";
+import { logger } from "./utils/logger";
 const cookieParser = require("cookie-parser");
 import cron from "node-cron";
 import CampaignModel from "./app/campaign/campaign.model";
@@ -14,7 +22,28 @@ import ProductModel from "./app/product/product.model";
 
 const app: Application = express();
 
-app.use(express.json());
+// F002: required for rate-limit `req.ip` to be the real client IP through
+// Coolify's reverse proxy. "1" = trust the first proxy hop only (safe — don't
+// blindly trust spoofed X-Forwarded-For from arbitrary upstreams).
+app.set("trust proxy", 1);
+
+// F003: security headers (helmet). CSP intentionally off — needs separate
+// session to map all external sources (S3, pixels, SSLCommerz iframe). See
+// finding F003b for the deferred plan.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+
+// F006: explicit body size limit. Default 100kb is fine for ~99% of payloads;
+// 200kb gives 2x headroom for the rich-text page-content patch without
+// enabling body-bomb DoS. File uploads use multer with its own limits.
+app.use(express.json({ limit: "200kb" }));
+app.use(express.urlencoded({ extended: true, limit: "200kb" }));
+
 // CORS configuration
 const corsOptions = {
   origin: [
@@ -39,8 +68,26 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// F005 (partial): pino-http logs every request with auto request ID + duration
+// + status. Replaces ad-hoc console logs at the request level. Module-level
+// console.* migrate gradually as the audit visits each module.
+app.use(
+  pinoHttp({
+    logger,
+    customLogLevel: (_req, res, err) => {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+    // Don't log bodies — may contain PII (phone, OTP, password).
+    serializers: {
+      req: (req) => ({ method: req.method, url: req.url }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+  }),
+);
 
 app.get("/", async (req: Request, res: Response) => {
   res.send("FruitSnacks Server is working!");
@@ -106,40 +153,18 @@ const updateCampaignStatus = async () => {
       }
     }
   } catch (error) {
-    console.error("Error updating campaign status:", error);
+    logger.error({ err: error }, "Error updating campaign status");
   }
 };
 
 // Schedule the cron job to run every day at 11:55 PM
 cron.schedule("55 23 * * *", () => {
-  console.log("Running cron job at 11:55 PM...");
+  logger.info("Running daily campaign/offer status cron at 23:55");
   updateCampaignStatus();
-  console.log("Successfully cron job at 11:55 PM...");
 });
-
-// Run every second
-// setInterval(() => {
-//   console.log('Running job every 5 second...');
-//   updateCampaignStatus();
-// console.log('Successfully cron job...');
-// }, 5000);
 
 const port: number | any = process.env.PORT || 8080;
-const time = new Date().toLocaleTimeString();
-const date = new Date().toLocaleString("en-us", {
-  weekday: "short",
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-});
 
 app.listen(port, () => {
-  console.log(
-    "\x1b[36m%s\x1b[0m",
-    "[FC]",
-    time,
-    ":",
-    date,
-    `: FruitSnacks server listening on port ${port}`,
-  );
+  logger.info({ port }, `FruitSnacks server listening on port ${port}`);
 });

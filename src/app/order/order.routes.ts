@@ -1,5 +1,7 @@
 import express from "express";
 import { verifyToken } from "../../middlewares/verify.token";
+// F002: per-IP rate limit on public order placement (burst spam control).
+import { orderLimiter } from "../../middlewares/rate.limit";
 import {
   getACustomerAllOrder,
   getAOrderWithOrderProducts,
@@ -19,12 +21,12 @@ const router = express.Router();
 // Customer order create & get
 router
   .route("/")
-  .post(postOrder)
+  .post(orderLimiter, postOrder)
   .get(getACustomerAllOrder)
   .patch(verifyToken("order_update"), updateOrder);
 
 // Single order (guest checkout)
-router.route("/single_order").post(postSingleOrder);
+router.route("/single_order").post(orderLimiter, postSingleOrder);
 
 // Dashboard orders
 router.route("/dashboard").get(verifyToken("order_show"), getDashboardOrder);
