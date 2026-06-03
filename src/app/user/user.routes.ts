@@ -17,7 +17,8 @@ import { verifyToken } from "../../middlewares/verify.token";
 // F002: per-IP rate limits on public auth/OTP surface.
 import {
   authLimiter,
-  otpSendLimiter,
+  otpSendHourlyLimiter,
+  otpSendDailyLimiter,
   signupLimiter,
 } from "../../middlewares/rate.limit";
 const router = express.Router();
@@ -40,8 +41,10 @@ router.route("/login").post(authLimiter, postLogUser);
 router.route("/refresh").post(refreshUser);
 router.route("/logout").post(logoutUserOwn);
 
-// forgot password (triggers SMS — cost + spam control)
-router.route("/forgetPassword").post(otpSendLimiter, postForgotPasswordUser);
+// forgot password (triggers SMS — dual cap: 5/hour AND 30/day)
+router
+  .route("/forgetPassword")
+  .post(otpSendHourlyLimiter, otpSendDailyLimiter, postForgotPasswordUser);
 
 // check user phone
 router.route("/check_phone").get(checkUserPhone);
@@ -49,8 +52,10 @@ router.route("/check_phone").get(checkUserPhone);
 // verify User OTP (brute-force target)
 router.route("/verifyOTP").post(authLimiter, verifyUserOTP);
 
-// update User OTP and resend otp (triggers SMS)
-router.route("/resend_otp").post(otpSendLimiter, postUserResendCode);
+// update User OTP and resend otp (triggers SMS — dual cap: 5/hour AND 30/day)
+router
+  .route("/resend_otp")
+  .post(otpSendHourlyLimiter, otpSendDailyLimiter, postUserResendCode);
 
 // set new password (brute-force target — guess OTP-validated session)
 router

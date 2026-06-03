@@ -13,7 +13,11 @@ import {
 } from "./admin.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 // F002: per-IP rate limits on public auth surface.
-import { authLimiter, otpSendLimiter } from "../../middlewares/rate.limit";
+import {
+  authLimiter,
+  otpSendHourlyLimiter,
+  otpSendDailyLimiter,
+} from "../../middlewares/rate.limit";
 const router = express.Router();
 
 // Create, Get update and delete Admin side user
@@ -31,8 +35,10 @@ router.route("/login").post(authLimiter, postLogAdmin).patch(updateAdmin);
 router.route("/refresh").post(refreshAdmin);
 router.route("/logout").post(logoutAdmin);
 
-// Phase D: admin self password-reset (sends OTP to admin phone — SMS cost)
-router.route("/forgot-password").post(otpSendLimiter, forgotPasswordAdmin);
+// Phase D: admin self password-reset (sends OTP — dual cap: 5/hour AND 30/day)
+router
+  .route("/forgot-password")
+  .post(otpSendHourlyLimiter, otpSendDailyLimiter, forgotPasswordAdmin);
 router.route("/reset-password").post(authLimiter, resetPasswordAdmin);
 
 // get all dashboard admin

@@ -20,16 +20,20 @@ import rateLimit from "express-rate-limit";
 const json429 = (msg: string) => ({ success: false, message: msg });
 
 // Strict — login, password reset, OTP verify (brute-force targets)
+// Owner-tuned 2026-06-03: 20 attempts / 10 min window.
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
+  windowMs: 10 * 60 * 1000, // 10 min
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: json429("Too many attempts. Try again in 15 minutes."),
+  message: json429("Too many attempts. Try again in 10 minutes."),
 });
 
-// SMS-triggering — forgot password, resend OTP (cost + spam control)
-export const otpSendLimiter = rateLimit({
+// SMS-triggering — forgot password, resend OTP (cost + spam control).
+// Owner-tuned 2026-06-03: dual limit — 5 per hour AND 30 per day. Chain both
+// on the same route so either cap triggers 429. Hourly catches bursts; daily
+// catches slow-drip SMS budget drain.
+export const otpSendHourlyLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
   standardHeaders: true,
@@ -37,16 +41,24 @@ export const otpSendLimiter = rateLimit({
   message: json429("Too many OTP requests. Try again in 1 hour."),
 });
 
-// Signup — bot account prevention
+export const otpSendDailyLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hour
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: json429("Daily OTP limit reached. Try again tomorrow."),
+});
+
+// Signup — bot account prevention. Owner-tuned 2026-06-03: 20 / hour.
 export const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: json429("Too many signup attempts. Try again in 1 hour."),
 });
 
-// Order placement — burst spam control (generous for legitimate retry)
+// Order placement — burst spam control (generous for legitimate retry).
 export const orderLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 min
   max: 30,
@@ -55,7 +67,7 @@ export const orderLimiter = rateLimit({
   message: json429("Order rate limit reached. Try again shortly."),
 });
 
-// Review submission — spam control
+// Review submission — spam control.
 export const reviewLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 20,
