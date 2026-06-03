@@ -7,6 +7,11 @@ import OrderProductModel from "../orderProducts/orderProduct.model";
 import ReviewModel from "../review/review.model";
 import CategoryModel from "../category/category.model";
 import BrandModel from "../brand/brand.model";
+import {
+  findActiveFlashForProduct,
+  findActiveFlashWithMetaForProduct,
+} from "../flashsale/flashsale.services";
+import { FileUploadHelper } from "../../helpers/image.upload";
 
 // Create A Product
 export const postProductServices = async (
@@ -34,13 +39,12 @@ export const findAProductDetailsServices = async (
     })
       .populate([
         { path: "category_id", model: "categories" },
-        { path: "sub_category_id", model: "subcategories" },
         { path: "brand_id", model: "brands" },
-        {
-          path: "specifications.specification_id",
-          model: "specifications", // ✅ fix — আগে "attributes" ছিল
-        },
         { path: "theme_id", model: "themes" },
+        // Resolve structured attribute payload so the PDP can render the spec
+        // table without separate look-ups. attribute_id → full attribute doc;
+        // FE then filters attribute_values by the chosen value_ids.
+        { path: "product_attributes.attribute_id", model: "attributes" },
       ])
       .select(
         "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt",
@@ -67,12 +71,6 @@ export const findAProductDetailsServices = async (
 
   // Step 3: Category, brand status check
   if (findProduct?.category_id?.category_status !== "active") {
-    throw new ApiError(404, "Product Unavailable !");
-  }
-  if (
-    findProduct?.sub_category_id &&
-    findProduct?.sub_category_id?.sub_category_status !== "active"
-  ) {
     throw new ApiError(404, "Product Unavailable !");
   }
   if (
@@ -119,7 +117,9 @@ export const findAProductDetailsServices = async (
       product_id: targetProductId,
     })
       .select(
-        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt",
+        // variation_sku is INCLUDED — surfaced on PDP for buyer reference.
+        // variation_barcode + image stay EXCLUDED (warehouse-only artifacts).
+        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_barcode_image_key -variation_image_key -createdAt -updatedAt",
       )
       .lean();
 
@@ -143,59 +143,11 @@ export const findAProductDetailsServices = async (
     };
   }
 
-  // Transform sub_category_id and child_category_id similarly if needed
-  if (findProduct?.sub_category_id) {
-    findProduct.sub_category_id = {
-      _id: findProduct?.sub_category_id?._id,
-      sub_category_name: findProduct?.sub_category_id?.sub_category_name,
-    };
-  }
-
-  // if (findProduct?.child_category_id) {
-  //   findProduct.child_category_id = {
-  //     _id: findProduct?.child_category_id?._id,
-  //     child_category_name: findProduct?.child_category_id?.child_category_name,
-  //   };
-  // }
   if (findProduct?.brand_id) {
     findProduct.brand_id = {
       _id: findProduct?.brand_id?._id,
       brand_name: findProduct?.brand_id?.brand_name,
     };
-  }
-
-  // Step 7: Specifications filter
-  // ✅ Fix — আগে attribute_values ও attribute_name ব্যবহার হচ্ছিল
-  // এখন specifications collection এর proper field names ব্যবহার হবে
-  if (findProduct?.specifications) {
-    findProduct.specifications = findProduct?.specifications?.map(
-      (specification: any) => {
-        const { specification_id, specification_values } = specification;
-
-        const filteredValues = specification_id?.specification_values?.filter(
-          (value: any) =>
-            specification_values?.some(
-              (specValue: any) =>
-                specValue?.specification_value_id?.toString() ===
-                value?._id?.toString(),
-            ),
-        );
-
-        return {
-          _id: specification?._id,
-          specification_id: {
-            _id: specification_id?._id,
-            specification_name: specification_id?.specification_name, // ✅ fix
-            specification_status: specification_id?.specification_status, // ✅ fix
-            specification_values: filteredValues?.map((value: any) => ({
-              _id: value?._id,
-              specification_value_name: value?.specification_value_name, // ✅ fix
-              specification_value_status: value?.specification_value_status, // ✅ fix
-            })),
-          },
-        };
-      },
-    );
   }
 
   // Step 8: Review + Order count
@@ -219,6 +171,18 @@ export const findAProductDetailsServices = async (
   findProduct.total_review_ratting =
     averageReview.length > 0 ? averageReview[0].totalReviews : 0;
   findProduct.total_order_count = total_order_count ?? 0;
+
+  // Phase E (F2) — attach the active flash sale row for this product so the
+  // PDP can render the countdown + flash price without a second round-trip.
+  // Returns null if nothing's active right now; FE renders normal price.
+  try {
+    const flashMeta = await findActiveFlashWithMetaForProduct(targetProductId);
+    if (flashMeta) {
+      findProduct.active_flash = flashMeta;
+    }
+  } catch (_) {
+    // Flash lookup is best-effort; never block PDP load on it.
+  }
 
   return { data: findProduct, redirect_slug: null };
 };
@@ -244,13 +208,10 @@ export const findCartProductServices = async (
   })
     .populate([
       { path: "brand_id", model: "brands" },
-      // { path: "product_campaign_id", model: "campaigns" },
       { path: "category_id", model: "categories" },
-      { path: "sub_category_id", model: "subcategories" },
-      // { path: "child_category_id", model: "childcategories" },
     ])
     .select(
-      "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -sub_category_id -specifications -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
+      "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -category_path -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
     )
     .lean();
 
@@ -297,11 +258,6 @@ export const findCartProductServices = async (
     // inactive check
     if (baseProduct?.category_id?.category_status !== "active") continue;
     if (
-      baseProduct?.sub_category_id &&
-      baseProduct?.sub_category_id?.sub_category_status !== "active"
-    )
-      continue;
-    if (
       baseProduct?.brand_id &&
       baseProduct?.brand_id?.brand_status !== "active"
     )
@@ -310,9 +266,8 @@ export const findCartProductServices = async (
     // ✅ deep copy — same product এর দুটো variation আলাদা object হবে
     const findProduct: any = { ...baseProduct };
 
-    // category/sub_category cleanup
+    // category cleanup
     delete findProduct.category_id;
-    delete findProduct.sub_category_id;
 
     // brand cleanup
     if (findProduct?.brand_id) {
@@ -357,13 +312,9 @@ export const findCompareProductServices = async (
       .populate([
         { path: "brand_id", model: "brands" },
         { path: "category_id", model: "categories" },
-        {
-          path: "specifications.specification_id",
-          model: "specifications",
-        },
       ])
       .select(
-        "product_name product_slug category_id brand_id specifications main_image unit product_warrenty product_return",
+        "product_name product_slug category_id brand_id main_image unit product_warrenty product_return",
       )
       .lean();
 
@@ -386,38 +337,6 @@ export const findCompareProductServices = async (
         category_name: findProduct?.category_id?.category_name,
         category_slug: findProduct?.category_id?.category_slug,
       };
-    }
-
-    if (findProduct?.specifications) {
-      findProduct.specifications = findProduct?.specifications?.map(
-        (specification: any) => {
-          const { specification_id, specification_values } = specification;
-
-          // Filter `specification_id.specification_values` based on `specification_values`
-          const filteredValues = specification_id?.attribute_values?.filter(
-            (value: any) =>
-              specification_values?.some(
-                (specValue: any) =>
-                  specValue?.specification_value_id?.toString() ===
-                  value?._id?.toString(),
-              ),
-          );
-
-          return {
-            _id: specification?._id,
-            specification_id: {
-              _id: specification_id?._id,
-              specification_name: specification_id?.specification_name,
-              specification_status: specification_id?.specification_status,
-              specification_values: filteredValues?.map((value: any) => ({
-                _id: value?._id,
-                specification_value_name: value?.specification_value_name,
-                specification_value_status: value?.specification_value_status,
-              })),
-            },
-          };
-        },
-      );
     }
 
     let avarage_review_ratting: any = 0;
@@ -529,20 +448,6 @@ export const findRelatedProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-      },
-    },
-    {
-      $lookup: {
         from: "brands", // Link the product's brand
         localField: "brand_id",
         foreignField: "_id",
@@ -612,12 +517,6 @@ export const findRelatedProductServices = async (
       $match: {
         "category.category_status": "active", // Ensure the category is active
         $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
           {
             $or: [
               { "brand.brand_status": "active" }, // Allow active brand
@@ -719,371 +618,6 @@ export const findRelatedProductServices = async (
 
   return findRelatedProduct;
 };
-
-// export const findRelatedProductServices = async (
-//   product_slug: string
-// ): Promise<IProductInterface[] | []> => {
-//   const andCondition = [];
-
-//   if (product_slug) {
-//     // Extracting keywords from the product_slug to find related items
-//     const keywords = product_slug.split("-").filter((word) => word.length > 2); // Ignore very short words
-//     // Match any of the keywords in the product_name or product_slug fields
-//     if (keywords.length) {
-//       andCondition.push({
-//         $or: keywords.map((keyword) => ({
-//           $or: [
-//             {
-//               product_name: {
-//                 $regex: keyword,
-//                 $options: "i", // Case-insensitive
-//               },
-//             },
-//             {
-//               product_slug: {
-//                 $regex: keyword,
-//                 $options: "i", // Case-insensitive
-//               },
-//             },
-//           ],
-//         })),
-//       });
-//     }
-//   }
-
-//   andCondition.push({
-//     product_status: "active", // Filter for active products
-//   });
-
-//   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
-
-//   const findRelatedProduct = await ProductModel.aggregate([
-//     {
-//       $match: {
-//         ...whereCondition, // Filter for active products
-//       },
-//     },
-//     {
-//       $sample: { size: 10 }, // Randomly select 10 products
-//     },
-//     {
-//       $lookup: {
-//         from: "categories", // Link the product's category
-//         localField: "category_id",
-//         foreignField: "_id",
-//         as: "category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$category",
-//         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "subcategories", // Link the product's sub-category
-//         localField: "sub_category_id",
-//         foreignField: "_id",
-//         as: "sub_category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$sub_category",
-//         preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "childcategories", // Link the product's child-category
-//         localField: "child_category_id",
-//         foreignField: "_id",
-//         as: "child_category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$child_category",
-//         preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "brands", // Link the product's brand
-//         localField: "brand_id",
-//         foreignField: "_id",
-//         as: "brand",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$brand",
-//         preserveNullAndEmptyArrays: true, // Include products even if brand details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "variations", // Link the product's variations
-//         localField: "_id",
-//         foreignField: "product_id",
-//         as: "variations",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         variations: {
-//           $map: {
-//             input: "$variations",
-//             as: "variation",
-//             in: {
-//               _id: "$$variation._id",
-//               variation_name: "$$variation.variation_name",
-//               product_id: "$$variation.product_id",
-//               variation_price: "$$variation.variation_price",
-//               variation_discount_price: "$$variation.variation_discount_price",
-//               variation_quantity: "$$variation.variation_quantity",
-//               variation_image: "$$variation.variation_image",
-//               variation_video: "$$variation.variation_video",
-//             },
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "reviews", // Join with reviews collection
-//         localField: "_id",
-//         foreignField: "review_product_id",
-//         as: "reviews",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         average_review_rating: {
-//           $cond: {
-//             if: { $gt: [{ $size: "$reviews" }, 0] }, // Check if reviews exist
-//             then: {
-//               $divide: [
-//                 { $sum: "$reviews.review_ratting" }, // Sum of all review ratings
-//                 { $size: "$reviews" }, // Total number of reviews
-//               ],
-//             },
-//             else: 0, // Default to 0 if no reviews
-//           },
-//         },
-//         total_reviews: { $size: "$reviews" }, // Count of reviews
-//       },
-//     },
-//     {
-//       $match: {
-//         "category.category_status": "active", // Ensure the category is active
-//         $and: [
-//           {
-//             $or: [
-//               { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-//               { sub_category: null }, // Or no sub-category
-//             ],
-//           },
-//           {
-//             $or: [
-//               { "child_category.child_category_status": "active" }, // Allow active child-category
-//               { child_category: null }, // Or no child-category
-//             ],
-//           },
-//           {
-//             $or: [
-//               { "brand.brand_status": "active" }, // Allow active brand
-//               { brand: null }, // Or no brand
-//             ],
-//           },
-//         ],
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "campaigns", // Link the product's campaign
-//         localField: "product_campaign_id",
-//         foreignField: "_id",
-//         as: "campaign",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$campaign",
-//         preserveNullAndEmptyArrays: true, // Include products even if campaign details are not available
-//       },
-//     },
-//     {
-//       $addFields: {
-//         campaign_details: {
-//           $cond: {
-//             if: {
-//               $and: [
-//                 { $ne: ["$campaign", null] }, // Check if campaign exists
-//                 { $ne: ["$campaign.campaign_products", null] },
-//                 { $eq: ["$campaign.campaign_status", "active"] }, // Check if campaign_status is active
-//                 {
-//                   $gt: [
-//                     {
-//                       $size: {
-//                         $filter: {
-//                           input: "$campaign.campaign_products",
-//                           as: "product",
-//                           cond: {
-//                             $and: [
-//                               {
-//                                 $eq: ["$$product.campaign_product_id", "$_id"],
-//                               }, // Match product ID
-//                               {
-//                                 $eq: [
-//                                   "$$product.campaign_product_status",
-//                                   "active",
-//                                 ],
-//                               }, // Check product status is active
-//                             ],
-//                           },
-//                         },
-//                       },
-//                     },
-//                     0,
-//                   ],
-//                 }, // Ensure at least one matching campaign product exists
-//               ],
-//             },
-//             then: {
-//               _id: "$campaign._id",
-//               campaign_start_date: "$campaign.campaign_start_date",
-//               campaign_end_date: "$campaign.campaign_end_date",
-//               campaign_status: "$campaign.campaign_status",
-//               campaign_product: {
-//                 $arrayElemAt: [
-//                   {
-//                     $filter: {
-//                       input: "$campaign.campaign_products",
-//                       as: "product",
-//                       cond: {
-//                         $and: [
-//                           { $eq: ["$$product.campaign_product_id", "$_id"] }, // Match product ID
-//                           {
-//                             $eq: [
-//                               "$$product.campaign_product_status",
-//                               "active",
-//                             ],
-//                           }, // Check product status is active
-//                         ],
-//                       },
-//                     },
-//                   },
-//                   0,
-//                 ],
-//               },
-//             },
-//             else: null,
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $project: {
-//         _id: 1,
-//         product_name: 1,
-//         attributes_details: {
-//           $let: {
-//             vars: {
-//               filteredAttributes: {
-//                 $filter: {
-//                   input: "$attributes_details",
-//                   as: "attribute",
-//                   cond: {
-//                     $gt: [
-//                       {
-//                         $size: {
-//                           $filter: {
-//                             input: "$$attribute.attribute_values",
-//                             as: "value",
-//                             cond: {
-//                               $and: [
-//                                 { $ne: ["$$value.attribute_value_code", null] },
-//                                 {
-//                                   $ne: [
-//                                     "$$value.attribute_value_code",
-//                                     "undefined",
-//                                   ],
-//                                 },
-//                                 { $ne: ["$$value.attribute_value_code", ""] },
-//                               ],
-//                             },
-//                           },
-//                         },
-//                       },
-//                       0,
-//                     ],
-//                   },
-//                 },
-//               },
-//             },
-//             in: {
-//               $cond: {
-//                 if: { $eq: [{ $size: "$$filteredAttributes" }, 0] },
-//                 then: "$$REMOVE", // Removes `attributes_details` if empty
-//                 else: {
-//                   $cond: {
-//                     if: { $eq: [{ $size: "$$filteredAttributes" }, 1] },
-//                     then: { $arrayElemAt: ["$$filteredAttributes", 0] }, // Send as object if length = 1
-//                     else: "$$filteredAttributes", // Send as array if length > 1
-//                   },
-//                 },
-//               },
-//             },
-//           },
-//         },
-//         product_slug: 1,
-//         main_image: 1,
-//         other_images: {
-//           $cond: {
-//             if: { $eq: ["$is_variation", false] },
-//             then: { $arrayElemAt: ["$other_images", 0] },
-//             else: "$$REMOVE",
-//           },
-//         },
-//         main_video: 1,
-//         product_price: 1,
-//         product_discount_price: 1,
-//         createdAt: 1,
-//         updatedAt: 1,
-//         brand: {
-//           _id: 1,
-//           brand_name: 1,
-//         },
-//         category: {
-//           _id: 1,
-//           category_name: 1,
-//         },
-//         is_variation: 1,
-//         variations: {
-//           $cond: {
-//             if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
-//             then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
-//             else: {}, // Set variations to an empty array if is_variation is false
-//           },
-//         },
-//         // campaign_details: 1,
-//         campaign_details: {
-//           $cond: {
-//             if: { $ne: ["$campaign_details.campaign_product", null] },
-//             then: "$campaign_details",
-//             else: null,
-//           },
-//         },
-//         average_review_rating: 1, // Include average rating
-//         total_reviews: 1, // Include total reviews coun
-//       },
-//     },
-//   ]);
-
-//   return findRelatedProduct;
-// };
 
 // Find trendingProduct
 export const findTrendingProductServices = async (
@@ -2645,660 +2179,6 @@ export const findPopularProductServices = async (
   return sendData;
 };
 
-// export const findPopularProductServices = async (
-//   category_id: any
-// ): Promise<IProductInterface[] | []> => {
-//   if (category_id) {
-//     const findCategoryWiseProduct = await ProductModel.aggregate([
-//       {
-//         $match: {
-//           product_status: "active", // Filter for active products
-//           category_id: new Types.ObjectId(category_id),
-//         },
-//       },
-//       {
-//         $sample: { size: 10 }, // Randomly select 10 products
-//       },
-//       {
-//         $lookup: {
-//           from: "categories", // Link the product's category
-//           localField: "category_id",
-//           foreignField: "_id",
-//           as: "category",
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: "$category",
-//           preserveNullAndEmptyArrays: false, // Only include products with a valid category
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "subcategories", // Link the product's sub-category
-//           localField: "sub_category_id",
-//           foreignField: "_id",
-//           as: "sub_category",
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: "$sub_category",
-//           preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "childcategories", // Link the product's child-category
-//           localField: "child_category_id",
-//           foreignField: "_id",
-//           as: "child_category",
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: "$child_category",
-//           preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "brands", // Link the product's brand
-//           localField: "brand_id",
-//           foreignField: "_id",
-//           as: "brand",
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: "$brand",
-//           preserveNullAndEmptyArrays: true, // Include products even if brand details are not available
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "variations", // Link the product's variations
-//           localField: "_id",
-//           foreignField: "product_id",
-//           as: "variations",
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "reviews", // Join with reviews collection
-//           localField: "_id",
-//           foreignField: "review_product_id",
-//           as: "reviews",
-//         },
-//       },
-//       {
-//         $addFields: {
-//           average_review_rating: {
-//             $cond: {
-//               if: { $gt: [{ $size: "$reviews" }, 0] }, // Check if reviews exist
-//               then: {
-//                 $divide: [
-//                   { $sum: "$reviews.review_ratting" }, // Sum of all review ratings
-//                   { $size: "$reviews" }, // Total number of reviews
-//                 ],
-//               },
-//               else: 0, // Default to 0 if no reviews
-//             },
-//           },
-//           total_reviews: { $size: "$reviews" }, // Count of reviews
-//         },
-//       },
-//       {
-//         $addFields: {
-//           variations: {
-//             $map: {
-//               input: "$variations",
-//               as: "variation",
-//               in: {
-//                 _id: "$$variation._id",
-//                 variation_name: "$$variation.variation_name",
-//                 product_id: "$$variation.product_id",
-//                 variation_price: "$$variation.variation_price",
-//                 variation_discount_price:
-//                   "$$variation.variation_discount_price",
-//                 variation_quantity: "$$variation.variation_quantity",
-//                 variation_image: "$$variation.variation_image",
-//                 variation_video: "$$variation.variation_video",
-//               },
-//             },
-//           },
-//         },
-//       },
-//       {
-//         $match: {
-//           "category.category_status": "active", // Ensure the category is active
-//           $and: [
-//             {
-//               $or: [
-//                 { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-//                 { sub_category: null }, // Or no sub-category
-//               ],
-//             },
-//             {
-//               $or: [
-//                 { "child_category.child_category_status": "active" }, // Allow active child-category
-//                 { child_category: null }, // Or no child-category
-//               ],
-//             },
-//             {
-//               $or: [
-//                 { "brand.brand_status": "active" }, // Allow active brand
-//                 { brand: null }, // Or no brand
-//               ],
-//             },
-//           ],
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "campaigns", // Link the product's campaign
-//           localField: "product_campaign_id",
-//           foreignField: "_id",
-//           as: "campaign",
-//         },
-//       },
-//       {
-//         $unwind: {
-//           path: "$campaign",
-//           preserveNullAndEmptyArrays: true, // Include products even if campaign details are not available
-//         },
-//       },
-//       {
-//         $addFields: {
-//           campaign_details: {
-//             $cond: {
-//               if: {
-//                 $and: [
-//                   { $ne: ["$campaign", null] }, // Check if campaign exists
-//                   { $ne: ["$campaign.campaign_products", null] },
-//                   { $eq: ["$campaign.campaign_status", "active"] }, // Check if campaign_status is active
-//                   {
-//                     $gt: [
-//                       {
-//                         $size: {
-//                           $filter: {
-//                             input: "$campaign.campaign_products",
-//                             as: "product",
-//                             cond: {
-//                               $and: [
-//                                 {
-//                                   $eq: [
-//                                     "$$product.campaign_product_id",
-//                                     "$_id",
-//                                   ],
-//                                 }, // Match product ID
-//                                 {
-//                                   $eq: [
-//                                     "$$product.campaign_product_status",
-//                                     "active",
-//                                   ],
-//                                 }, // Check product status is active
-//                               ],
-//                             },
-//                           },
-//                         },
-//                       },
-//                       0,
-//                     ],
-//                   }, // Ensure at least one matching campaign product exists
-//                 ],
-//               },
-//               then: {
-//                 _id: "$campaign._id",
-//                 campaign_start_date: "$campaign.campaign_start_date",
-//                 campaign_end_date: "$campaign.campaign_end_date",
-//                 campaign_status: "$campaign.campaign_status",
-//                 campaign_product: {
-//                   $arrayElemAt: [
-//                     {
-//                       $filter: {
-//                         input: "$campaign.campaign_products",
-//                         as: "product",
-//                         cond: {
-//                           $and: [
-//                             { $eq: ["$$product.campaign_product_id", "$_id"] }, // Match product ID
-//                             {
-//                               $eq: [
-//                                 "$$product.campaign_product_status",
-//                                 "active",
-//                               ],
-//                             }, // Check product status is active
-//                           ],
-//                         },
-//                       },
-//                     },
-//                     0,
-//                   ],
-//                 },
-//               },
-//               else: null,
-//             },
-//           },
-//         },
-//       },
-//       {
-//         $project: {
-//           _id: 1,
-//           product_name: 1,
-//           attributes_details: {
-//             $let: {
-//               vars: {
-//                 filteredAttributes: {
-//                   $filter: {
-//                     input: "$attributes_details",
-//                     as: "attribute",
-//                     cond: {
-//                       $gt: [
-//                         {
-//                           $size: {
-//                             $filter: {
-//                               input: "$$attribute.attribute_values",
-//                               as: "value",
-//                               cond: {
-//                                 $and: [
-//                                   { $ne: ["$$value.attribute_value_code", null] },
-//                                   { $ne: ["$$value.attribute_value_code", "undefined"] },
-//                                   { $ne: ["$$value.attribute_value_code", ""] },
-//                                 ],
-//                               },
-//                             },
-//                           },
-//                         },
-//                         0,
-//                       ],
-//                     },
-//                   },
-//                 },
-//               },
-//               in: {
-//                 $cond: {
-//                   if: { $eq: [{ $size: "$$filteredAttributes" }, 0] },
-//                   then: "$$REMOVE", // Removes `attributes_details` if empty
-//                   else: {
-//                     $cond: {
-//                       if: { $eq: [{ $size: "$$filteredAttributes" }, 1] },
-//                       then: { $arrayElemAt: ["$$filteredAttributes", 0] }, // Send as object if length = 1
-//                       else: "$$filteredAttributes", // Send as array if length > 1
-//                     },
-//                   },
-//                 },
-//               },
-//             },
-//           },
-//           product_slug: 1,
-//           main_image: 1,
-//           other_images: {
-//             $cond: {
-//               if: { $eq: ["$is_variation", false] },
-//               then: { $arrayElemAt: ["$other_images", 0] },
-//               else: "$$REMOVE",
-//             },
-//           },
-//           main_video: 1,
-//           product_price: 1,
-//           product_discount_price: 1,
-//           createdAt: 1,
-//           updatedAt: 1,
-//           category: {
-//             _id: 1,
-//             category_name: 1,
-//             category_slug: 1,
-//           },
-//           brand: {
-//             _id: 1,
-//             brand_name: 1,
-//           },
-//           is_variation: 1,
-//           variations: {
-//             $cond: {
-//               if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
-//               then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
-//               else: {}, // Set variations to an empty array if is_variation is false
-//             },
-//           },
-//           campaign_details: {
-//             $cond: {
-//               if: { $ne: ["$campaign_details.campaign_product", null] },
-//               then: "$campaign_details",
-//               else: null,
-//             },
-//           },
-//           average_review_rating: 1, // Include average rating
-//           total_reviews: 1, // Include total reviews coun
-//         },
-//       },
-//     ]);
-//     return findCategoryWiseProduct;
-//   }
-
-//   const findPopularProduct = await ProductModel.aggregate([
-//     {
-//       $match: {
-//         product_status: "active", // Filter for active products
-//       },
-//     },
-//     {
-//       $sample: { size: 10 }, // Randomly select 10 products
-//     },
-//     {
-//       $lookup: {
-//         from: "categories", // Link the product's category
-//         localField: "category_id",
-//         foreignField: "_id",
-//         as: "category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$category",
-//         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "subcategories", // Link the product's sub-category
-//         localField: "sub_category_id",
-//         foreignField: "_id",
-//         as: "sub_category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$sub_category",
-//         preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "childcategories", // Link the product's child-category
-//         localField: "child_category_id",
-//         foreignField: "_id",
-//         as: "child_category",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$child_category",
-//         preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "brands", // Link the product's brand
-//         localField: "brand_id",
-//         foreignField: "_id",
-//         as: "brand",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$brand",
-//         preserveNullAndEmptyArrays: true, // Include products even if brand details are not available
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "variations", // Link the product's variations
-//         localField: "_id",
-//         foreignField: "product_id",
-//         as: "variations",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         variations: {
-//           $map: {
-//             input: "$variations",
-//             as: "variation",
-//             in: {
-//               _id: "$$variation._id",
-//               variation_name: "$$variation.variation_name",
-//               product_id: "$$variation.product_id",
-//               variation_price: "$$variation.variation_price",
-//               variation_discount_price: "$$variation.variation_discount_price",
-//               variation_quantity: "$$variation.variation_quantity",
-//               variation_image: "$$variation.variation_image",
-//               variation_video: "$$variation.variation_video",
-//             },
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "reviews", // Join with reviews collection
-//         localField: "_id",
-//         foreignField: "review_product_id",
-//         as: "reviews",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         average_review_rating: {
-//           $cond: {
-//             if: { $gt: [{ $size: "$reviews" }, 0] }, // Check if reviews exist
-//             then: {
-//               $divide: [
-//                 { $sum: "$reviews.review_ratting" }, // Sum of all review ratings
-//                 { $size: "$reviews" }, // Total number of reviews
-//               ],
-//             },
-//             else: 0, // Default to 0 if no reviews
-//           },
-//         },
-//         total_reviews: { $size: "$reviews" }, // Count of reviews
-//       },
-//     },
-//     {
-//       $match: {
-//         "category.category_status": "active", // Ensure the category is active
-//         $and: [
-//           {
-//             $or: [
-//               { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-//               { sub_category: null }, // Or no sub-category
-//             ],
-//           },
-//           {
-//             $or: [
-//               { "child_category.child_category_status": "active" }, // Allow active child-category
-//               { child_category: null }, // Or no child-category
-//             ],
-//           },
-//           {
-//             $or: [
-//               { "brand.brand_status": "active" }, // Allow active brand
-//               { brand: null }, // Or no brand
-//             ],
-//           },
-//         ],
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "campaigns", // Link the product's campaign
-//         localField: "product_campaign_id",
-//         foreignField: "_id",
-//         as: "campaign",
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$campaign",
-//         preserveNullAndEmptyArrays: true, // Include products even if campaign details are not available
-//       },
-//     },
-//     {
-//       $addFields: {
-//         campaign_details: {
-//           $cond: {
-//             if: {
-//               $and: [
-//                 { $ne: ["$campaign", null] }, // Check if campaign exists
-//                 { $ne: ["$campaign.campaign_products", null] },
-//                 { $eq: ["$campaign.campaign_status", "active"] }, // Check if campaign_status is active
-//                 {
-//                   $gt: [
-//                     {
-//                       $size: {
-//                         $filter: {
-//                           input: "$campaign.campaign_products",
-//                           as: "product",
-//                           cond: {
-//                             $and: [
-//                               {
-//                                 $eq: ["$$product.campaign_product_id", "$_id"],
-//                               }, // Match product ID
-//                               {
-//                                 $eq: [
-//                                   "$$product.campaign_product_status",
-//                                   "active",
-//                                 ],
-//                               }, // Check product status is active
-//                             ],
-//                           },
-//                         },
-//                       },
-//                     },
-//                     0,
-//                   ],
-//                 }, // Ensure at least one matching campaign product exists
-//               ],
-//             },
-//             then: {
-//               _id: "$campaign._id",
-//               campaign_start_date: "$campaign.campaign_start_date",
-//               campaign_end_date: "$campaign.campaign_end_date",
-//               campaign_status: "$campaign.campaign_status",
-//               campaign_product: {
-//                 $arrayElemAt: [
-//                   {
-//                     $filter: {
-//                       input: "$campaign.campaign_products",
-//                       as: "product",
-//                       cond: {
-//                         $and: [
-//                           { $eq: ["$$product.campaign_product_id", "$_id"] }, // Match product ID
-//                           {
-//                             $eq: [
-//                               "$$product.campaign_product_status",
-//                               "active",
-//                             ],
-//                           }, // Check product status is active
-//                         ],
-//                       },
-//                     },
-//                   },
-//                   0,
-//                 ],
-//               },
-//             },
-//             else: null,
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $project: {
-//         _id: 1,
-//         product_name: 1,
-//         attributes_details: {
-//           $let: {
-//             vars: {
-//               filteredAttributes: {
-//                 $filter: {
-//                   input: "$attributes_details",
-//                   as: "attribute",
-//                   cond: {
-//                     $gt: [
-//                       {
-//                         $size: {
-//                           $filter: {
-//                             input: "$$attribute.attribute_values",
-//                             as: "value",
-//                             cond: {
-//                               $and: [
-//                                 { $ne: ["$$value.attribute_value_code", null] },
-//                                 { $ne: ["$$value.attribute_value_code", "undefined"] },
-//                                 { $ne: ["$$value.attribute_value_code", ""] },
-//                               ],
-//                             },
-//                           },
-//                         },
-//                       },
-//                       0,
-//                     ],
-//                   },
-//                 },
-//               },
-//             },
-//             in: {
-//               $cond: {
-//                 if: { $eq: [{ $size: "$$filteredAttributes" }, 0] },
-//                 then: "$$REMOVE", // Removes `attributes_details` if empty
-//                 else: {
-//                   $cond: {
-//                     if: { $eq: [{ $size: "$$filteredAttributes" }, 1] },
-//                     then: { $arrayElemAt: ["$$filteredAttributes", 0] }, // Send as object if length = 1
-//                     else: "$$filteredAttributes", // Send as array if length > 1
-//                   },
-//                 },
-//               },
-//             },
-//           },
-//         },
-//         product_slug: 1,
-//         main_image: 1,
-//         other_images: {
-//           $cond: {
-//             if: { $eq: ["$is_variation", false] },
-//             then: { $arrayElemAt: ["$other_images", 0] },
-//             else: "$$REMOVE",
-//           },
-//         },
-//         main_video: 1,
-//         product_price: 1,
-//         product_discount_price: 1,
-//         createdAt: 1,
-//         updatedAt: 1,
-//         category: {
-//           _id: 1,
-//           category_name: 1,
-//           category_slug: 1,
-//         },
-//         brand: {
-//           _id: 1,
-//           brand_name: 1,
-//         },
-//         is_variation: 1,
-//         variations: {
-//           $cond: {
-//             if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
-//             then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
-//             else: {}, // Set variations to an empty array if is_variation is false
-//           },
-//         },
-//         campaign_details: {
-//           $cond: {
-//             if: { $ne: ["$campaign_details.campaign_product", null] },
-//             then: "$campaign_details",
-//             else: null,
-//           },
-//         },
-//         average_review_rating: 1, // Include average rating
-//         total_reviews: 1, // Include total reviews coun
-//       },
-//     },
-//   ]);
-
-//   return findPopularProduct;
-// };
-
 // Find ECommerceChoiceProduct
 export const findECommerceChoiceProductServices = async (
   limit: number,
@@ -4030,6 +2910,72 @@ export const findJustForYouProductServices = async (): Promise<
   return matchedProductsByCategory.filter((entry) => entry !== null);
 };
 
+// Partial update of a product's themed page-content ONLY. Unlike
+// updateProductServices (which the full product-edit form uses and which
+// rebuilds the whole document), this whitelists page-content fields and $sets
+// just those — so the admin Page Content form can save without touching price,
+// stock, category, name, etc. theme_id "" / null is treated as "clear theme".
+const PAGE_CONTENT_FIELDS = [
+  "theme_id",
+  "short_description",
+  "benefits_side_image",
+  "benefits_side_image_key",
+  "use_cases_side_image",
+  "use_cases_side_image_key",
+  "faq_side_image",
+  "faq_side_image_key",
+  "badge_text",
+  "hero_corner_badge",
+  "video_title",
+  "benefits",
+  "short_features",
+  "process_steps",
+  "use_cases",
+  "faqs",
+  "floating_images",
+  "nutrition",
+  "og_image",
+  "og_image_key",
+  "og_title",
+  "og_description",
+  "product_updated_by",
+] as const;
+
+export const updateProductPageContentServices = async (
+  _id: any,
+  data: any,
+): Promise<any> => {
+  const exists = await ProductModel.findById(_id).select("_id");
+  if (!exists) {
+    throw new Error("Product not found");
+  }
+
+  const set: any = {};
+  const unset: any = {};
+  for (const field of PAGE_CONTENT_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+    const value = data[field];
+    // theme_id: empty / null is treated as "no change" (skip), NOT "remove
+    // theme". The Page Content form may legitimately send an empty value while
+    // the theme dropdown is still loading its option list — clearing the field
+    // in that case wiped the admin's selection and dropped the product back to
+    // the default theme. To intentionally clear a theme, use the product edit
+    // form (full PATCH /product).
+    if (field === "theme_id") {
+      if (value === "" || value === null || value === undefined) continue;
+      set.theme_id = value;
+      continue;
+    }
+    set[field] = value;
+  }
+
+  const update: any = {};
+  if (Object.keys(set).length) update.$set = set;
+  if (Object.keys(unset).length) update.$unset = unset;
+
+  return ProductModel.updateOne({ _id }, update, { runValidators: true });
+};
+
 // update A Product
 export const updateProductServices = async (
   _id: any,
@@ -4045,14 +2991,9 @@ export const updateProductServices = async (
   // আপডেট করার ডেটা তৈরি করা হচ্ছে
   const updateData: any = { ...data };
 
-  // যদি `sub_category_id` পাঠানো না হয়, তাহলে সেটি ডিলিট করা হবে
+  // sub/child category retired — single leaf category_id + category_path are
+  // always set by the controller now; only brand_id needs the unset fallback.
   const unsetData: any = {};
-  if (!data.hasOwnProperty("sub_category_id")) {
-    unsetData.sub_category_id = "";
-  }
-  if (!data.hasOwnProperty("child_category_id")) {
-    unsetData.child_category_id = "";
-  }
   if (!data.hasOwnProperty("brand_id")) {
     unsetData.brand_id = "";
   }
@@ -4094,12 +3035,9 @@ export const findAllDashboardProductServices = async (
     .populate([
       { path: "product_supplier_id" },
       { path: "category_id" },
-      { path: "sub_category_id" },
-      { path: "child_category_id" },
       { path: "brand_id" },
       { path: "product_publisher_id" },
       { path: "product_updated_by" },
-      { path: "specifications.specification_id", model: "specifications" },
     ])
     .sort({ _id: -1 })
     .skip(skip)
@@ -4134,19 +3072,15 @@ export const findAllDashboardProductServices = async (
 export const findADashboardProductServices = async (
   _id: string,
 ): Promise<any | null> => {
-  // Step 1: Find the product by its ID and populate related fields
+  // Step 1: Find the product by its ID and populate related fields.
+  // SECURITY: explicitly strip admin_password (bcrypt hash) from any populated
+  // admin doc — older code leaked it via the publisher / updated_by populate.
   const findProduct = await ProductModel.findOne({ _id })
     .populate([
       { path: "category_id" },
-      { path: "sub_category_id" },
-      { path: "child_category_id" },
       { path: "brand_id" },
-      { path: "product_publisher_id" },
-      { path: "product_updated_by" },
-      {
-        path: "specifications.specification_id",
-        model: "attributes",
-      },
+      { path: "product_publisher_id", select: "-admin_password" },
+      { path: "product_updated_by", select: "-admin_password" },
     ])
     .select("-__v")
     .lean(); // Use .lean() to return a plain JavaScript object
@@ -4166,7 +3100,169 @@ export const findADashboardProductServices = async (
   return { ...findProduct };
 };
 
-// Delete a Product
+// ─────────────────────────────────────────────────────────────────────────────
+// Batch 2 D — within-product reference-counted image cleanup
+//
+// An S3 image URL may appear in MULTIPLE places on the same product:
+//   - product.main_image
+//   - product.other_images[].other_image
+//   - variation.variation_image (legacy single)
+//   - variation.variation_images[] (C1 multi)
+//
+// `collectAllProductImageUrls` returns the union (key + url) so callers can
+// either (a) delete every S3 object when the product is hard-deleted, or
+// (b) check "is this URL still referenced anywhere on this product?" before
+// deleting a specific S3 object after an image swap. Scope intentionally
+// within-product only — cross-product reuse is rare at single-shop scale.
+// ─────────────────────────────────────────────────────────────────────────────
+export const collectAllProductImageRefs = async (
+  productId: string,
+): Promise<{ urls: Set<string>; keys: Set<string> }> => {
+  const urls = new Set<string>();
+  const keys = new Set<string>();
+  const product = await ProductModel.findById(productId).lean();
+  if (!product) return { urls, keys };
+
+  if (product.main_image) urls.add(product.main_image);
+  if (product.main_image_key) keys.add(product.main_image_key);
+  if (product.size_chart) urls.add(product.size_chart);
+  if (product.size_chart_key) keys.add(product.size_chart_key);
+  // main_video has its own S3 key alongside the URL.
+  if (product.main_video) urls.add(product.main_video);
+  if (product.main_video_key) keys.add(product.main_video_key);
+  (product.other_images || []).forEach((o: any) => {
+    if (o?.other_image) urls.add(o.other_image);
+    if (o?.other_image_key) keys.add(o.other_image_key);
+  });
+
+  const variations = await VariationModel.find({ product_id: productId })
+    .select(
+      "variation_image variation_image_key variation_images variation_images_keys variation_video variation_video_key",
+    )
+    .lean();
+  variations.forEach((v: any) => {
+    if (v.variation_image) urls.add(v.variation_image);
+    if (v.variation_image_key) keys.add(v.variation_image_key);
+    (v.variation_images || []).forEach((u: string) => u && urls.add(u));
+    (v.variation_images_keys || []).forEach((k: string) => k && keys.add(k));
+    if (v.variation_video) urls.add(v.variation_video);
+    if (v.variation_video_key) keys.add(v.variation_video_key);
+  });
+
+  return { urls, keys };
+};
+
+// Check whether a specific URL is still referenced anywhere on this product
+// AFTER an in-memory edit (excluding the doc shape the caller already has —
+// they pass in the new product/variations state). Use to decide whether to
+// trigger an S3 delete on an image that's being swapped out.
+export const isImageStillReferenced = (
+  url: string,
+  nextProduct: any,
+  nextVariations: any[],
+): boolean => {
+  if (!url) return true; // nothing to delete anyway
+  if (nextProduct?.main_image === url) return true;
+  if ((nextProduct?.other_images || []).some((o: any) => o?.other_image === url))
+    return true;
+  for (const v of nextVariations || []) {
+    if (v?.variation_image === url) return true;
+    if ((v?.variation_images || []).includes(url)) return true;
+  }
+  return false;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image-swap S3 orphan cleanup (Batch 2 D wire-in).
+//
+// Called from updateProduct AFTER the new product/variation docs are saved,
+// with the BEFORE snapshot (existingProduct + existingVariations) and the
+// AFTER state (nextProduct + nextVariations). Any S3 key that was in the
+// BEFORE state but is no longer referenced anywhere in the AFTER state gets
+// deleted from S3 (best-effort — failures swallowed, monthly orphan cron
+// will catch stragglers).
+//
+// Cross-product reuse is NOT checked (per owner decision). Within-product
+// reuse IS checked — if the admin reassigns the same URL to a different slot
+// (e.g. moves main_image into other_images), the URL stays referenced and
+// is not deleted.
+// ─────────────────────────────────────────────────────────────────────────────
+const collectKeysFromState = (
+  product: any,
+  variations: any[],
+): { keys: Set<string>; urls: Set<string> } => {
+  const keys = new Set<string>();
+  const urls = new Set<string>();
+  if (product?.main_image) urls.add(product.main_image);
+  if (product?.main_image_key) keys.add(product.main_image_key);
+  if (product?.size_chart) urls.add(product.size_chart);
+  if (product?.size_chart_key) keys.add(product.size_chart_key);
+  if (product?.main_video) urls.add(product.main_video);
+  if (product?.main_video_key) keys.add(product.main_video_key);
+  (product?.other_images || []).forEach((o: any) => {
+    if (o?.other_image) urls.add(o.other_image);
+    if (o?.other_image_key) keys.add(o.other_image_key);
+  });
+  (variations || []).forEach((v: any) => {
+    if (v?.variation_image) urls.add(v.variation_image);
+    if (v?.variation_image_key) keys.add(v.variation_image_key);
+    (v?.variation_images || []).forEach((u: string) => u && urls.add(u));
+    (v?.variation_images_keys || []).forEach((k: string) => k && keys.add(k));
+    if (v?.variation_video) urls.add(v.variation_video);
+    if (v?.variation_video_key) keys.add(v.variation_video_key);
+  });
+  return { keys, urls };
+};
+
+export const cleanupOrphanedProductMedia = async (
+  prevProduct: any,
+  prevVariations: any[],
+  nextProductId: string,
+): Promise<{ deleted: number; skipped: number }> => {
+  const prev = collectKeysFromState(prevProduct, prevVariations);
+  const nextProduct = await ProductModel.findById(nextProductId).lean();
+  const nextVariations = await VariationModel.find({ product_id: nextProductId })
+    .select(
+      "variation_image variation_image_key variation_images variation_images_keys variation_video variation_video_key",
+    )
+    .lean();
+  const next = collectKeysFromState(nextProduct, nextVariations);
+
+  let deleted = 0;
+  let skipped = 0;
+  for (const key of prev.keys) {
+    if (!key) continue;
+    if (next.keys.has(key)) {
+      skipped++;
+      continue;
+    }
+    // Key dropped from the doc — also check whether the URL form still lives
+    // somewhere (defensive — admin moving URL between slots without key).
+    const urlForKey = Array.from(prev.urls).find((u) => u.includes(key));
+    if (urlForKey && next.urls.has(urlForKey)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await FileUploadHelper.deleteFromSpaces(key);
+      deleted++;
+    } catch {
+      // Best-effort. Monthly orphan-cleanup cron handles stragglers.
+      skipped++;
+    }
+  }
+  return { deleted, skipped };
+};
+
+// Delete a Product — cascades:
+//   1. Collect all S3 image/video keys (main + others + variation media)
+//   2. Best-effort S3 delete (don't throw on individual failures — orphan
+//      cleanup will catch leftovers monthly via a future cron)
+//   3. Delete all variations
+//   4. Delete the product doc
+//
+// Reference scope is within-product only (per owner decision 2026-05-30).
+// Cross-product checks are not done — single-shop scale rarely shares media.
 export const deleteProductServices = async (
   _id: string,
 ): Promise<IProductInterface | any> => {
@@ -4175,6 +3271,22 @@ export const deleteProductServices = async (
   if (!updateProductInfo) {
     throw new ApiError(404, "Product not found");
   }
+
+  // Collect every S3 key associated with this product BEFORE deleting docs.
+  const { keys } = await collectAllProductImageRefs(_id);
+  for (const key of keys) {
+    if (!key) continue;
+    try {
+      await FileUploadHelper.deleteFromSpaces(key);
+    } catch {
+      // Swallow — best-effort. A future monthly orphan-cleanup cron will
+      // catch anything that slipped through.
+    }
+  }
+
+  // Cascade variations (orphan rows otherwise).
+  await VariationModel.deleteMany({ product_id: _id });
+
   const Product = await ProductModel.deleteOne(
     { _id: _id },
     {
@@ -4182,4 +3294,43 @@ export const deleteProductServices = async (
     },
   );
   return Product;
+};
+
+// Low-stock list (Phase B, B4). Returns simple products AND variations whose
+// current stock has fallen to or below their alert threshold. Computed at query
+// time (always accurate — no stored flag to drift). Only items with a positive
+// alert threshold count, so products that never set one are never flagged.
+export const findLowStockServices = async (): Promise<{
+  products: any[];
+  variations: any[];
+}> => {
+  // Simple (non-variation) products at/under their alert quantity.
+  const products = await ProductModel.find({
+    is_variation: { $ne: true },
+    product_alert_quantity: { $gt: 0 },
+    $expr: { $lte: ["$product_quantity", "$product_alert_quantity"] },
+  })
+    .select(
+      "product_name product_slug main_image product_quantity product_alert_quantity",
+    )
+    .sort({ product_quantity: 1 })
+    .lean();
+
+  // Variations at/under their alert quantity, with parent product info.
+  const variations = await VariationModel.find({
+    variation_alert_quantity: { $gt: 0 },
+    $expr: { $lte: ["$variation_quantity", "$variation_alert_quantity"] },
+  })
+    .select(
+      "variation_name variation_quantity variation_alert_quantity product_id",
+    )
+    .populate({
+      path: "product_id",
+      model: "products",
+      select: "product_name product_slug main_image",
+    })
+    .sort({ variation_quantity: 1 })
+    .lean();
+
+  return { products, variations };
 };

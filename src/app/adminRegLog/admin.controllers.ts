@@ -11,27 +11,42 @@ import {
   postAdminServices,
   updateAdminServices,
 } from "./admin.services";
+import {
+  signAdminAccess,
+  signAdminRefresh,
+  setAccessCookie,
+  setRefreshCookie,
+  clearAuthCookies,
+} from "../../utils/auth.tokens";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 const jwt = require("jsonwebtoken");
 const { promisify } = require("util");
 
-// get a Admin
+// get a Admin (Phase D: uses central token helper; rejects refresh-typed token)
 export const getMeAdmin: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const token = await req.cookies?.fruit_snacks_token;
+    const token = req.cookies?.[
+      require("../../utils/auth.tokens").COOKIE_NAMES.ACCESS
+    ];
+    if (!token) throw new ApiError(401, "Admin get failed !");
 
-    if (!token) {
-      throw new ApiError(400, "Admin get failed !");
+    const { verifyTokenAsync } = require("../../utils/auth.tokens");
+    const decode: any = await verifyTokenAsync(token);
+    if (decode?.kind && decode.kind !== "access") {
+      throw new ApiError(401, "Refresh token cannot be used as access.");
     }
-    const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
-    // const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
+    if (decode?.who && decode.who !== "admin") {
+      throw new ApiError(401, "Not an admin token.");
+    }
 
-    const Admin = await findAdminInfoServices(decode.admin_phone);
+    const Admin = decode?._id
+      ? await AdminModel.findById(decode._id).populate("role_id")
+      : await findAdminInfoServices(decode.admin_phone);
 
     if (Admin) {
       return sendResponse(res, {
@@ -41,7 +56,7 @@ export const getMeAdmin: RequestHandler = async (
         data: Admin,
       });
     }
-    throw new ApiError(400, "Admin get failed !");
+    throw new ApiError(404, "Admin not found !");
   } catch (error) {
     next(error);
   }
@@ -133,17 +148,21 @@ export const postLogAdmin: RequestHandler = async (
       findAdmin?.admin_password,
     );
     if (isPasswordValid) {
-      const admin_phone = findAdmin?.admin_phone;
-      const token = jwt.sign({ admin_phone }, process.env.ACCESS_TOKEN, {
-        expiresIn: "365d",
+      // Phase D: payload now carries _id (+ role_id) so the middleware can
+      // skip the phone→admin lookup. Cookie lifetime tightened from 1y → 7d
+      // access + 90d refresh — see utils/auth.tokens for the constants.
+      const _id = String(findAdmin?._id);
+      const access = signAdminAccess({
+        _id,
+        admin_phone: findAdmin.admin_phone,
+        role_id: findAdmin?.role_id ? String(findAdmin.role_id) : undefined,
       });
-      // res.cookie("fruit_snacks_token", token); //according to chatgpt for access cookies separate domain i have to use like this
-      res.cookie("fruit_snacks_token", token, {
-        httpOnly: true, // নিরাপত্তার জন্য
-        secure: true, // https connection এর জন্য অবশ্যই true লাগবে
-        sameSite: "none", // cross-domain এর জন্য required
-        maxAge: 365 * 24 * 60 * 60 * 1000, // optional, 1 year
+      const refresh = signAdminRefresh({
+        _id,
+        admin_phone: findAdmin.admin_phone,
       });
+      setAccessCookie(res, "admin", access);
+      setRefreshCookie(res, refresh);
 
       return sendResponse(res, {
         statusCode: httpStatus.OK,
@@ -288,6 +307,167 @@ export const deleteAAdmin: RequestHandler = async (
       throw new ApiError(400, "Admin Delete Failed !");
     }
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// ── Refresh access token (Phase D, D2) ────────────────────────────────────────
+// Reads the refresh cookie, validates it, confirms the admin is still active,
+// then re-issues access + refresh (rotating refresh too — small upgrade over
+// "just access" because it keeps long-lived sessions alive without re-login).
+export const refreshAdmin: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const {
+      verifyTokenAsync,
+      COOKIE_NAMES,
+    } = require("../../utils/auth.tokens");
+    const token = req.cookies?.[COOKIE_NAMES.REFRESH];
+    if (!token) throw new ApiError(401, "No refresh token.");
+
+    const decoded: any = await verifyTokenAsync(token);
+    if (decoded?.kind !== "refresh" || decoded?.who !== "admin") {
+      throw new ApiError(401, "Invalid refresh token.");
+    }
+
+    const admin: any = await AdminModel.findById(decoded._id);
+    if (!admin || admin.admin_status !== "active") {
+      throw new ApiError(401, "Admin not active.");
+    }
+
+    const _id = String(admin._id);
+    const access = signAdminAccess({
+      _id,
+      admin_phone: admin.admin_phone,
+      role_id: admin?.role_id ? String(admin.role_id) : undefined,
+    });
+    const refresh = signAdminRefresh({ _id, admin_phone: admin.admin_phone });
+    setAccessCookie(res, "admin", access);
+    setRefreshCookie(res, refresh);
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Token refreshed.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Admin logout — clears both cookies (Phase D, D2) ──────────────────────────
+export const logoutAdmin: RequestHandler = (req, res, next) => {
+  try {
+    clearAuthCookies(res);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Admin logged out.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Admin forgot password — send OTP (Phase D, D4) ────────────────────────────
+// Same OTP shape as the user flow: 6-digit, bcrypt-hashed at rest, 60s
+// resend cooldown, 5-attempt cap. Reuses utils/auth.otp + existing SMS infra.
+// Fixes the "locked-out admin needs another admin to reset" gap.
+export const forgotPasswordAdmin: RequestHandler = async (req, res, next) => {
+  try {
+    const { generateOtp, buildOtpFields, isWithinSendCooldown, secondsUntilCooldownEnds } =
+      require("../../utils/auth.otp");
+    const { SendPhoneOTP } = require("../../middlewares/send.otp.phone");
+
+    const { admin_phone } = req.body;
+    if (!admin_phone) throw new ApiError(400, "Phone required!");
+
+    const admin: any = await AdminModel.findOne({ admin_phone });
+    if (!admin) throw new ApiError(404, "Admin not found!");
+    if (admin.admin_status !== "active") {
+      throw new ApiError(403, "Admin is inactive.");
+    }
+
+    if (isWithinSendCooldown(admin.otp_sent_at)) {
+      const wait = secondsUntilCooldownEnds(admin.otp_sent_at);
+      throw new ApiError(
+        429,
+        `Please wait ${wait}s before requesting another OTP.`,
+      );
+    }
+
+    const otp = generateOtp();
+    const otpFields = await buildOtpFields(otp);
+
+    await SendPhoneOTP(otp, admin_phone, admin?.admin_name);
+    await AdminModel.updateOne({ admin_phone }, otpFields, {
+      runValidators: true,
+    });
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "OTP sent to your phone.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Admin reset password — verify OTP + set new password (Phase D, D4) ───────
+export const resetPasswordAdmin: RequestHandler = async (req, res, next) => {
+  try {
+    const { verifyOtp, otpClearFields, OTP_MAX_ATTEMPTS } = require(
+      "../../utils/auth.otp",
+    );
+
+    const { admin_phone, admin_otp, admin_password } = req.body;
+    if (!admin_phone || !admin_otp || !admin_password) {
+      throw new ApiError(400, "Phone, OTP and new password required!");
+    }
+
+    const admin: any = await AdminModel.findOne({ admin_phone });
+    if (!admin) throw new ApiError(404, "Admin not found!");
+
+    if (
+      admin?.otp_expires_at &&
+      new Date() > new Date(admin.otp_expires_at)
+    ) {
+      throw new ApiError(400, "OTP has expired. Please request a new one.");
+    }
+
+    if ((admin.otp_attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+      throw new ApiError(
+        429,
+        "Too many wrong attempts. Please request a new OTP.",
+      );
+    }
+
+    const ok = await verifyOtp(admin_otp, admin.forgot_otp);
+    if (!ok) {
+      await AdminModel.updateOne(
+        { admin_phone },
+        { $inc: { otp_attempts: 1 } },
+      );
+      throw new ApiError(400, "OTP does not match!");
+    }
+
+    const hash = await bcrypt.hash(admin_password, saltRounds);
+    await AdminModel.updateOne(
+      { admin_phone },
+      { admin_password: hash, ...otpClearFields() },
+      { runValidators: true },
+    );
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
     next(error);
   }
 };

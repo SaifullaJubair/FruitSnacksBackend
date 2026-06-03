@@ -17,6 +17,12 @@ import {
   findTrendingProduct,
   postProduct,
   updateProduct,
+  patchProductPageContent,
+  findLowStock,
+  generateProductQr,
+  bumpProductViewCount,
+  lookupProductByQrCode,
+  ensureBarcodeImage,
 } from "./product.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -26,6 +32,12 @@ router
   .post(verifyToken("product_create"), FileUploadHelper.ImageUpload.any(), postProduct)
   .patch(verifyToken("product_update"), FileUploadHelper.ImageUpload.any(), updateProduct)
   .delete(verifyToken("product_delete"), deleteAProductInfo);
+
+// Partial JSON update for the themed Page Content form (no file upload).
+// Declared before "/:product_slug" so it isn't swallowed by that param route.
+router
+  .route("/page-content")
+  .patch(verifyToken("product_update"), patchProductPageContent);
 
 // check product barcode
 router.route("/check_product_barcode").post(checkProductBarcode);
@@ -52,6 +64,24 @@ router.route("/related_product").get(findRelatedProduct);
 
 // find all EcommerceChoice product
 router.route("/ecommerce_choice_product").get(findECommerceChoiceProduct);
+
+// get low-stock products & variations (admin)
+router.route("/low_stock").get(verifyToken("product_show"), findLowStock);
+
+// Phase F: generate QR for a product (admin) + bump view count (public)
+router.route("/qr").post(verifyToken("product_update"), generateProductQr);
+router.route("/view-count").post(bumpProductViewCount);
+
+// Phase 0.5+ Option 1: lazy barcode image generation. Admin print modal calls
+// this when it has the barcode NUMBER but no IMAGE URL. Idempotent — returns
+// cached URL if already generated.
+router
+  .route("/ensure-barcode-image")
+  .post(verifyToken("product_update"), ensureBarcodeImage);
+
+// Phase 1 (redesigned): public lookup by /q/<short_code> for the storefront
+// short-URL redirect route. No auth — printed QR labels are public artifacts.
+router.route("/by-qr-code/:code").get(lookupProductByQrCode);
 
 // get all dashboard product
 router.route("/dashboard").get(verifyToken("product_show"), findAllDashboardProduct);

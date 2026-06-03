@@ -20,15 +20,18 @@
     "@types/node": "^24.3.0",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.16",
+    "@types/uuid": "^10.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.658.1",
     "@types/qrcode": "^1.5.5",
+    "any-ascii": "^0.3.3",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "bkash-payment-gateway": "^2.0.1",
+    "bwip-js": "^4.11.1",
     "chroma-js": "^3.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -40,10 +43,12 @@
     "mongodb": "^6.9.0",
     "mongoose": "^8.7.0",
     "multer": "^1.4.5-lts.1",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.16",
+    "nanoid": "^5.1.11",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.7",
     "qrcode": "^1.5.4",
     "sslcommerz": "^1.7.0",
-    "strip": "^3.0.0"
+    "strip": "^3.0.0",
+    "uuid": "^14.0.0"
   }
 }

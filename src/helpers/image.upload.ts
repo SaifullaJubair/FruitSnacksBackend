@@ -207,8 +207,17 @@ const VideoUploader = async (file: any) => {
     const httpStatusCode = data?.$metadata?.httpStatusCode;
     const { Key } = uploadParams;
 
-    // ✅ CDN URL for videos
-    const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
+    // ✅ Use the SAME public URL pattern as uploadToSpaces above. The old
+    // DigitalOcean Spaces CDN hostname (`<bucket>.<region>.cdn.digitalocean
+    // spaces.com`) was retired when the project migrated to Contabo Storage;
+    // hardcoding it here was leaving every video URL pointing at a domain
+    // that no longer resolves (browser → ERR_NAME_NOT_RESOLVED).
+    //
+    // Path segments are URL-encoded so filenames with spaces / commas /
+    // unicode (e.g. "Flow - May 22, 01-29 AM.mp4") resolve correctly. Slashes
+    // are preserved by splitting first.
+    const encodedKey = Key.split("/").map(encodeURIComponent).join("/");
+    const Location = `${process.env.S3_PUBLIC_URL}:${process.env.S3_BUCKET}/${encodedKey}`;
 
     fs.unlinkSync(file.path);
     const sendData = {
@@ -222,10 +231,47 @@ const VideoUploader = async (file: any) => {
   }
 };
 
+// ================= Path A Q5-1 Parallel Chunk Uploader ===================
+/**
+ * Upload N files to S3 in parallel chunks. Default chunk size 10 matches the
+ * AWS S3 SDK default connection pool — going higher risks ECONNRESET /
+ * throttling on slow networks; lower wastes parallelism.
+ *
+ * Order is preserved INDEX-FOR-INDEX between input `files` and output array,
+ * so callers can map result[i] → input[i] without bookkeeping. This is the
+ * critical invariant flagged by the edge audit (HIGH H3).
+ *
+ * Throws if any single upload fails — caller is expected to handle (the
+ * parent Mongo transaction aborts on throw, rolling back the product save).
+ */
+const uploadFilesInChunks = async (
+  files: any[],
+  chunkSize = 10,
+): Promise<Array<{ Location: string; Key: string }>> => {
+  if (!files?.length) return [];
+  const out: Array<{ Location: string; Key: string }> = new Array(files.length);
+  for (let i = 0; i < files.length; i += chunkSize) {
+    const slice = files.slice(i, i + chunkSize);
+    const results = await Promise.all(slice.map((f) => uploadToSpaces(f)));
+    // Place results back at the correct absolute index so order is preserved
+    // across multiple chunks.
+    results.forEach((r, j) => {
+      out[i + j] = r;
+    });
+  }
+  // Ordering invariant — should be impossible to fail given the write
+  // pattern above, but defense-in-depth catches an SDK regression early.
+  if (out.length !== files.length || out.some((r) => !r)) {
+    throw new ApiError(500, "Parallel upload result/order invariant violated");
+  }
+  return out;
+};
+
 // ================= Export Helper ===================
 export const FileUploadHelper = {
   ImageUpload,
   uploadToSpaces,
+  uploadFilesInChunks,
   deleteFromSpaces, // এই ফাংশন এখন যেকোন ফাইল ডিলিট করতে পারবে
   VideoUploader,
   VideoUpload,

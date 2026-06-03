@@ -262,7 +262,12 @@ export const getAOrderWithOrderProductsServices = async (
     {
       path: "product_id",
       model: "products",
-      select: "product_name main_image",
+      // product_sku / barcode / barcode_image surfaced for the admin order
+      // details page (SKU column + "Print label" button per Phase D Bug #3).
+      // Snapshots on the orderProduct doc are write-once at placement, but
+      // the live product carries the printable barcode image URL.
+      select:
+        "product_name main_image product_sku barcode barcode_image barcode_format",
       populate: [
         {
           path: "category_id",
@@ -274,7 +279,8 @@ export const getAOrderWithOrderProductsServices = async (
     {
       path: "variation_id",
       model: "variations",
-      select: "variation_name variation_image",
+      select:
+        "variation_name variation_image variation_sku variation_barcode variation_barcode_image variation_barcode_format",
     },
     { path: "campaign_id", model: "campaigns" },
   ]);

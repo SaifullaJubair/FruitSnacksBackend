@@ -170,6 +170,35 @@ const orderSchema = new Schema<IOrderInterface>(
     delivery_note: {
       type: String,
     },
+    // ── Stock lifecycle (Phase B) ──────────────────────────────────────────────
+    // Stock is decremented at placement; restored exactly once on cancel/return.
+    stock_restored: {
+      type: Boolean,
+      default: false,
+    },
+    // ── Payment (Phase C) ──────────────────────────────────────────────────────
+    payment_method: {
+      type: String,
+      enum: ["cod", "manual_mfs", "sslcommerz", "bank_transfer"],
+      default: "cod",
+    },
+    payment_status: {
+      type: String,
+      enum: ["unpaid", "pending", "paid", "partial", "failed", "refunded"],
+      default: "unpaid",
+    },
+    transaction_id: { type: String },
+    paid_amount: { type: Number, default: 0 },
+    advance_amount: { type: Number, default: 0 },
+    paid_at: { type: String },
+    payment_meta: { type: Schema.Types.Mixed },
+
+    // Phase H — VAT/tax recomputed server-side at placement.
+    vat_amount: { type: Number, default: 0 },
+
+    // Phase G3 (F1b) cart-side loyalty redeem.
+    loyalty_redeem_points: { type: Number, default: 0 },
+    loyalty_redeem_amount: { type: Number, default: 0 },
   },
   {
     timestamps: true,

@@ -91,51 +91,52 @@ export const updateAttributeServices = async (
     throw new Error("Attribute not found");
   }
 
-  //  attribute Values আপডেট করা
-  const attributeValuesUpdates = data?.attribute_values?.map((value) => {
-    if (value?._id) {
-      // _id আছে, এটি আপডেট হবে
-      return AttributeModel.updateOne(
-        { _id: _id, "attribute_values._id": value?._id }, // এই _id দিয়ে value খুঁজবে
-        {
-          $set: {
-            "attribute_values.$.attribute_value_name":
-              value?.attribute_value_name,
-            "attribute_values.$.attribute_value_slug":
-              value?.attribute_value_slug,
-            "attribute_values.$.attribute_value_code":
-              value?.attribute_value_code,
-            "attribute_values.$.attribute_value_status":
-              value?.attribute_value_status,
-          },
-        },
-        { runValidators: true }
-      );
-    } else {
-      // _id নেই, নতুন করে তৈরি হবে
-      return AttributeModel.updateOne(
-        { _id: _id },
-        {
-          $push: {
-            attribute_values: {
-              attribute_value_name: value?.attribute_value_name,
-              attribute_value_slug: value?.attribute_value_slug,
-              attribute_value_code: value?.attribute_value_code,
-              attribute_value_status: value?.attribute_value_status || "active",
-            },
-          },
-        },
-        { runValidators: true }
-      );
-    }
-  });
+  // Phase E audit BLOCKER fix — single $set write for the whole document.
+  // Previously this ran per-value $set / $push and THEN a bulk
+  // `updateOne(_id, data, ...)` that overwrote `attribute_values` again. That
+  // second overwrite silently dropped any field the per-value $set didn't
+  // explicitly list (notably `weight_grams_value`), so editing an attribute
+  // without re-sending weights wiped them from the DB.
+  //
+  // The audit's recommended pattern: do one $set with the full new
+  // attribute_values array plus the top-level scalar fields. Mongoose will
+  // assign fresh subdoc _ids for entries that don't have one (this matches
+  // the previous $push behaviour for newly-added values from the inline
+  // "+ Add value" flow). Existing values keep their _id because the caller
+  // includes it in the payload.
+  const $set: Record<string, any> = {};
+  if (data?.attribute_name !== undefined)
+    $set.attribute_name = data.attribute_name;
+  if (data?.attribute_slug !== undefined)
+    $set.attribute_slug = data.attribute_slug;
+  if (data?.attribute_status !== undefined)
+    $set.attribute_status = data.attribute_status;
+  if (data?.display_type !== undefined) $set.display_type = data.display_type;
+  if (data?.tracks_weight !== undefined)
+    $set.tracks_weight = data.tracks_weight;
+  if (data?.attribute_updated_by !== undefined)
+    $set.attribute_updated_by = data.attribute_updated_by;
+  if (Array.isArray(data?.attribute_values)) {
+    // Ensure every value carries all the fields we care about — including
+    // `weight_grams_value` — so the overwrite is the SAME shape as the
+    // existing doc, no fields ghost-dropped.
+    $set.attribute_values = data.attribute_values.map((v: any) => ({
+      ...(v?._id ? { _id: v._id } : {}),
+      attribute_value_name: v?.attribute_value_name,
+      attribute_value_slug: v?.attribute_value_slug,
+      attribute_value_code: v?.attribute_value_code,
+      attribute_value_status: v?.attribute_value_status || "active",
+      ...(v?.weight_grams_value !== undefined
+        ? { weight_grams_value: v.weight_grams_value }
+        : {}),
+    }));
+  }
 
-  // সমস্ত আপডেট এবং ক্রিয়েশন প্রক্রিয়াগুলো Promise.all এর মাধ্যমে চালানো হচ্ছে
-  await Promise.all(attributeValuesUpdates || []);
-
-  const Attribute = await AttributeModel.updateOne({ _id: _id }, data, {
-    runValidators: true,
-  });
+  const Attribute = await AttributeModel.updateOne(
+    { _id: _id },
+    { $set },
+    { runValidators: true }
+  );
   return Attribute;
 };
 

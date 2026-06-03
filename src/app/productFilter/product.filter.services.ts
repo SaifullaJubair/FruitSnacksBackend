@@ -1,286 +1,296 @@
+/**
+ * Product filter engine — Phase 4 rewrite (variation-attribute-filter feature).
+ *
+ * ONE source of truth = `attributes` + `product.product_attributes`. The
+ * sidebar facets and the filter matching now read the SAME field, so they can
+ * never desync (the old bug: sidebar came from `attributes`, matching ran on
+ * `product.specifications` → never lined up).
+ *
+ * Category is the nested tree (Phase 0). "Products in category X" = the whole
+ * SUBTREE, resolved via `product.category_path` (which holds the full root→leaf
+ * ancestor chain inclusive), so `{ category_path: X }` matches X and every
+ * descendant in one indexed query — no recursive lookups.
+ *
+ * Facets returned: Attribute (auto-discovered from the subtree's products) +
+ * Brand + Price range + Availability. Matching is PRODUCT-LEVEL (StarTech-style,
+ * PLAN): multiple values within one attribute = OR, across attributes = AND.
+ */
+
+import { Types } from "mongoose";
 import AttributeModel from "../attribute/attribute.model";
 import BrandModel from "../brand/brand.model";
 import CategoryModel from "../category/category.model";
-import ChildCategoryModel from "../child_category/child_category.model";
+import { resolveCategoryDefaults } from "../category/category.services";
 import {
   IProductInterface,
   productSearchableField,
 } from "../product/product.interface";
 import ProductModel from "../product/product.model";
-import SpecificationModel from "../specification/specification.model";
-import SubCategoryModel from "../sub_category/sub_category.model";
 
-// Find All heading sub and child category Data
+// Resolve a category slug → the set of category ids that make up its subtree
+// match. With product.category_path = full root→leaf chain, a single id is
+// enough: `{ category_path: id }` matches the node and all descendants.
+const resolveCategoryId = async (
+  slug: any,
+): Promise<Types.ObjectId | null> => {
+  if (!slug || slug === "undefined") return null;
+  const category = await CategoryModel.findOne({ category_slug: slug })
+    .select("_id")
+    .lean();
+  return category ? (category._id as Types.ObjectId) : null;
+};
+
+// Build the product-scope match for a category subtree (+ active status).
+const buildSubtreeMatch = (categoryId: Types.ObjectId | null) => {
+  const match: any = { product_status: "active" };
+  if (categoryId) {
+    // category_path holds the full chain incl. self, so this matches the node
+    // and every descendant. (Direct-leaf products also have self in the path.)
+    match.category_path = categoryId;
+  }
+  return match;
+};
+
+// ── Drill-down: direct children of a category node (for the FE category nav) ──
+// Replaces the old sub/child-category heading endpoint. Given a category slug,
+// returns its immediate child categories (tree drill-down). sub/child args are
+// ignored now (kept in the signature so the controller/route stay stable until
+// the FE nav is rewritten in Phase 5).
 export const findAllHeadingSub_Child_CategoryDataServices = async (
   categoryType: any,
-  sub_categoryType: any,
-  child_categoryType: any
+  _sub_categoryType: any,
+  _child_categoryType: any,
 ): Promise<any> => {
-  const findCategoryType = await CategoryModel.findOne({
-    category_slug: categoryType,
-  });
-  const findCategoryTypeId = findCategoryType?._id?.toString();
-  if (child_categoryType !== "undefined") {
-    return [];
-  } else if (sub_categoryType !== "undefined") {
-    // let findSubCategoryTypeId: any;
-    // const findSubCategoryType = await SubCategoryModel.findOne({
-    //   sub_category_slug: sub_categoryType,
-    //   category_id: findCategoryTypeId,
-    // });
-
-    // findSubCategoryTypeId = findSubCategoryType?._id?.toString();
-
-    // const childCategoryBySubCategory = await ChildCategoryModel.find({
-    //   child_category_status: "active",
-    //   sub_category_id: findSubCategoryTypeId,
-    // }).populate("sub_category_id");
-    // return childCategoryBySubCategory;
-    return [];
-  } else {
-    const subCategoryByCategory = await SubCategoryModel.find({
-      sub_category_status: "active",
-      category_id: findCategoryTypeId,
-    }).populate("category_id");
-
-    return subCategoryByCategory;
-  }
+  const categoryId = await resolveCategoryId(categoryType);
+  if (!categoryId) return [];
+  return CategoryModel.find({
+    parent_id: categoryId,
+    category_status: "active",
+  })
+    .sort({ category_serial: 1 })
+    .select("-__v")
+    .lean();
 };
 
-// Find All Side Filtered Data
+// ── Sidebar facets for a category subtree ──
+// Returns { maxPriceRange, brands, attributes } where `attributes` is
+// auto-discovered: only the attributes (and only the values) that actually
+// appear on active products in this subtree. `specifications` is kept as an
+// alias of `attributes` for FE back-compat until Phase 5.
 export const findAllActiveSideFilteredDataServices = async (
   categoryType: any,
-  subCategoryType: any,
-  childCategoryType: any
+  _subCategoryType: any,
+  _childCategoryType: any,
 ): Promise<IProductInterface[] | any> => {
-  const findCategoryType = await CategoryModel.findOne({
-    category_slug: categoryType,
+  const categoryId = await resolveCategoryId(categoryType);
+  const productMatch = buildSubtreeMatch(categoryId);
+
+  // 1) Discover which attribute_ids + value_ids exist on this subtree's products.
+  //    Batch 2 E6 — skip product_attributes entries the owner has untoggled
+  //    "Show in filter sidebar". `show_in_filter !== false` keeps legacy docs
+  //    (without the field) included since the schema default is true.
+  const discovered = await ProductModel.aggregate([
+    { $match: productMatch },
+    { $unwind: "$product_attributes" },
+    { $match: { "product_attributes.show_in_filter": { $ne: false } } },
+    {
+      $group: {
+        _id: "$product_attributes.attribute_id",
+        value_ids: { $addToSet: "$product_attributes.value_ids" },
+      },
+    },
+  ]);
+
+  // Flatten the nested value_ids arrays into one distinct set per attribute.
+  const valueIdsByAttribute = new Map<string, Set<string>>();
+  discovered.forEach((row: any) => {
+    if (!row?._id) return;
+    const set = new Set<string>();
+    (row.value_ids ?? []).forEach((arr: any[]) =>
+      (arr ?? []).forEach((id: any) => id && set.add(String(id))),
+    );
+    valueIdsByAttribute.set(String(row._id), set);
   });
 
-  const findCategoryTypeId = findCategoryType?._id?.toString();
-  let findSubCategoryTypeId: any;
-  // let findChildCategoryTypeId: any;
-  if (subCategoryType) {
-    const findSubCategoryType = await SubCategoryModel.findOne({
-      sub_category_slug: subCategoryType,
-      category_id: findCategoryTypeId,
-    });
-    findSubCategoryTypeId = findSubCategoryType?._id?.toString();
+  // 2) Load those attributes and keep only the values that were discovered
+  //    (and are active). This is the StarTech behaviour — show only facets that
+  //    can actually match something in the current category.
+  //
+  //    Phase B M5 + M6 — UNION with category.default_filter_attributes (resolved
+  //    with parent inheritance). Order: category defaults first (parent-first
+  //    inside resolveCategoryDefaults), then product-driven extras. De-dup by
+  //    attribute._id. Empty-value attributes from category defaults are still
+  //    HIDDEN per locked rule "0-count values hidden" — we only include them if
+  //    they survive the discovered-value filter below.
+  let categoryDefaultIds: string[] = [];
+  if (categoryId) {
+    const resolved = await resolveCategoryDefaults(categoryId);
+    categoryDefaultIds = resolved.default_filter_attributes.map((a: any) =>
+      String(a._id),
+    );
   }
-  let childCategoryQuery: any = { category_id: findCategoryTypeId };
-  // childCategoryQuery.child_category_slug = childCategoryType;
 
-  if (findSubCategoryTypeId) {
-    childCategoryQuery.sub_category_id = findSubCategoryTypeId;
-  }
-  // if (childCategoryType) {
-  //   const findChildCategoryType = await ChildCategoryModel.findOne(
-  //     childCategoryQuery
-  //   );
-  //   findChildCategoryTypeId = findChildCategoryType?._id?.toString();
-  // }
-
-  // let brandQuery: any = { category_id: findCategoryTypeId };
-
-  // const categoryTypeMatchbrands = await BrandModel.find(brandQuery);
-  const categoryTypeMatchbrands = await BrandModel.find({});
-
-  // let filterQuery: any = {
-  //   category_id: findCategoryTypeId,
-  //   specification_status: "active",
-  // };
-
-  // If there's a subcategory filter, include it in the query
-  // if (findSubCategoryTypeId) {
-  //   filterQuery.$or = [
-  //     { sub_category_id: findSubCategoryTypeId },
-  //     { sub_category_id: { $exists: false } },
-  //   ];
-  // }
-
-  // Filter for specifications that have active specification values
-  // filterQuery.specification_values = {
-  //   $elemMatch: {
-  //     specification_value_status: "active", // Only match specifications with active values
-  //   },
-  // };
-
-  // Fetch the matching data from the database
-  // const categoryTypeMatchFilters = await SpecificationModel.find(filterQuery);
-
-
-  const categoryTypeMatchFilters = await AttributeModel.find({});
-
-  // Post-processing to ensure inactive specification values are excluded
-  const filteredCategoryTypeMatchFilters = categoryTypeMatchFilters.map(
-    (specification) => {
-      specification.attribute_values =
-        specification.attribute_values.filter(
-          (value) => value.attribute_value_status === "active"
-        );
-      return specification;
+  const orderedAttributeIdStrings: string[] = [];
+  const seen = new Set<string>();
+  for (const id of categoryDefaultIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      orderedAttributeIdStrings.push(id);
     }
+  }
+  for (const id of valueIdsByAttribute.keys()) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      orderedAttributeIdStrings.push(id);
+    }
+  }
+
+  const attributeIds = orderedAttributeIdStrings.map(
+    (id) => new Types.ObjectId(id),
+  );
+  const attributeDocs = attributeIds.length
+    ? await AttributeModel.find({
+        _id: { $in: attributeIds },
+        attribute_status: "active",
+      }).lean()
+    : [];
+  const attributeDocsById = new Map<string, any>(
+    attributeDocs.map((a: any) => [String(a._id), a]),
   );
 
-  let productQuery: any = { category_id: findCategoryTypeId };
-  productQuery.product_status = "active";
+  const attributes = orderedAttributeIdStrings
+    .map((id) => attributeDocsById.get(id))
+    .filter(Boolean)
+    .map((attr: any) => {
+      const allowed = valueIdsByAttribute.get(String(attr._id)) ?? new Set();
+      const values = (attr.attribute_values ?? []).filter(
+        (v: any) =>
+          v?.attribute_value_status === "active" &&
+          allowed.has(String(v._id)),
+      );
+      return { ...attr, attribute_values: values };
+    })
+    .filter((attr: any) => attr.attribute_values.length > 0);
 
-  if (findSubCategoryTypeId) {
-    productQuery.sub_category_id = findSubCategoryTypeId;
-  }
-  // if (findChildCategoryTypeId) {
-  //   productQuery.child_category_id = findChildCategoryTypeId;
-  // }
+  // 3) Brands present on this subtree's products.
+  const brandIds = await ProductModel.distinct("brand_id", productMatch);
+  const brands = await BrandModel.find({
+    _id: { $in: brandIds.filter(Boolean) },
+    brand_status: "active",
+  })
+    .sort({ brand_serial: 1 })
+    .lean();
 
-  const findProduct = await ProductModel.find(productQuery)
-    .sort({ product_price: -1 })
-    .limit(1);
+  // 4) Max price for the price-range slider.
+  // Fix #22 — variation products: max effective price = max(active variations'
+  // variation_price). Simple products: product_price. Take overall max across
+  // the whole subtree so the slider's right edge truly covers every product.
+  const maxAgg = await ProductModel.aggregate([
+    { $match: productMatch },
+    {
+      $lookup: {
+        from: "variations",
+        localField: "_id",
+        foreignField: "product_id",
+        as: "variations",
+      },
+    },
+    {
+      $addFields: {
+        _activeVariations: {
+          $filter: {
+            input: "$variations",
+            as: "v",
+            cond: { $ne: ["$$v.is_active", false] },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        _maxPrice: {
+          $cond: {
+            if: {
+              $and: [
+                { $eq: ["$is_variation", true] },
+                { $gt: [{ $size: "$_activeVariations" }, 0] },
+              ],
+            },
+            then: { $max: "$_activeVariations.variation_price" },
+            else: "$product_price",
+          },
+        },
+      },
+    },
+    {
+      $group: { _id: null, max: { $max: "$_maxPrice" } },
+    },
+  ]);
 
-  const sendData = {
-    maxPriceRange: findProduct?.[0]?.product_price,
-    brands: categoryTypeMatchbrands,
-    specifications: filteredCategoryTypeMatchFilters,
+  return {
+    maxPriceRange: maxAgg?.[0]?.max ?? 0,
+    brands,
+    attributes,
+    specifications: attributes, // FE back-compat alias (remove in Phase 5)
   };
-
-  return sendData;
 };
 
-// Find FilteredProduct
+// ── Filtered product listing (product-level match) ──
 export const findAllActiveFilteredProductServices = async (
   conditions: any,
   filterData: any,
   limitNumber: number,
-  skip: number
+  skip: number,
 ): Promise<any> => {
   const parsedFilterData = filterData && JSON.parse(filterData);
   const minPrice = (parsedFilterData && parsedFilterData?.min_price) || 0;
   const maxPrice =
     (parsedFilterData && parsedFilterData?.max_price) ||
     Number.MAX_SAFE_INTEGER;
-  const availability: any = (parsedFilterData &&
-    parsedFilterData?.availability) || [0, 1];
+  const availability: any =
+    (parsedFilterData && parsedFilterData?.availability) || [0, 1];
+  // `filters` shape unchanged for FE: { [attributeId]: [valueId, ...] }.
   const filters: any = (parsedFilterData && parsedFilterData?.filters) || {};
   const brands: any = (parsedFilterData && parsedFilterData?.brands) || [];
 
-  // product get condition
-  const matchConditions: any = {
-    product_status: "active",
-  };
+  // Category subtree + active.
+  const categoryId = await resolveCategoryId(conditions?.categoryType);
+  const matchConditions: any = buildSubtreeMatch(categoryId);
 
-  // Add category conditions
-  const category = await CategoryModel.findOne({
-    category_slug: conditions?.categoryType,
-  });
-  if (category) matchConditions.category_id = category?._id;
-
-  if (conditions?.sub_categoryType) {
-    const subCategory = await SubCategoryModel.findOne({
-      sub_category_slug: conditions?.sub_categoryType,
-      category_id: matchConditions?.category_id,
-    });
-    if (subCategory) matchConditions.sub_category_id = subCategory?._id;
+  // Attribute match (product-level): within one attribute = OR over its values,
+  // across attributes = AND. Matches against product_attributes (same field the
+  // facets came from → sidebar and match never desync).
+  const attributeAndClauses = Object.entries(filters)
+    .filter(([, values]: any) => Array.isArray(values) && values.length)
+    .map(([attributeId, values]: any) => ({
+      product_attributes: {
+        $elemMatch: {
+          attribute_id: new Types.ObjectId(attributeId),
+          value_ids: {
+            $in: values.map((v: any) => new Types.ObjectId(v)),
+          },
+        },
+      },
+    }));
+  if (attributeAndClauses.length) {
+    matchConditions.$and = attributeAndClauses;
   }
 
-  // if (conditions?.child_categoryType) {
-  //   const childCategory = await ChildCategoryModel.findOne({
-  //     child_category_slug: conditions?.child_categoryType,
-  //     category_id: matchConditions?.category_id,
-  //     sub_category_id: matchConditions?.sub_category_id,
-  //   });
-  //   if (childCategory) matchConditions.child_category_id = childCategory?._id;
-  // }
-
-  const pipeline: any = [
+  const pipeline: any[] = [
+    { $match: matchConditions },
+    // Brand lookup (+ optional brand-slug filter).
     {
-      $match: matchConditions,
+      $lookup: {
+        from: "brands",
+        localField: "brand_id",
+        foreignField: "_id",
+        as: "brand",
+      },
     },
-    ...(conditions?.categoryType
-      ? []
-      : [
-          {
-            $lookup: {
-              from: "categories",
-              localField: "category_id",
-              foreignField: "_id",
-              as: "category",
-            },
-          },
-          {
-            $unwind: {
-              path: "$category",
-              preserveNullAndEmptyArrays: false,
-            },
-          },
-          {
-            $match: {
-              "category.category_status": "active",
-            },
-          },
-        ]),
-    ...(conditions?.sub_categoryType
-      ? []
-      : [
-          {
-            $lookup: {
-              from: "subcategories",
-              localField: "sub_category_id",
-              foreignField: "_id",
-              as: "sub_category",
-            },
-          },
-          {
-            $unwind: {
-              path: "$sub_category",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $match: {
-              $or: [
-                { "sub_category.sub_category_status": "active" },
-                { sub_category: null },
-              ],
-            },
-          },
-        ]),
-    ...(brands.length > 0
-      ? [
-          {
-            $lookup: {
-              from: "brands",
-              localField: "brand_id",
-              foreignField: "_id",
-              as: "brand",
-            },
-          },
-          {
-            $unwind: {
-              path: "$brand",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $match: {
-              "brand.brand_slug": { $in: brands }, // Match only specified brands
-            },
-          },
-        ]
-      : [
-          {
-            $lookup: {
-              from: "brands",
-              localField: "brand_id",
-              foreignField: "_id",
-              as: "brand",
-            },
-          },
-          {
-            $unwind: {
-              path: "$brand",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ]),
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    ...(brands.length
+      ? [{ $match: { "brand.brand_slug": { $in: brands } } }]
+      : []),
     {
       $lookup: {
         from: "variations",
@@ -301,16 +311,68 @@ export const findAllActiveFilteredProductServices = async (
               product_id: "$$variation.product_id",
               variation_price: "$$variation.variation_price",
               variation_discount_price: "$$variation.variation_discount_price",
+              variation_price_delta: "$$variation.variation_price_delta",
               variation_quantity: "$$variation.variation_quantity",
               variation_image: "$$variation.variation_image",
+              is_active: "$$variation.is_active",
             },
+          },
+        },
+      },
+    },
+    // Fix #22 — compute effective price + stock that mirrors what the
+    // storefront card actually shows the customer:
+    //   - variation product → cheapest active variation's price (StarTech-
+    //     style "from ₹X"); stock = SUM of active variation stocks
+    //   - simple product   → product_price / product_quantity unchanged
+    // This is what user-facing price filter and OOS filter should evaluate
+    // against. Without this, filter checks `product_price` (base) while card
+    // shows `variation_price` (base+delta) → mismatch (e.g. base 600 passes a
+    // 1-608 filter even though final price is 640).
+    {
+      $addFields: {
+        _activeVariations: {
+          $filter: {
+            input: "$variations",
+            as: "v",
+            cond: { $ne: ["$$v.is_active", false] },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        effective_price: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $cond: {
+                if: { $gt: [{ $size: "$_activeVariations" }, 0] },
+                then: { $min: "$_activeVariations.variation_price" },
+                else: "$product_price",
+              },
+            },
+            else: "$product_price",
+          },
+        },
+        effective_stock: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $cond: {
+                if: { $gt: [{ $size: "$_activeVariations" }, 0] },
+                then: { $sum: "$_activeVariations.variation_quantity" },
+                else: 0,
+              },
+            },
+            else: { $ifNull: ["$product_quantity", 0] },
           },
         },
       },
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
@@ -320,148 +382,43 @@ export const findAllActiveFilteredProductServices = async (
       $addFields: {
         average_review_rating: {
           $cond: {
-            if: { $gt: [{ $size: "$reviews" }, 0] }, // Check if reviews exist
+            if: { $gt: [{ $size: "$reviews" }, 0] },
             then: {
               $divide: [
-                { $sum: "$reviews.review_ratting" }, // Sum of all review ratings
-                { $size: "$reviews" }, // Total number of reviews
+                { $sum: "$reviews.review_ratting" },
+                { $size: "$reviews" },
               ],
             },
-            else: 0, // Default to 0 if no reviews
+            else: 0,
           },
         },
-        total_reviews: { $size: "$reviews" }, // Count of reviews
+        total_reviews: { $size: "$reviews" },
       },
     },
+    // Price range + availability (brand active already ensured by status? brand
+    // is optional, so keep the active-or-null guard).
+    // Fix #22 — filter on effective_price + effective_stock (variation-aware).
     {
       $match: {
         $and: [
+          { $or: [{ "brand.brand_status": "active" }, { brand: null }] },
           {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-          {
-            $or: [
-              {
-                $and: [
-                  { is_variation: false },
-                  {
-                    product_price: {
-                      $gte: minPrice,
-                      $lte: maxPrice,
-                    },
-                  },
-                ],
-              },
-              {
-                $and: [
-                  { is_variation: true },
-                  {
-                    variations: {
-                      $elemMatch: {
-                        variation_price: {
-                          $gte: minPrice,
-                          $lte: maxPrice,
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
+            effective_price: { $gte: minPrice, $lte: maxPrice },
           },
           ...(availability.length
             ? [
                 {
                   $or: [
                     ...(availability.includes(0)
-                      ? [
-                          {
-                            $and: [
-                              { is_variation: false },
-                              { product_quantity: { $eq: 0 } },
-                            ],
-                          },
-                          {
-                            $and: [
-                              { is_variation: true },
-                              {
-                                variations: {
-                                  $elemMatch: {
-                                    variation_quantity: { $eq: 0 },
-                                  },
-                                },
-                              },
-                            ],
-                          },
-                        ]
+                      ? [{ effective_stock: { $lte: 0 } }]
                       : []),
                     ...(availability.includes(1)
-                      ? [
-                          {
-                            $and: [
-                              { is_variation: false },
-                              { product_quantity: { $gt: 0 } },
-                            ],
-                          },
-                          {
-                            $and: [
-                              { is_variation: true },
-                              {
-                                variations: {
-                                  $elemMatch: {
-                                    variation_quantity: { $gt: 0 },
-                                  },
-                                },
-                              },
-                            ],
-                          },
-                        ]
+                      ? [{ effective_stock: { $gt: 0 } }]
                       : []),
                   ],
                 },
               ]
             : []),
-          {
-            $expr: {
-              $and: Object.entries(filters).map(
-                ([specId, specValues]: any) => ({
-                  $anyElementTrue: {
-                    $map: {
-                      input: {
-                        $filter: {
-                          input: "$specifications",
-                          as: "spec",
-                          cond: {
-                            $eq: [
-                              "$$spec.specification_id",
-                              { $toObjectId: specId },
-                            ],
-                          },
-                        },
-                      },
-                      as: "matchedSpec",
-                      in: {
-                        $anyElementTrue: {
-                          $map: {
-                            input: "$$matchedSpec.specification_values",
-                            as: "specValue",
-                            in: {
-                              $in: [
-                                "$$specValue.specification_value_id",
-                                specValues?.map((val: any) => ({
-                                  $toObjectId: val,
-                                })),
-                              ],
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                })
-              ),
-            },
-          },
         ],
       },
     },
@@ -487,9 +444,7 @@ export const findAllActiveFilteredProductServices = async (
                             as: "value",
                             cond: {
                               $and: [
-                                {
-                                  $ne: ["$$value.attribute_value_code", null],
-                                },
+                                { $ne: ["$$value.attribute_value_code", null] },
                                 {
                                   $ne: [
                                     "$$value.attribute_value_code",
@@ -511,12 +466,12 @@ export const findAllActiveFilteredProductServices = async (
             in: {
               $cond: {
                 if: { $eq: [{ $size: "$$filteredAttributes" }, 0] },
-                then: "$$REMOVE", // Removes `attributes_details` if empty
+                then: "$$REMOVE",
                 else: {
                   $cond: {
                     if: { $eq: [{ $size: "$$filteredAttributes" }, 1] },
-                    then: { $arrayElemAt: ["$$filteredAttributes", 0] }, // Send as object if length = 1
-                    else: "$$filteredAttributes", // Send as array if length > 1
+                    then: { $arrayElemAt: ["$$filteredAttributes", 0] },
+                    else: "$$filteredAttributes",
                   },
                 },
               },
@@ -527,11 +482,7 @@ export const findAllActiveFilteredProductServices = async (
         product_discount_price: 1,
         createdAt: 1,
         updatedAt: 1,
-        brand: {
-          _id: 1,
-          brand_name: 1,
-          brand_slug: 1,
-        },
+        brand: { _id: 1, brand_name: 1, brand_slug: 1 },
         is_variation: 1,
         variations: {
           $cond: {
@@ -548,20 +499,13 @@ export const findAllActiveFilteredProductServices = async (
 
   const findFilterProduct: any = await ProductModel.aggregate([
     ...pipeline,
-    {
-      $skip: skip,
-    },
-    {
-      $limit: limitNumber,
-    },
+    { $skip: skip },
+    { $limit: limitNumber },
   ]);
 
-  // Get the total count of products matching the conditions
   const totalCount = await ProductModel.aggregate([
     ...pipeline,
-    {
-      $count: "total",
-    },
+    { $count: "total" },
   ]);
 
   return {
@@ -570,32 +514,25 @@ export const findAllActiveFilteredProductServices = async (
   };
 };
 
-// search product
+// ── Search ──
 export const findAllSearchTermProductServices = async (
   limit: any,
   skip: any,
-  searchTerm: any
+  searchTerm: any,
 ): Promise<any> => {
-  const andCondition = [];
+  const andCondition: any[] = [];
   if (searchTerm) {
     andCondition.push({
       $or: productSearchableField.map((field) => ({
-        [field]: {
-          $regex: searchTerm,
-          $options: "i",
-        },
+        [field]: { $regex: searchTerm, $options: "i" },
       })),
     });
   }
   andCondition.push({ product_status: "active" });
-
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
 
-  // Step 1: Count total data
-  const totalData = await ProductModel.aggregate([
-    {
-      $match: whereCondition,
-    },
+  const basePipeline: any[] = [
+    { $match: whereCondition },
     {
       $lookup: {
         from: "categories",
@@ -604,40 +541,7 @@ export const findAllSearchTermProductServices = async (
         as: "category",
       },
     },
-    {
-      $unwind: {
-        path: "$category",
-        preserveNullAndEmptyArrays: false,
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    // {
-    //   $lookup: {
-    //     from: "childcategories",
-    //     localField: "child_category_id",
-    //     foreignField: "_id",
-    //     as: "child_category",
-    //   },
-    // },
-    // {
-    //   $unwind: {
-    //     path: "$child_category",
-    //     preserveNullAndEmptyArrays: true,
-    //   },
-    // },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
     {
       $lookup: {
         from: "brands",
@@ -646,103 +550,23 @@ export const findAllSearchTermProductServices = async (
         as: "brand",
       },
     },
-    {
-      $unwind: {
-        path: "$brand",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          // {
-          //   $or: [
-          //     { "child_category.child_category_status": "active" },
-          //     { child_category: null },
-          //   ],
-          // },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
-    {
-      $count: "total",
-    },
-  ]);
+  ];
 
-  // Extract the total count
+  const totalData = await ProductModel.aggregate([
+    ...basePipeline,
+    { $count: "total" },
+  ]);
   const totalCount = totalData.length > 0 ? totalData[0].total : 0;
 
-  // Step 2: Fetch paginated data
   const findAllSearchProductProduct = await ProductModel.aggregate([
-    {
-      $match: whereCondition,
-    },
-    {
-      $lookup: {
-        from: "categories",
-        localField: "category_id",
-        foreignField: "_id",
-        as: "category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$category",
-        preserveNullAndEmptyArrays: false,
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    // {
-    //   $lookup: {
-    //     from: "childcategories",
-    //     localField: "child_category_id",
-    //     foreignField: "_id",
-    //     as: "child_category",
-    //   },
-    // },
-    // {
-    //   $unwind: {
-    //     path: "$child_category",
-    //     preserveNullAndEmptyArrays: true,
-    //   },
-    // },
-    {
-      $lookup: {
-        from: "brands",
-        localField: "brand_id",
-        foreignField: "_id",
-        as: "brand",
-      },
-    },
-    {
-      $unwind: {
-        path: "$brand",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    ...basePipeline,
     {
       $lookup: {
         from: "variations",
@@ -763,6 +587,7 @@ export const findAllSearchTermProductServices = async (
               product_id: "$$variation.product_id",
               variation_price: "$$variation.variation_price",
               variation_discount_price: "$$variation.variation_discount_price",
+              variation_price_delta: "$$variation.variation_price_delta",
               variation_quantity: "$$variation.variation_quantity",
               variation_image: "$$variation.variation_image",
             },
@@ -772,7 +597,7 @@ export const findAllSearchTermProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
@@ -782,125 +607,19 @@ export const findAllSearchTermProductServices = async (
       $addFields: {
         average_review_rating: {
           $cond: {
-            if: { $gt: [{ $size: "$reviews" }, 0] }, // Check if reviews exist
+            if: { $gt: [{ $size: "$reviews" }, 0] },
             then: {
               $divide: [
-                { $sum: "$reviews.review_ratting" }, // Sum of all review ratings
-                { $size: "$reviews" }, // Total number of reviews
+                { $sum: "$reviews.review_ratting" },
+                { $size: "$reviews" },
               ],
             },
-            else: 0, // Default to 0 if no reviews
+            else: 0,
           },
         },
-        total_reviews: { $size: "$reviews" }, // Count of reviews
+        total_reviews: { $size: "$reviews" },
       },
     },
-    {
-      $match: {
-        "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" },
-              { child_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
-      },
-    },
-    // {
-    //   $lookup: {
-    //     from: "campaigns",
-    //     localField: "product_campaign_id",
-    //     foreignField: "_id",
-    //     as: "campaign",
-    //   },
-    // },
-    // {
-    //   $unwind: {
-    //     path: "$campaign",
-    //     preserveNullAndEmptyArrays: true,
-    //   },
-    // },
-    // {
-    //   $addFields: {
-    //     campaign_details: {
-    //       $cond: {
-    //         if: {
-    //           $and: [
-    //             { $ne: ["$campaign", null] }, // Check if campaign exists
-    //             { $ne: ["$campaign.campaign_products", null] },
-    //             { $eq: ["$campaign.campaign_status", "active"] }, // Check if campaign_status is active
-    //             {
-    //               $gt: [
-    //                 {
-    //                   $size: {
-    //                     $filter: {
-    //                       input: "$campaign.campaign_products",
-    //                       as: "product",
-    //                       cond: {
-    //                         $and: [
-    //                           {
-    //                             $eq: ["$$product.campaign_product_id", "$_id"],
-    //                           }, // Match product ID
-    //                           {
-    //                             $eq: [
-    //                               "$$product.campaign_product_status",
-    //                               "active",
-    //                             ],
-    //                           }, // Check product status is active
-    //                         ],
-    //                       },
-    //                     },
-    //                   },
-    //                 },
-    //                 0,
-    //               ],
-    //             }, // Ensure at least one matching campaign product exists
-    //           ],
-    //         },
-    //         then: {
-    //           _id: "$campaign._id",
-    //           campaign_start_date: "$campaign.campaign_start_date",
-    //           campaign_end_date: "$campaign.campaign_end_date",
-    //           campaign_status: "$campaign.campaign_status",
-    //           campaign_product: {
-    //             $arrayElemAt: [
-    //               {
-    //                 $filter: {
-    //                   input: "$campaign.campaign_products",
-    //                   as: "product",
-    //                   cond: {
-    //                     $and: [
-    //                       { $eq: ["$$product.campaign_product_id", "$_id"] }, // Match product ID
-    //                       {
-    //                         $eq: [
-    //                           "$$product.campaign_product_status",
-    //                           "active",
-    //                         ],
-    //                       }, // Check product status is active
-    //                     ],
-    //                   },
-    //                 },
-    //               },
-    //               0,
-    //             ],
-    //           },
-    //         },
-    //         else: null,
-    //       },
-    //     },
-    //   },
-    // },
     {
       $project: {
         _id: 1,
@@ -911,10 +630,7 @@ export const findAllSearchTermProductServices = async (
         product_discount_price: 1,
         createdAt: 1,
         updatedAt: 1,
-        brand: {
-          _id: 1,
-          brand_name: 1,
-        },
+        brand: { _id: 1, brand_name: 1 },
         is_variation: 1,
         variations: {
           $cond: {
@@ -923,26 +639,14 @@ export const findAllSearchTermProductServices = async (
             else: {},
           },
         },
-        // campaign_details: {
-        //   $cond: {
-        //     if: { $ne: ["$campaign_details.campaign_product", null] },
-        //     then: "$campaign_details",
-        //     else: null,
-        //   },
-        // },
-        average_review_rating: 1, // Include average rating
-        total_reviews: 1, // Include total reviews coun
+        average_review_rating: 1,
+        total_reviews: 1,
       },
     },
-    {
-      $skip: skip,
-    },
-    {
-      $limit: limit,
-    },
+    { $skip: skip },
+    { $limit: limit },
   ]);
 
-  // Return both the data and total count
   return {
     data: findAllSearchProductProduct,
     totalData: totalCount,

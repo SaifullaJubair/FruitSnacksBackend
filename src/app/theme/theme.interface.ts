@@ -61,9 +61,11 @@ export interface IFloatingAsset {
 }
 
 export interface IThemeTypography {
-  font_key: FontKey;
+  font_key?: FontKey | string; // legacy single font (back-compat fallback)
+  heading_font?: string; // two-font system
+  body_font?: string;
   heading_weight: FontWeight;
-  style: FontStyleKind;
+  style?: FontStyleKind; // deprecated, unused
 }
 
 export interface IThemeButtonStyle {

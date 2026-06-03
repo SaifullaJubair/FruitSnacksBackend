@@ -43,6 +43,50 @@ const categorySchema = new Schema<ICategoryInterface>(
       type: Boolean,
       enum: [true, false],
     },
+
+    // ── Nested tree (self-referencing, infinite depth) ──
+    parent_id: {
+      type: Schema.Types.ObjectId,
+      ref: "categories",
+      default: null,
+      index: true,
+    },
+    // Ordered ancestor ids (root → … → immediate parent). Lets us fetch a
+    // whole subtree with `category_path: thisId` and build breadcrumbs.
+    category_path: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "categories",
+      },
+    ],
+    depth: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    // Per-category default theme (previously lived on subcategories).
+    default_theme_id: {
+      type: Schema.Types.ObjectId,
+      ref: "themes",
+      default: null,
+    },
+
+    // Phase B — attribute suggestions inherited by descendants and used to
+    // pre-populate product form / storefront filter sidebar. Resolved with
+    // parent-chain merge by resolveCategoryDefaults().
+    default_variant_attributes: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "attributes",
+      },
+    ],
+    default_filter_attributes: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "attributes",
+      },
+    ],
+
     category_publisher_id: {
       type: Schema.Types.ObjectId,
       ref: "admins",

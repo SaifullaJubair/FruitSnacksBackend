@@ -1,10 +1,7 @@
 import express from "express";
 import { ImageUploadRoutes } from "../helpers/frontend/imageUpload/imageUpload.routes";
 import { CategoryRoutes } from "../app/category/category.routes";
-import { Sub_CategoryRoutes } from "../app/sub_category/sub_category.routes";
-import { Child_CategoryRoutes } from "../app/child_category/child_category.routes";
 import { BrandRoutes } from "../app/brand/brand.routes";
-import { SpecificationRoutes } from "../app/specification/specification.routes";
 import { AttributeRoutes } from "../app/attribute/attribute.routes";
 import { MultiImageUploadRoutes } from "../helpers/frontend/imageUpload/multi_imageUpload.routes";
 import { ReviewRoutes } from "../app/review/review.routes";
@@ -37,7 +34,16 @@ import PageSeoRouter from "../app/pageSeo/pageSeo.route";
 import TikTokPixelRouter from "../app/tiktokPixel/tiktok.pixel.route";
 import { ThemeRoutes } from "../app/theme/theme.routes";
 import { FaqTemplateRoutes } from "../app/faq_template/faq_template.routes";
+import { TrustPointRoutes } from "../app/trustPoint/trustPoint.routes";
 import { VariationRoutes } from "../app/variation/variation.routes";
+import { PaymentRoutes } from "../app/payment/payment.routes";
+import { FlashSaleRoutes } from "../app/flashsale/flashsale.routes";
+import { WalletRoutes } from "../app/wallet/wallet.routes";
+import { WarehouseRoutes } from "../app/warehouse/warehouse.routes";
+import { WishlistRoutes } from "../app/wishlist/wishlist.routes";
+import { AbandonedCartRoutes } from "../app/abandonedCart/abandonedCart.routes";
+import { LoyaltyRoutes } from "../app/loyalty/loyalty.routes";
+import { ProductFeedRoutes } from "../app/productFeed/productFeed.routes";
 
 const router = express.Router();
 
@@ -47,20 +53,8 @@ const moduleRoutes = [
     route: CategoryRoutes,
   },
   {
-    path: "/sub_category",
-    route: Sub_CategoryRoutes,
-  },
-  {
-    path: "/child_category",
-    route: Child_CategoryRoutes,
-  },
-  {
     path: "/brand",
     route: BrandRoutes,
-  },
-  {
-    path: "/specification",
-    route: SpecificationRoutes,
   },
   {
     path: "/attribute",
@@ -81,6 +75,10 @@ const moduleRoutes = [
   {
     path: "/order",
     route: OrderRoutes,
+  },
+  {
+    path: "/payment",
+    route: PaymentRoutes,
   },
   {
     path: "/webhook",
@@ -181,7 +179,15 @@ const moduleRoutes = [
   { path: "/page-seo", route: PageSeoRouter },
   { path: "/theme", route: ThemeRoutes },
   { path: "/faq-template", route: FaqTemplateRoutes },
+  { path: "/trust-point", route: TrustPointRoutes },
   { path: "/variation", route: VariationRoutes },
+  { path: "/flash-sale", route: FlashSaleRoutes },
+  { path: "/wallet", route: WalletRoutes },
+  { path: "/warehouse", route: WarehouseRoutes },
+  { path: "/wishlist", route: WishlistRoutes },
+  { path: "/abandoned-cart", route: AbandonedCartRoutes },
+  { path: "/loyalty", route: LoyaltyRoutes },
+  { path: "/product-feed", route: ProductFeedRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

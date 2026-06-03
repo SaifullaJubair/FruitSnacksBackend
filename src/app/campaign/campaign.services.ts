@@ -78,17 +78,6 @@ export const findACampaignServices = async (
           model: "categories",
           select: "_id category_name category_slug category_status", // Select only `_id` and `category_name`
         },
-        {
-          path: "sub_category_id",
-          model: "subcategories",
-          select: "_id sub_category_name sub_category_slug sub_category_status", // Select only `_id` and `sub_category_name`
-        },
-        {
-          path: "child_category_id",
-          model: "childcategories",
-          select:
-            "_id child_category_name child_category_slug child_category_status", // Select only `_id` and `child_category_name`
-        },
       ],
     })
     .select(
@@ -124,18 +113,6 @@ export const findACampaignServices = async (
       }
 
       if (campaignProduct?.category_id?.category_status !== "active") {
-        return null;
-      }
-      if (
-        campaignProduct?.sub_category_id &&
-        campaignProduct?.sub_category_id?.sub_category_status !== "active"
-      ) {
-        return null;
-      }
-      if (
-        campaignProduct?.child_category_id &&
-        campaignProduct?.child_category_id?.child_category_status !== "active"
-      ) {
         return null;
       }
       if (

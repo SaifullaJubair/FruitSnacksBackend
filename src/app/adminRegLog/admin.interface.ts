@@ -16,6 +16,11 @@ export interface IAdminInterface {
   role_id: Types.ObjectId | IRoleInterface;
   admin_publisher_id?: Types.ObjectId | IAdminInterface;
   admin_updated_by?: Types.ObjectId | IAdminInterface;
+  // Phase D — admin self password-reset (same OTP shape as user).
+  forgot_otp?: string;
+  otp_expires_at?: Date;
+  otp_sent_at?: Date;
+  otp_attempts?: number;
 }
 
 export const adminSearchableField = [

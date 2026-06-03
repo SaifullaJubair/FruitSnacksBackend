@@ -14,8 +14,6 @@ import {
   updateOrderServices,
 } from "./order.service";
 import OrderProductModel from "../orderProducts/orderProduct.model";
-import ProductModel from "../product/product.model";
-import VariationModel from "../variation/variation.model";
 import OrderModel from "./order.model";
 import CouponUsedModel from "../coupon/coupon_used/coupon.used.model";
 import { createCouponUsedCustomer } from "../coupon/coupon_used/coupon.used.services";
@@ -30,6 +28,19 @@ import {
   sendOrderSMS_LoggedIn,
   sendOrderSMS_VerifiedGuest,
 } from "../../utils/send.order.sms";
+import { recomputeOrderTotals } from "./order.recompute";
+import {
+  decrementStockForLines,
+  restockOrder,
+  bumpSoldCounts,
+} from "./order.stock";
+import { getCurrencyCode } from "../setting/setting.services";
+import {
+  initiatePayment,
+  initiateAdvancePayment,
+} from "../payment/payment.service";
+import { markAbandonedCartRecoveredByPhone } from "../abandonedCart/abandonedCart.services";
+import { earnOnOrder, redeemOnOrder } from "../loyalty/loyalty.services";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -185,34 +196,84 @@ export const postOrder: any = async (
     const requestData = req.body;
     await findOrCreateUser(requestData, session);
 
+    // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
+    // Overwrite the order totals + per-line prices with server-computed values.
+    const recomputed = await recomputeOrderTotals(requestData, session);
+    requestData.sub_total_amount = recomputed.sub_total_amount;
+    requestData.discount_amount = recomputed.discount_amount;
+    requestData.shipping_cost = recomputed.shipping_cost;
+    requestData.vat_amount = recomputed.vat_amount; // Phase H
+    requestData.grand_total_amount = recomputed.grand_total_amount;
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
+    // admin can see them in PaymentInfoCard + so reports can split discount
+    // vs loyalty without spelunking the ledger.
+    requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
+    requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
+
+    // Phase C3: when client requested a valid advance, force the order to
+    // record itself as "cod" + advance_amount; the advance leg is charged
+    // separately below (post-commit) via the requested advance gateway.
+    if (recomputed.advance_amount && recomputed.advance_method) {
+      requestData.payment_method = "cod";
+      requestData.advance_amount = recomputed.advance_amount;
+    }
+
     requestData.invoice_id = await generateInvoiceId();
     const result: any = await postOrderServices(requestData, session);
     if (!result) throw new ApiError(400, "Order Create Failed !");
 
-    for (const productDetails of requestData?.order_products || []) {
+    for (const line of recomputed.order_products) {
       const orderDetails = await OrderProductModel.create(
         [
           {
             order_id: result?._id,
             invoice_id: requestData.invoice_id,
-            product_id: productDetails?.product_id,
-            variation_id: productDetails?.variation_id,
-            product_unit_price: productDetails?.product_unit_price,
-            product_unit_final_price: productDetails?.product_unit_final_price,
-            product_quantity: productDetails?.product_quantity,
-            product_grand_total_price:
-              productDetails?.product_grand_total_price,
-            campaign_id: productDetails?.campaign_id,
-            product_main_price: productDetails?.product_main_price,
-            product_main_discount_price:
-              productDetails?.product_main_discount_price,
+            product_id: line?.product_id,
+            variation_id: line?.variation_id,
+            product_unit_price: line?.product_unit_price,
+            product_unit_final_price: line?.product_unit_final_price,
+            product_quantity: line?.product_quantity,
+            product_grand_total_price: line?.product_grand_total_price,
+            campaign_id: line?.campaign_id,
+            product_main_price: line?.product_main_price,
+            product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
+            // Phase 1 — snapshot SKU + barcode at placement.
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
           },
         ],
         { session },
       );
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
+
+    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
+    await decrementStockForLines(recomputed.order_products, session);
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
+    await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    try {
+      if (recomputed.loyalty_redeem_points) {
+        await redeemOnOrder(
+          requestData?.customer_id,
+          recomputed.loyalty_redeem_points,
+          requestData.invoice_id,
+          session,
+        );
+      }
+    } catch (_) {}
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        recomputed.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
 
     await handleCouponUsage(requestData, session);
 
@@ -240,6 +301,7 @@ export const postOrder: any = async (
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
         req.socket?.remoteAddress ||
         "";
+      const currency = await getCurrencyCode();
 
       await sendMetaEvent({
         event_name: "Purchase",
@@ -257,7 +319,7 @@ export const postOrder: any = async (
           fbp: requestData?.fbp,
         },
         custom_data: {
-          currency: "BDT",
+          currency,
           value: requestData?.grand_total_amount,
           content_ids: requestData?.order_products?.map(
             (p: any) => p?.product_id,
@@ -291,6 +353,37 @@ export const postOrder: any = async (
       }
     } catch (_) {}
 
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
+    try {
+      await markAbandonedCartRecoveredByPhone(
+        requestData?.customer_phone,
+        result?._id,
+      );
+    } catch (_) {}
+
+    // ── Phase C: hand off to the chosen payment gateway (post-commit so a
+    // gateway hiccup doesn't roll back the order). For COD this is a no-op.
+    // Phase C3: if an advance was requested, initiate the advance gateway for
+    // ONLY the advance_amount (order itself stays cod for the rest).
+    let payment_init: any = { kind: "none" };
+    try {
+      if (recomputed.advance_amount && recomputed.advance_method) {
+        payment_init = await initiateAdvancePayment(
+          { ...requestData, _id: result?._id },
+          recomputed.advance_method,
+          recomputed.advance_amount,
+        );
+      } else {
+        payment_init = await initiatePayment({
+          ...requestData,
+          _id: result?._id,
+        });
+      }
+    } catch (e: any) {
+      payment_init = { kind: "none", error: e?.message || "init failed" };
+    }
+
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -299,6 +392,8 @@ export const postOrder: any = async (
         order_id: result?._id,
         invoice_id: requestData?.invoice_id,
         user_created: requestData?.user_created ?? false,
+        payment_method: requestData?.payment_method || "cod",
+        payment_init,
       },
     });
   } catch (error) {
@@ -322,34 +417,75 @@ export const postSingleOrder: any = async (
     const requestData = req.body;
     await findOrCreateUser(requestData, session);
 
+    // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
+    const recomputed = await recomputeOrderTotals(requestData, session);
+    requestData.sub_total_amount = recomputed.sub_total_amount;
+    requestData.discount_amount = recomputed.discount_amount;
+    requestData.shipping_cost = recomputed.shipping_cost;
+    requestData.vat_amount = recomputed.vat_amount; // Phase H
+    requestData.grand_total_amount = recomputed.grand_total_amount;
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
+    // admin can see them in PaymentInfoCard + so reports can split discount
+    // vs loyalty without spelunking the ledger.
+    requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
+    requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
+
     requestData.invoice_id = await generateInvoiceId();
     const result: any = await postOrderServices(requestData, session);
     if (!result) throw new ApiError(400, "Order Create Failed !");
 
-    for (const productDetails of requestData?.order_products || []) {
+    for (const line of recomputed.order_products) {
       const orderDetails = await OrderProductModel.create(
         [
           {
             order_id: result?._id,
             invoice_id: requestData.invoice_id,
-            product_id: productDetails?.product_id,
-            variation_id: productDetails?.variation_id,
-            product_unit_price: productDetails?.product_unit_price,
-            product_unit_final_price: productDetails?.product_unit_final_price,
-            product_quantity: productDetails?.product_quantity,
-            product_grand_total_price:
-              productDetails?.product_grand_total_price,
-            campaign_id: productDetails?.campaign_id,
-            product_main_price: productDetails?.product_main_price,
-            product_main_discount_price:
-              productDetails?.product_main_discount_price,
+            product_id: line?.product_id,
+            variation_id: line?.variation_id,
+            product_unit_price: line?.product_unit_price,
+            product_unit_final_price: line?.product_unit_final_price,
+            product_quantity: line?.product_quantity,
+            product_grand_total_price: line?.product_grand_total_price,
+            campaign_id: line?.campaign_id,
+            product_main_price: line?.product_main_price,
+            product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
+            // Phase 1 — snapshot SKU + barcode at placement.
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
           },
         ],
         { session },
       );
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
+
+    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
+    await decrementStockForLines(recomputed.order_products, session);
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
+    await bumpSoldCounts(recomputed.order_products, session);
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    try {
+      if (recomputed.loyalty_redeem_points) {
+        await redeemOnOrder(
+          requestData?.customer_id,
+          recomputed.loyalty_redeem_points,
+          requestData.invoice_id,
+          session,
+        );
+      }
+    } catch (_) {}
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        recomputed.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
 
     await handleCouponUsage(requestData, session);
 
@@ -362,6 +498,7 @@ export const postSingleOrder: any = async (
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
         req.socket?.remoteAddress ||
         "";
+      const currency = await getCurrencyCode();
 
       await sendMetaEvent({
         event_name: "Purchase",
@@ -378,7 +515,7 @@ export const postSingleOrder: any = async (
           fbp: requestData?.fbp,
         },
         custom_data: {
-          currency: "BDT",
+          currency,
           value: requestData?.grand_total_amount,
           content_ids: requestData?.order_products?.map(
             (p: any) => p?.product_id,
@@ -412,6 +549,37 @@ export const postSingleOrder: any = async (
       }
     } catch (_) {}
 
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
+    try {
+      await markAbandonedCartRecoveredByPhone(
+        requestData?.customer_phone,
+        result?._id,
+      );
+    } catch (_) {}
+
+    // ── Phase C: hand off to the chosen payment gateway (post-commit so a
+    // gateway hiccup doesn't roll back the order). For COD this is a no-op.
+    // Phase C3: if an advance was requested, initiate the advance gateway for
+    // ONLY the advance_amount (order itself stays cod for the rest).
+    let payment_init: any = { kind: "none" };
+    try {
+      if (recomputed.advance_amount && recomputed.advance_method) {
+        payment_init = await initiateAdvancePayment(
+          { ...requestData, _id: result?._id },
+          recomputed.advance_method,
+          recomputed.advance_amount,
+        );
+      } else {
+        payment_init = await initiatePayment({
+          ...requestData,
+          _id: result?._id,
+        });
+      }
+    } catch (e: any) {
+      payment_init = { kind: "none", error: e?.message || "init failed" };
+    }
+
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -420,6 +588,8 @@ export const postSingleOrder: any = async (
         order_id: result?._id,
         invoice_id: requestData?.invoice_id,
         user_created: requestData?.user_created ?? false,
+        payment_method: requestData?.payment_method || "cod",
+        payment_init,
       },
     });
   } catch (error) {
@@ -707,6 +877,9 @@ export const cancelSteadfastOrder: RequestHandler = async (
     if (result.modifiedCount === 0)
       throw new ApiError(400, "Order Cancel Failed!");
 
+    // Restock cancelled order (idempotent).
+    await restockOrder(order_id, session);
+
     await session.commitTransaction();
     session.endSession();
 
@@ -786,30 +959,13 @@ export const updateOrder: RequestHandler = async (
     if (result?.modifiedCount === 0)
       throw new ApiError(400, "Order Update Failed !");
 
-    if (requestData?.order_status === "delivered") {
-      const { order_products } = requestData;
-      for (const order_product of order_products || []) {
-        if (!order_product?.variation_id) {
-          const productUpdate = await ProductModel.updateOne(
-            { _id: order_product?.product_id },
-            { $inc: { product_quantity: -order_product?.product_quantity } },
-            { session, runValidators: true },
-          );
-          if (productUpdate.modifiedCount === 0)
-            throw new ApiError(400, "Order Update Failed!");
-        } else {
-          const variationUpdate = await VariationModel.updateOne(
-            {
-              _id: order_product?.variation_id,
-              product_id: order_product?.product_id,
-            },
-            { $inc: { variation_quantity: -order_product?.product_quantity } },
-            { session, runValidators: true },
-          );
-          if (variationUpdate.modifiedCount === 0)
-            throw new ApiError(400, "Order Update Failed!");
-        }
-      }
+    // Stock is decremented at PLACEMENT (B2), not at delivery. On cancel/return
+    // we add it back (idempotent via order.stock_restored).
+    if (
+      requestData?.order_status === "cancel" ||
+      requestData?.order_status === "return"
+    ) {
+      await restockOrder(requestData?._id, session);
     }
 
     await session.commitTransaction();

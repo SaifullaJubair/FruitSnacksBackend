@@ -11,10 +11,20 @@ export interface IUserInterface {
   user_address?: string;
   user_status?: "active" | "in-active";
   wallet_amount?: number;
-  forgot_otp?: number;
-  otp_expires_at?: Date; // ✅ OTP expiry
-  user_type?: "guest" | "registered"; // ✅ guest or registered
-  user_verified?: boolean; // ✅ password set করেছে কিনা
+  // Phase D: bcrypt hash of 6-digit OTP (was raw 4-digit number).
+  forgot_otp?: string | number;
+  otp_expires_at?: Date;
+  otp_sent_at?: Date;
+  otp_attempts?: number;
+  user_type?: "guest" | "registered";
+  user_verified?: boolean;
+
+  // Phase H — pricing tier this user belongs to. Resolver picks the matching
+  // `group_prices` entry on a product when this is not "retail".
+  customer_group?: "retail" | "wholesale" | "vip";
+
+  // Phase G3 — loyalty points balance (separate from wallet_amount currency).
+  loyalty_points?: number;
 }
 
 export const userSearchableField = [

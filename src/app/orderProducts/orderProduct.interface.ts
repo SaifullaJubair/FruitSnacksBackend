@@ -19,6 +19,15 @@ export interface IOrderProductInterface {
   customer_id: Types.ObjectId | IUserInterface;
   product_main_price: number;
   product_main_discount_price: number;
+
+  // Snapshot at order-placement time (Phase 1 SKU/Barcode/QR). Frozen — never
+  // updated after creation. Lets historical orders + warehouse pick-lists
+  // keep showing the original SKU/barcode even after product rename, SKU
+  // edit, or product deletion.
+  product_sku_snapshot?: string;
+  variation_sku_snapshot?: string;
+  product_barcode_snapshot?: string;
+  variation_barcode_snapshot?: string;
 }
 
 export const orderProductSearchableField = ["invoice_id"];

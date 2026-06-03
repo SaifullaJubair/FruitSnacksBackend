@@ -91,11 +91,89 @@ export interface ISettingInterface {
 
   // ✅ Announcement Bar (top of page, 3 items in design)
   announcement_bar?: IAnnouncementBarItem[];
+
+  // ✅ Special offer banner (themed PDP "আজকের বিশেষ অফার" with live countdown)
+  offer_enabled?: boolean;
+  offer_text?: string;
+  offer_end_at?: Date | string;
+
+  // ✅ Payment methods (Phase C) — per-gateway toggles + config. cod is on
+  // by default for legacy compatibility; other methods opt-in via admin.
+  cod_enabled?: boolean;
+
+  // C2 — Manual MFS (customer pays to merchant's bkash/nagad number, sends
+  // trxId, admin verifies). manual_mfs_methods[] = the displayable list.
+  manual_mfs_enabled?: boolean;
+  manual_mfs_methods?: IManualMfsMethod[];
+  manual_mfs_instruction?: string; // shared note above the methods list
+
+  // C4 — manual bank transfer + screenshot upload (shipped Phase C4).
+  bank_transfer_enabled?: boolean;
+  bank_accounts?: IBankAccount[];
+  bank_transfer_instruction?: string;
+
+  // C1 — SSLCommerz integration (cards + bKash + Nagad + Rocket). Secrets are
+  // read from .env (SSLCOMMERZ_STORE_ID + SSLCOMMERZ_STORE_PASSWORD); these
+  // settings fields toggle on/off + sandbox-vs-live from the admin UI.
+  sslcommerz_enabled?: boolean;
+  /** @deprecated read from .env at runtime; kept for back-compat. */
+  sslcommerz_store_id?: string;
+  /** @deprecated read from .env at runtime; kept for back-compat. */
+  sslcommerz_store_password?: string;
+  sslcommerz_sandbox?: boolean;
+
+  // C3 — advance / partial payment. Customer pays X% online to confirm the
+  // order; the rest is collected COD on delivery. Order doc gets
+  // `payment_method:"cod"` + `advance_amount=X`; the chosen advance method
+  // (e.g. sslcommerz) is initiated separately for just the advance.
+  advance_payment_enabled?: boolean;
+  advance_payment_min_percent?: number; // e.g. 20 → must pre-pay ≥20%
+  advance_payment_methods?: Array<
+    "sslcommerz" | "manual_mfs" | "bank_transfer"
+  >;
+
+  // Phase H — site-wide VAT/tax percent applied at checkout. Default 0
+  // (no tax). Per-product `vat_percentage_override` beats this when set > 0.
+  vat_percentage?: number;
+
+  // Phase G3 — loyalty points configuration.
+  loyalty_enabled?: boolean;
+  // Earn: how many points the buyer gets per 1 unit of currency spent.
+  // e.g. earn_rate = 1 → 100tk order = 100 points.
+  loyalty_earn_rate?: number;
+  // Redeem: how many currency units 1 point is worth at checkout.
+  // e.g. redeem_rate = 0.01 → 100 points = 1tk discount.
+  loyalty_redeem_rate?: number;
+  // Optional cap so a single order can't be 100% paid with points.
+  loyalty_max_redeem_percent?: number;
+
+  // SKU / Barcode / QR (Phase 1) — owner-tunable per-shop.
+  sku_prefix?: string;
+  barcode_auto_generate?: boolean;
+  barcode_default_format?: "CODE128" | "EAN13" | "UPC" | "ITF14";
+  qr_storefront_base_url?: string;
+}
+
+export interface IManualMfsMethod {
+  name: string; // "bKash", "Nagad", "Rocket", ...
+  number: string; // the merchant's receiving number
+  account_type?: "personal" | "agent" | "merchant";
+  instruction?: string; // per-method instruction (optional)
+}
+
+export interface IBankAccount {
+  bank_name: string;
+  branch?: string;
+  account_name: string;
+  account_number: string;
+  routing?: string;
 }
 
 export interface IAnnouncementBarItem {
   text: string;
-  icon?: string;
+  icon?: string; // legacy emoji/text (kept for back-compat)
+  icon_key?: string; // curated icon (e.g. "lu:Truck")
+  icon_url?: string; // custom uploaded SVG/PNG
 }
 
 export interface ITrustPoint {

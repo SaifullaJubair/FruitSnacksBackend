@@ -148,17 +148,11 @@ export const deleteAAuthenticationInfo = async (
   }
 };
 
-// Logout Controller
+// Logout Controller (Phase D: clears BOTH access + refresh cookies)
+import { clearAuthCookies } from "../../utils/auth.tokens";
 export const logoutUser: RequestHandler = (req, res, next) => {
   try {
-    // Clear the cookie
-    res.cookie("fruit_snacks_token", "", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      expires: new Date(0),
-    });
-
+    clearAuthCookies(res);
     return res.status(200).json({
       success: true,
       message: "Logged out successfully!",

@@ -6,37 +6,119 @@ import {
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import {
+  categoryHasChildrenServices,
+  categoryHasProductsServices,
   deleteCategoryServices,
   findAllCategoryServices,
   findAllDashboardCategoryServices,
-  getCategorySubChildCategoryServices,
+  getCategoryBreadcrumbServices,
+  getCategoryChildrenServices,
+  getCategoryTreeServices,
   getSixFeaturedCategoryServices,
   postCategoryServices,
+  resolveCategoryDefaults,
   updateCategoryServices,
 } from "./category.services";
 import { FileUploadHelper } from "../../helpers/image.upload";
 import ApiError from "../../errors/ApiError";
 import * as fs from "fs";
 import CategoryModel from "./category.model";
-import SubCategoryModel from "../sub_category/sub_category.model";
-import ChildCategoryModel from "../child_category/child_category.model";
-import BrandModel from "../brand/brand.model";
-import SpecificationModel from "../specification/specification.model";
-import AttributeModel from "../attribute/attribute.model";
-import ProductModel from "../product/product.model";
 
-// Get banner match category  subCategory childCategory
-export const getCategorySubChildCategory: RequestHandler = async (
+// Phase B — normalize default_*_attributes arrays from multipart/JSON bodies.
+// Admin sends these as JSON-stringified arrays inside multipart form-data
+// (multer collapses repeated keys to the last value, so we can't rely on
+// repeated-key arrays here). Pure JSON requests send a real array directly.
+// "" / "[]" → explicit empty; missing → leave alone (don't wipe existing).
+const normalizeAttributeArrays = (body: any): void => {
+  for (const key of [
+    "default_variant_attributes",
+    "default_filter_attributes",
+  ]) {
+    const raw = body?.[key];
+    if (raw === undefined || raw === null) continue;
+    if (Array.isArray(raw)) {
+      body[key] = raw
+        .map((v: any) => (typeof v === "string" ? v.trim() : v))
+        .filter((v: any) => v);
+      continue;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "[]") {
+        body[key] = [];
+        continue;
+      }
+      // Try JSON parse first (admin form sends stringified array).
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            body[key] = parsed
+              .map((v: any) => (typeof v === "string" ? v.trim() : v))
+              .filter((v: any) => v);
+            continue;
+          }
+        } catch (_e) {
+          // fall through
+        }
+      }
+      // Fallback: treat as single id.
+      body[key] = [trimmed];
+    }
+  }
+};
+
+// Get the full nested category tree (root nodes with nested children)
+export const getCategoryTree: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<ICategoryInterface | any> => {
   try {
-    const result: any = await getCategorySubChildCategoryServices();
+    const includeInactive = req.query?.includeInactive === "true";
+    const result: any = await getCategoryTreeServices(includeInactive);
     return sendResponse<ICategoryInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
-      message: "Category With Sub And Child Category Found Successfully !",
+      message: "Category Tree Found Successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// Get direct children of one node (drill-down). :id = node id, or "root".
+export const getCategoryChildren: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<ICategoryInterface | any> => {
+  try {
+    const result: any = await getCategoryChildrenServices(req.params.id);
+    return sendResponse<ICategoryInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Category Children Found Successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// Get breadcrumb (ancestors root → … → node) for a node.
+export const getCategoryBreadcrumb: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<ICategoryInterface | any> => {
+  try {
+    const result: any = await getCategoryBreadcrumbServices(req.params.id);
+    return sendResponse<ICategoryInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Category Breadcrumb Found Successfully !",
       data: result,
     });
   } catch (error: any) {
@@ -76,6 +158,7 @@ export const postCategory: RequestHandler = async (
       req.body
     ) {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -171,7 +254,58 @@ export const postCategory: RequestHandler = async (
         throw new ApiError(400, "Category Added Failed !");
       }
     } else {
-      throw new ApiError(400, "Image Upload Failed");
+      // No file uploaded — child/leaf nodes in the tree may have no logo/video.
+      const requestData = req.body;
+      normalizeAttributeArrays(requestData);
+      if (!requestData?.category_name || !requestData?.category_slug) {
+        throw new ApiError(400, "Category name and slug are required");
+      }
+      const findCategoryNameExit = await CategoryModel.exists({
+        category_slug: requestData?.category_slug,
+      });
+      if (findCategoryNameExit) {
+        throw new ApiError(400, "Already Added !");
+      }
+      const findCategorySerialExit = await CategoryModel.exists({
+        category_serial: requestData?.category_serial,
+      });
+      if (findCategorySerialExit) {
+        throw new ApiError(400, "Serial Number Previously Added !");
+      }
+      if (
+        requestData?.feature_category_show == true ||
+        requestData?.feature_category_show == "true"
+      ) {
+        const featureCount = await CategoryModel.countDocuments({
+          feature_category_show: true,
+        });
+        if (featureCount >= 6) {
+          throw new ApiError(400, "Already 6 Feature Selected !");
+        }
+      }
+      if (
+        requestData?.explore_category_show == true ||
+        requestData?.explore_category_show == "true"
+      ) {
+        const exploreCount = await CategoryModel.countDocuments({
+          explore_category_show: true,
+        });
+        if (exploreCount >= 3) {
+          throw new ApiError(400, "Already 3 Explore Selected !");
+        }
+      }
+      const result: ICategoryInterface | {} = await postCategoryServices(
+        requestData
+      );
+      if (result) {
+        return sendResponse<ICategoryInterface>(res, {
+          statusCode: httpStatus.OK,
+          success: true,
+          message: "Category Added Successfully !",
+        });
+      } else {
+        throw new ApiError(400, "Category Added Failed !");
+      }
     }
   } catch (error: any) {
     next(error);
@@ -249,6 +383,7 @@ export const updateCategory: RequestHandler = async (
       req.body
     ) {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -360,6 +495,7 @@ export const updateCategory: RequestHandler = async (
       }
     } else {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -417,6 +553,28 @@ export const updateCategory: RequestHandler = async (
   }
 };
 
+// Phase B — resolved category defaults (parent-merged, dead-ref filtered).
+// Public endpoint — used by admin product form for auto-apply + by storefront
+// filter sidebar fallback. Returns hydrated attribute docs (not just ids) so
+// the consumer doesn't need a second populate round-trip.
+export const getCategoryDefaults: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<ICategoryInterface | any> => {
+  try {
+    const result = await resolveCategoryDefaults(req.params.id);
+    return sendResponse<any>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Category defaults resolved successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
 // delete A Category item
 export const deleteACategoryInfo = async (
   req: Request,
@@ -425,47 +583,16 @@ export const deleteACategoryInfo = async (
 ) => {
   try {
     const category_id = req.body._id;
-    const findCategoryInSubCategoryExist: boolean | null | undefined | any =
-      await SubCategoryModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInSubCategoryExist) {
-      throw new ApiError(400, "Already Added In SubCategory !");
+    // Tree integrity: a node can only be deleted if it is a leaf (no child
+    // categories) and no product is assigned to it.
+    if (await categoryHasChildrenServices(category_id)) {
+      throw new ApiError(
+        400,
+        "This category has sub-categories. Delete or move them first."
+      );
     }
-    const findCategoryInChildCategoryExist: boolean | null | undefined | any =
-      await ChildCategoryModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInChildCategoryExist) {
-      throw new ApiError(400, "Already Added In ChildCategory !");
-    }
-    const findCategoryInBrandExist: boolean | null | undefined | any =
-      await BrandModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInBrandExist) {
-      throw new ApiError(400, "Already Added In Brand !");
-    }
-    const findCategoryInSpecificationExist: boolean | null | undefined | any =
-      await SpecificationModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInSpecificationExist) {
-      throw new ApiError(400, "Already Added In Specification !");
-    }
-    const findCategoryInAttributeExist: boolean | null | undefined | any =
-      await AttributeModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInAttributeExist) {
-      throw new ApiError(400, "Already Added In Attribute !");
-    }
-    const findCategoryInProductExist: boolean | null | undefined | any =
-      await ProductModel.exists({
-        category_id: category_id,
-      });
-    if (findCategoryInProductExist) {
-      throw new ApiError(400, "Already Added In Product !");
+    if (await categoryHasProductsServices(category_id)) {
+      throw new ApiError(400, "Products are assigned to this category.");
     }
     const result = await deleteCategoryServices(category_id);
     if (result?.deletedCount > 0) {

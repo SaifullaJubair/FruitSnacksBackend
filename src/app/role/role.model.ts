@@ -334,6 +334,14 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    trust_point_show: {
+      type: Boolean,
+      default: false,
+    },
+    trust_point_update: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

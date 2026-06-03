@@ -18,7 +18,7 @@ const couponSchema = new Schema<ICouponInterface>(
     },
     coupon_type: {
       type: String,
-      enum: ["fixed", "percent"],
+      enum: ["fixed", "percent", "bogo"],
       required: true,
     },
     coupon_amount: {
@@ -81,6 +81,10 @@ const couponSchema = new Schema<ICouponInterface>(
       type: Schema.Types.ObjectId,
       ref: "admins",
     },
+    // Phase E — BOGO fields (used only when coupon_type === "bogo")
+    bogo_buy_qty: { type: Number },
+    bogo_get_qty: { type: Number },
+    bogo_get_discount_pct: { type: Number },
   },
   {
     timestamps: true,

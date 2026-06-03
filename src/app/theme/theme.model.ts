@@ -78,26 +78,16 @@ const themeSchema = new Schema<IThemeInterface>(
     floating_assets: { type: [floatingAssetSchema], default: [] },
 
     typography: {
-      font_key: {
-        type: String,
-        enum: [
-          "hind-siliguri",
-          "tiro-bangla",
-          "noto-sans-bengali",
-          "baloo-da-2",
-          "mina",
-        ],
-        default: "hind-siliguri",
-      },
+      // Legacy single font (kept for back-compat; used as fallback for both
+      // heading_font and body_font when those aren't set).
+      font_key: { type: String },
+      // Two-font system.
+      heading_font: { type: String },
+      body_font: { type: String },
       heading_weight: {
         type: String,
         enum: ["400", "500", "600", "700"],
         default: "700",
-      },
-      style: {
-        type: String,
-        enum: ["rounded", "sharp", "elegant", "bold"],
-        default: "rounded",
       },
     },
 
