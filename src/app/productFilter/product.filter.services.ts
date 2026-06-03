@@ -20,6 +20,7 @@ import { Types } from "mongoose";
 import AttributeModel from "../attribute/attribute.model";
 import BrandModel from "../brand/brand.model";
 import CategoryModel from "../category/category.model";
+import { resolveCategoryDefaults } from "../category/category.services";
 import {
   IProductInterface,
   productSearchableField,
@@ -114,7 +115,37 @@ export const findAllActiveSideFilteredDataServices = async (
   // 2) Load those attributes and keep only the values that were discovered
   //    (and are active). This is the StarTech behaviour — show only facets that
   //    can actually match something in the current category.
-  const attributeIds = [...valueIdsByAttribute.keys()].map(
+  //
+  //    Phase B M5 + M6 — UNION with category.default_filter_attributes (resolved
+  //    with parent inheritance). Order: category defaults first (parent-first
+  //    inside resolveCategoryDefaults), then product-driven extras. De-dup by
+  //    attribute._id. Empty-value attributes from category defaults are still
+  //    HIDDEN per locked rule "0-count values hidden" — we only include them if
+  //    they survive the discovered-value filter below.
+  let categoryDefaultIds: string[] = [];
+  if (categoryId) {
+    const resolved = await resolveCategoryDefaults(categoryId);
+    categoryDefaultIds = resolved.default_filter_attributes.map((a: any) =>
+      String(a._id),
+    );
+  }
+
+  const orderedAttributeIdStrings: string[] = [];
+  const seen = new Set<string>();
+  for (const id of categoryDefaultIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      orderedAttributeIdStrings.push(id);
+    }
+  }
+  for (const id of valueIdsByAttribute.keys()) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      orderedAttributeIdStrings.push(id);
+    }
+  }
+
+  const attributeIds = orderedAttributeIdStrings.map(
     (id) => new Types.ObjectId(id),
   );
   const attributeDocs = attributeIds.length
@@ -123,8 +154,13 @@ export const findAllActiveSideFilteredDataServices = async (
         attribute_status: "active",
       }).lean()
     : [];
+  const attributeDocsById = new Map<string, any>(
+    attributeDocs.map((a: any) => [String(a._id), a]),
+  );
 
-  const attributes = attributeDocs
+  const attributes = orderedAttributeIdStrings
+    .map((id) => attributeDocsById.get(id))
+    .filter(Boolean)
     .map((attr: any) => {
       const allowed = valueIdsByAttribute.get(String(attr._id)) ?? new Set();
       const values = (attr.attribute_values ?? []).filter(
@@ -145,16 +181,54 @@ export const findAllActiveSideFilteredDataServices = async (
     .sort({ brand_serial: 1 })
     .lean();
 
-  // 4) Max price for the price-range slider (product base price; variation
-  //    products use base too — StarTech shows the product's headline price).
-  const topPriced = await ProductModel.find(productMatch)
-    .sort({ product_price: -1 })
-    .select("product_price")
-    .limit(1)
-    .lean();
+  // 4) Max price for the price-range slider.
+  // Fix #22 — variation products: max effective price = max(active variations'
+  // variation_price). Simple products: product_price. Take overall max across
+  // the whole subtree so the slider's right edge truly covers every product.
+  const maxAgg = await ProductModel.aggregate([
+    { $match: productMatch },
+    {
+      $lookup: {
+        from: "variations",
+        localField: "_id",
+        foreignField: "product_id",
+        as: "variations",
+      },
+    },
+    {
+      $addFields: {
+        _activeVariations: {
+          $filter: {
+            input: "$variations",
+            as: "v",
+            cond: { $ne: ["$$v.is_active", false] },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        _maxPrice: {
+          $cond: {
+            if: {
+              $and: [
+                { $eq: ["$is_variation", true] },
+                { $gt: [{ $size: "$_activeVariations" }, 0] },
+              ],
+            },
+            then: { $max: "$_activeVariations.variation_price" },
+            else: "$product_price",
+          },
+        },
+      },
+    },
+    {
+      $group: { _id: null, max: { $max: "$_maxPrice" } },
+    },
+  ]);
 
   return {
-    maxPriceRange: topPriced?.[0]?.product_price ?? 0,
+    maxPriceRange: maxAgg?.[0]?.max ?? 0,
     brands,
     attributes,
     specifications: attributes, // FE back-compat alias (remove in Phase 5)
@@ -240,7 +314,58 @@ export const findAllActiveFilteredProductServices = async (
               variation_price_delta: "$$variation.variation_price_delta",
               variation_quantity: "$$variation.variation_quantity",
               variation_image: "$$variation.variation_image",
+              is_active: "$$variation.is_active",
             },
+          },
+        },
+      },
+    },
+    // Fix #22 — compute effective price + stock that mirrors what the
+    // storefront card actually shows the customer:
+    //   - variation product → cheapest active variation's price (StarTech-
+    //     style "from ₹X"); stock = SUM of active variation stocks
+    //   - simple product   → product_price / product_quantity unchanged
+    // This is what user-facing price filter and OOS filter should evaluate
+    // against. Without this, filter checks `product_price` (base) while card
+    // shows `variation_price` (base+delta) → mismatch (e.g. base 600 passes a
+    // 1-608 filter even though final price is 640).
+    {
+      $addFields: {
+        _activeVariations: {
+          $filter: {
+            input: "$variations",
+            as: "v",
+            cond: { $ne: ["$$v.is_active", false] },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        effective_price: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $cond: {
+                if: { $gt: [{ $size: "$_activeVariations" }, 0] },
+                then: { $min: "$_activeVariations.variation_price" },
+                else: "$product_price",
+              },
+            },
+            else: "$product_price",
+          },
+        },
+        effective_stock: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $cond: {
+                if: { $gt: [{ $size: "$_activeVariations" }, 0] },
+                then: { $sum: "$_activeVariations.variation_quantity" },
+                else: 0,
+              },
+            },
+            else: { $ifNull: ["$product_quantity", 0] },
           },
         },
       },
@@ -272,22 +397,23 @@ export const findAllActiveFilteredProductServices = async (
     },
     // Price range + availability (brand active already ensured by status? brand
     // is optional, so keep the active-or-null guard).
+    // Fix #22 — filter on effective_price + effective_stock (variation-aware).
     {
       $match: {
         $and: [
           { $or: [{ "brand.brand_status": "active" }, { brand: null }] },
           {
-            product_price: { $gte: minPrice, $lte: maxPrice },
+            effective_price: { $gte: minPrice, $lte: maxPrice },
           },
           ...(availability.length
             ? [
                 {
                   $or: [
                     ...(availability.includes(0)
-                      ? [{ product_quantity: { $lte: 0 } }]
+                      ? [{ effective_stock: { $lte: 0 } }]
                       : []),
                     ...(availability.includes(1)
-                      ? [{ product_quantity: { $gt: 0 } }]
+                      ? [{ effective_stock: { $gt: 0 } }]
                       : []),
                   ],
                 },

@@ -163,6 +163,21 @@ const settingSchema = new Schema<ISettingInterface>(
     loyalty_earn_rate: { type: Number, default: 0 },
     loyalty_redeem_rate: { type: Number, default: 0 },
     loyalty_max_redeem_percent: { type: Number, default: 50 },
+
+    // SKU / Barcode / QR (Phase 1) — owner-tunable per-shop. SKU pattern:
+    // <PREFIX>-<CORE_NOUN>-<AXIS1..3>-<HASH>; strip_words drives which words
+    // are dropped from product_name when extracting the core noun.
+    sku_prefix: { type: String, default: "FS" },
+    barcode_auto_generate: { type: Boolean, default: true },
+    barcode_default_format: {
+      type: String,
+      enum: ["CODE128", "EAN13", "UPC", "ITF14"],
+      default: "CODE128",
+    },
+    // QR payload root — defaults to env.FRONTEND_PUBLIC_URL when blank. Allows
+    // per-deploy override (e.g. staging vs production storefront hostname)
+    // without redeploying the backend.
+    qr_storefront_base_url: { type: String },
   },
   { timestamps: true },
 );

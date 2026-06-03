@@ -71,6 +71,22 @@ const categorySchema = new Schema<ICategoryInterface>(
       default: null,
     },
 
+    // Phase B — attribute suggestions inherited by descendants and used to
+    // pre-populate product form / storefront filter sidebar. Resolved with
+    // parent-chain merge by resolveCategoryDefaults().
+    default_variant_attributes: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "attributes",
+      },
+    ],
+    default_filter_attributes: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "attributes",
+      },
+    ],
+
     category_publisher_id: {
       type: Schema.Types.ObjectId,
       ref: "admins",

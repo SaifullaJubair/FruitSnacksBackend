@@ -5,6 +5,7 @@ import {
   findAllDashboardCategory,
   getCategoryBreadcrumb,
   getCategoryChildren,
+  getCategoryDefaults,
   getCategoryTree,
   getSixFeaturedCategory,
   postCategory,
@@ -50,5 +51,9 @@ router.route("/breadcrumb/:id").get(getCategoryBreadcrumb);
 
 // Direct children of one node (drill-down). :id = node id, or "root".
 router.route("/children/:id").get(getCategoryChildren);
+
+// Phase B — resolved default attributes (parent-merged, dead-ref filtered).
+// Public — used by admin product form auto-apply + storefront filter fallback.
+router.route("/defaults/:id").get(getCategoryDefaults);
 
 export const CategoryRoutes = router;

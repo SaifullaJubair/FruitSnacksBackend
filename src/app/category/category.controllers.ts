@@ -16,12 +16,57 @@ import {
   getCategoryTreeServices,
   getSixFeaturedCategoryServices,
   postCategoryServices,
+  resolveCategoryDefaults,
   updateCategoryServices,
 } from "./category.services";
 import { FileUploadHelper } from "../../helpers/image.upload";
 import ApiError from "../../errors/ApiError";
 import * as fs from "fs";
 import CategoryModel from "./category.model";
+
+// Phase B — normalize default_*_attributes arrays from multipart/JSON bodies.
+// Admin sends these as JSON-stringified arrays inside multipart form-data
+// (multer collapses repeated keys to the last value, so we can't rely on
+// repeated-key arrays here). Pure JSON requests send a real array directly.
+// "" / "[]" → explicit empty; missing → leave alone (don't wipe existing).
+const normalizeAttributeArrays = (body: any): void => {
+  for (const key of [
+    "default_variant_attributes",
+    "default_filter_attributes",
+  ]) {
+    const raw = body?.[key];
+    if (raw === undefined || raw === null) continue;
+    if (Array.isArray(raw)) {
+      body[key] = raw
+        .map((v: any) => (typeof v === "string" ? v.trim() : v))
+        .filter((v: any) => v);
+      continue;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "[]") {
+        body[key] = [];
+        continue;
+      }
+      // Try JSON parse first (admin form sends stringified array).
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            body[key] = parsed
+              .map((v: any) => (typeof v === "string" ? v.trim() : v))
+              .filter((v: any) => v);
+            continue;
+          }
+        } catch (_e) {
+          // fall through
+        }
+      }
+      // Fallback: treat as single id.
+      body[key] = [trimmed];
+    }
+  }
+};
 
 // Get the full nested category tree (root nodes with nested children)
 export const getCategoryTree: RequestHandler = async (
@@ -30,7 +75,8 @@ export const getCategoryTree: RequestHandler = async (
   next: NextFunction
 ): Promise<ICategoryInterface | any> => {
   try {
-    const result: any = await getCategoryTreeServices();
+    const includeInactive = req.query?.includeInactive === "true";
+    const result: any = await getCategoryTreeServices(includeInactive);
     return sendResponse<ICategoryInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -112,6 +158,7 @@ export const postCategory: RequestHandler = async (
       req.body
     ) {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -209,6 +256,7 @@ export const postCategory: RequestHandler = async (
     } else {
       // No file uploaded — child/leaf nodes in the tree may have no logo/video.
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       if (!requestData?.category_name || !requestData?.category_slug) {
         throw new ApiError(400, "Category name and slug are required");
       }
@@ -335,6 +383,7 @@ export const updateCategory: RequestHandler = async (
       req.body
     ) {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -446,6 +495,7 @@ export const updateCategory: RequestHandler = async (
       }
     } else {
       const requestData = req.body;
+      normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_slug: requestData?.category_slug,
@@ -498,6 +548,28 @@ export const updateCategory: RequestHandler = async (
         throw new ApiError(400, "Category Update Failed !");
       }
     }
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// Phase B — resolved category defaults (parent-merged, dead-ref filtered).
+// Public endpoint — used by admin product form for auto-apply + by storefront
+// filter sidebar fallback. Returns hydrated attribute docs (not just ids) so
+// the consumer doesn't need a second populate round-trip.
+export const getCategoryDefaults: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<ICategoryInterface | any> => {
+  try {
+    const result = await resolveCategoryDefaults(req.params.id);
+    return sendResponse<any>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Category defaults resolved successfully !",
+      data: result,
+    });
   } catch (error: any) {
     next(error);
   }

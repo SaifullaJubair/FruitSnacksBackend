@@ -11,6 +11,11 @@ interface attribute_valuesArray {
 }
 
 export interface attributesArray {
+  // Phase 0 fix — source attribute._id snapshot. Without this, the frontend
+  // helper `variantAxisAttributes()` cannot reconcile this snapshot row with
+  // `variant_axes[].attribute_id`, so the PDP picker never renders. The
+  // Mongoose-autogen subdoc `_id` is unrelated and unsafe to use here.
+  attribute_id?: Types.ObjectId;
   attribute_name?: string;
   attribute_values?: attribute_valuesArray[];
 }
@@ -101,6 +106,7 @@ export interface IProductInterface {
   product_slug: string;
   product_slug_history?: string[];
   product_sku?: string;
+  product_sku_hash?: string;
   product_status: "active" | "in-active";
   // Phase L: category is OPTIONAL — products can publish without one.
   category_id?: Types.ObjectId | ICategoryInterface;
@@ -113,6 +119,8 @@ export interface IProductInterface {
   variant_axes?: IVariantAxis[];
   barcode?: string;
   barcode_image?: string;
+  barcode_image_key?: string;
+  barcode_format?: "CODE128" | "EAN13" | "UPC" | "ITF14" | "CUSTOM";
   description: string;
   main_image?: string;
   main_image_key?: string;
@@ -191,6 +199,8 @@ export interface IProductInterface {
   qr_code?: string;
   qr_code_image?: string;
   qr_code_image_key?: string;
+  qr_code_updated_at?: Date | string;
+  qr_short_code?: string;
   /**
    * Product type — what the order/checkout/fulfillment flow should do with
    * this product. `simple` = current single-product behaviour (default);
@@ -236,6 +246,8 @@ export const productSearchableField = [
   "product_name",
   "product_slug",
   "product_status",
+  "product_sku",
+  "barcode",
   "description",
   "short_description",
   "badge_text",

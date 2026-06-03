@@ -238,6 +238,11 @@ export const postOrder: any = async (
             product_main_price: line?.product_main_price,
             product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
+            // Phase 1 — snapshot SKU + barcode at placement.
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
           },
         ],
         { session },
@@ -445,6 +450,11 @@ export const postSingleOrder: any = async (
             product_main_price: line?.product_main_price,
             product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
+            // Phase 1 — snapshot SKU + barcode at placement.
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
           },
         ],
         { session },

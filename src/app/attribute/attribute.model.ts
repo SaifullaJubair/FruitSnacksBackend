@@ -42,6 +42,13 @@ const attributeSchema = new Schema<IAttributeInterface>(
           enum: ["active", "in-active"],
           default: "active",
         },
+        // Phase A: per-value weight in grams. Only consumed when the parent
+        // attribute has tracks_weight=true. Allowed to be null for values
+        // that aren't weight-bearing (e.g. a Color value on a hybrid axis).
+        weight_grams_value: {
+          type: Number,
+          default: null,
+        },
       },
     ],
     attribute_publisher_id: {
@@ -52,6 +59,19 @@ const attributeSchema = new Schema<IAttributeInterface>(
     attribute_updated_by: {
       type: Schema.Types.ObjectId,
       ref: "admins",
+    },
+    // Phase A: how this attribute renders in admin + storefront. Defaults
+    // are conservative — "button" + no weight tracking. Migration script
+    // smart-flips legacy color attributes to "swatch" if any value has a
+    // hex code, so PDP doesn't regress between Phase A and Phase C.
+    display_type: {
+      type: String,
+      enum: ["swatch", "button", "dropdown"],
+      default: "button",
+    },
+    tracks_weight: {
+      type: Boolean,
+      default: false,
     },
   },
   {

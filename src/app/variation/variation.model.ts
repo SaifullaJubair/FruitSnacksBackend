@@ -31,10 +31,20 @@ const variationSchema = new Schema<IVariationInterface>(
       type: Number,
     },
     variation_barcode: {
+      // No inline `index: true` — sparse-unique index declared explicitly
+      // below to avoid Mongoose's duplicate-index warning at boot.
       type: String,
     },
     variation_barcode_image: {
       type: String,
+    },
+    variation_barcode_image_key: {
+      type: String,
+    },
+    variation_barcode_format: {
+      type: String,
+      enum: ["CODE128", "EAN13", "UPC", "ITF14", "CUSTOM"],
+      default: "CODE128",
     },
     // Legacy single image (kept for back-compat — cart/order still read it as
     // the "primary" image when no array is present).
@@ -65,7 +75,9 @@ const variationSchema = new Schema<IVariationInterface>(
       type: String,
     },
     variation_sku: {
-      type: String
+      // No inline `index: true` — sparse-unique index declared explicitly
+      // below to avoid Mongoose's duplicate-index warning at boot.
+      type: String,
     },
     variation_weight_grams: {
       type: Number,
@@ -103,6 +115,11 @@ const variationSchema = new Schema<IVariationInterface>(
     timestamps: true, // Automatically add createdAt and updatedAt fields
   }
 );
+
+// Sparse unique — uniqueness enforced when present; variations without SKU /
+// barcode (legacy docs or simple-variation rows) don't collide.
+variationSchema.index({ variation_sku: 1 }, { unique: true, sparse: true });
+variationSchema.index({ variation_barcode: 1 }, { unique: true, sparse: true });
 
 const VariationModel = model<IVariationInterface>("variations", variationSchema);
 

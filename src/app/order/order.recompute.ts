@@ -57,6 +57,11 @@ export interface RecomputedLine {
   product_grand_total_price: number; // final × quantity
   /** Phase H — effective VAT pct used for this line (override > settings). */
   vat_pct?: number;
+  /** Phase 1 SKU snapshot — written into the OrderProduct doc at placement. */
+  product_sku_snapshot?: string;
+  variation_sku_snapshot?: string;
+  product_barcode_snapshot?: string;
+  variation_barcode_snapshot?: string;
 }
 
 export interface RecomputedOrder {
@@ -226,6 +231,11 @@ export const recomputeOrderTotals = async (
       product_unit_final_price: unit_final,
       product_grand_total_price: grand,
       vat_pct,
+      // Phase 1 — snapshot at placement; immune to later product edits.
+      product_sku_snapshot: product?.product_sku || undefined,
+      variation_sku_snapshot: variation?.variation_sku || undefined,
+      product_barcode_snapshot: product?.barcode || undefined,
+      variation_barcode_snapshot: variation?.variation_barcode || undefined,
     });
   }
 

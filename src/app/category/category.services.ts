@@ -6,6 +6,7 @@ import {
 } from "./category.interface";
 import CategoryModel from "./category.model";
 import ProductModel from "../product/product.model";
+import AttributeModel from "../attribute/attribute.model";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Nested-tree helpers
@@ -50,8 +51,17 @@ export const postCategoryServices = async (
 // Build the full category tree (root nodes with nested children, infinite depth).
 // One DB read of all active categories, assembled into a tree in memory —
 // avoids recursive lookups. Each node gets a `children: []` array.
-export const getCategoryTreeServices = async (): Promise<any[]> => {
-  const all = await CategoryModel.find({ category_status: { $ne: "in-active" } })
+//
+// Phase D Bug #6: when `includeInactive=true` is passed (admin product form),
+// inactive categories are also returned so the picker can render them as
+// disabled/greyed-out instead of hiding them silently. Public consumers
+// (storefront filter, etc.) keep the default active-only behavior.
+export const getCategoryTreeServices = async (
+  includeInactive = false,
+): Promise<any[]> => {
+  const all = await CategoryModel.find(
+    includeInactive ? {} : { category_status: { $ne: "in-active" } },
+  )
     .sort({ category_serial: 1 })
     .select("-__v")
     .lean();
@@ -221,6 +231,128 @@ export const deleteCategoryServices = async (
     }
   );
   return Category;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase B — Category default attribute resolver
+// ──────────────────────────────────────────────────────────────────────────
+
+// Walks the parent chain (current → root) and merges default_variant_attributes
+// and default_filter_attributes with parent-first, dedup-by-id, first-occurrence
+// semantics. Self-healing: dead refs (attributes that were deleted but linger
+// in arrays) are filtered out at the end so the admin form / sidebar never
+// renders orphans.
+//
+// Safety nets:
+//   - visited Set breaks circular parent refs (A→B→A)
+//   - 10-level cap as belt-and-suspenders
+//   - dead-ref skip via single $in fetch against attribute collection
+export const resolveCategoryDefaults = async (
+  categoryId: string | Types.ObjectId,
+): Promise<{
+  default_variant_attributes: any[];
+  default_filter_attributes: any[];
+}> => {
+  const visited = new Set<string>();
+  const chain: Array<{
+    variants: Types.ObjectId[];
+    filters: Types.ObjectId[];
+  }> = [];
+
+  let cursorId: Types.ObjectId | string | null = categoryId;
+  let safety = 0;
+  while (cursorId && safety < 10) {
+    const key = String(cursorId);
+    if (visited.has(key)) break;
+    visited.add(key);
+
+    const node: any = await CategoryModel.findById(cursorId)
+      .select(
+        "_id parent_id default_variant_attributes default_filter_attributes",
+      )
+      .lean();
+    if (!node) break;
+
+    chain.push({
+      variants: (node.default_variant_attributes || []) as Types.ObjectId[],
+      filters: (node.default_filter_attributes || []) as Types.ObjectId[],
+    });
+    cursorId = node.parent_id || null;
+    safety += 1;
+  }
+
+  // Parent-first then own — chain is current→root, so reverse for parent→child
+  // walk, then dedup keeps first occurrence (the earliest ancestor that listed
+  // the attribute).
+  const merge = (key: "variants" | "filters"): Types.ObjectId[] => {
+    const seen = new Set<string>();
+    const out: Types.ObjectId[] = [];
+    for (const layer of [...chain].reverse()) {
+      for (const id of layer[key]) {
+        const idKey = String(id);
+        if (!seen.has(idKey)) {
+          seen.add(idKey);
+          out.push(id);
+        }
+      }
+    }
+    return out;
+  };
+
+  const variantIds = merge("variants");
+  const filterIds = merge("filters");
+
+  // Self-heal dead refs via one $in fetch covering BOTH lists.
+  const allIds = Array.from(
+    new Set([...variantIds, ...filterIds].map((id) => String(id))),
+  ).map((s) => new Types.ObjectId(s));
+
+  const liveAttrs: any[] = allIds.length
+    ? await AttributeModel.find({ _id: { $in: allIds } })
+        .select("_id attribute_name display_type tracks_weight attribute_status")
+        .lean()
+    : [];
+  const liveMap = new Map<string, any>(
+    liveAttrs.map((a) => [String(a._id), a]),
+  );
+
+  const hydrate = (ids: Types.ObjectId[]): any[] =>
+    ids
+      .map((id) => liveMap.get(String(id)))
+      .filter((a) => a && a.attribute_status !== "in-active");
+
+  return {
+    default_variant_attributes: hydrate(variantIds),
+    default_filter_attributes: hydrate(filterIds),
+  };
+};
+
+// Counts how many distinct attribute VALUES are actually used by products in
+// a given set. Single aggregation: $unwind product_attributes → $unwind values
+// → $group by value._id. Used by the storefront filter sidebar to hide
+// 0-count values (industry-standard "hide empty" behavior).
+//
+// Caller passes productIds (already filtered by category, status, etc.).
+export const countAttributeValueUsage = async (
+  productIds: Types.ObjectId[],
+): Promise<Record<string, number>> => {
+  if (!productIds.length) return {};
+  const rows = await ProductModel.aggregate([
+    { $match: { _id: { $in: productIds } } },
+    { $unwind: "$product_attributes" },
+    { $unwind: "$product_attributes.values" },
+    {
+      $group: {
+        _id: "$product_attributes.values._id",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const map: Record<string, number> = {};
+  for (const r of rows) {
+    if (r?._id) map[String(r._id)] = r.count;
+  }
+  return map;
 };
 
 // Tree-integrity guards used before deleting a node.

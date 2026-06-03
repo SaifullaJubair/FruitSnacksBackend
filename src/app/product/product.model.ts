@@ -42,7 +42,20 @@ const productSchema = new Schema<IProductInterface>(
         type: String,
       },
     ],
+    // Phase-1 SKU/Barcode/QR. SKU follows pattern
+    // `<PREFIX>-<CORE_NOUN>-<AXIS1>-<AXIS2>-<AXIS3>-<HASH>` (variations share
+    // the parent hash). Sparse unique index so products without SKU don't
+    // collide. Once set, the SKU is locked in the admin form by default — see
+    // Option C "Edit SKU" warning modal in the admin product form.
     product_sku: {
+      // No inline `index: true` — explicit sparse-unique index below avoids
+      // Mongoose's duplicate-index warning at boot.
+      type: String,
+    },
+    // 6-char nanoid alphanumeric. SHARED across the parent product + every
+    // variation of that product, so variations are visually grouped by SKU.
+    // Immutable across product rename (industry standard, Shopify/Amazon).
+    product_sku_hash: {
       type: String,
     },
     product_status: {
@@ -74,6 +87,16 @@ const productSchema = new Schema<IProductInterface>(
     },
     attributes_details: [
       {
+        // Phase 0 fix — source attribute._id snapshot. Frontend helper
+        // `variantAxisAttributes()` matches this against `variant_axes[]
+        // .attribute_id`. The Mongoose-autogen subdoc `_id` is unrelated
+        // and must NOT be used for that match. Optional only because
+        // pre-Phase-0 documents may not have it until the backfill script
+        // runs — see scripts/backfill-attribute-id.ts.
+        attribute_id: {
+          type: Schema.Types.ObjectId,
+          ref: "attributes",
+        },
         attribute_name: {
           type: String,
         },
@@ -135,10 +158,20 @@ const productSchema = new Schema<IProductInterface>(
     ],
 
     barcode: {
+      // No inline `index: true` — explicit sparse-unique index below avoids
+      // Mongoose's duplicate-index warning at boot.
       type: String,
     },
     barcode_image: {
       type: String,
+    },
+    barcode_image_key: {
+      type: String,
+    },
+    barcode_format: {
+      type: String,
+      enum: ["CODE128", "EAN13", "UPC", "ITF14", "CUSTOM"],
+      default: "CODE128",
     },
     description: {
       type: String,
@@ -381,6 +414,15 @@ const productSchema = new Schema<IProductInterface>(
     qr_code: { type: String },
     qr_code_image: { type: String },
     qr_code_image_key: { type: String },
+    // Last regen timestamp — admin UI can show "stale, regenerate" hint when
+    // the product slug changes after the QR was last built.
+    qr_code_updated_at: { type: Date },
+    // 5-char permanent short code for `/q/<code>` URL pattern. Immutable for
+    // the product's lifetime — domain change or slug change cannot break a
+    // printed QR because the code resolves server-side to the current PDP.
+    // No inline `index: true` — explicit sparse-unique index below avoids
+    // Mongoose's duplicate-index warning at boot.
+    qr_short_code: { type: String },
     product_type: {
       type: String,
       enum: [
@@ -475,6 +517,13 @@ productSchema.post("findOneAndUpdate", async function () {
     await adjustThemeUsage(opts._newThemeId, +1);
   }
 });
+
+// Sparse unique — uniqueness enforced when present; products without SKU /
+// barcode (small shops at launch) don't collide. Sparse:true is REQUIRED for
+// back-compat with existing docs that have no SKU/barcode field at all.
+productSchema.index({ product_sku: 1 }, { unique: true, sparse: true });
+productSchema.index({ barcode: 1 }, { unique: true, sparse: true });
+productSchema.index({ qr_short_code: 1 }, { unique: true, sparse: true });
 
 const ProductModel = model<IProductInterface>("products", productSchema);
 

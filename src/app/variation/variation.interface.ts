@@ -13,6 +13,8 @@ export interface IVariationInterface {
   variation_alert_quantity?: number;
   variation_barcode?: string;
   variation_barcode_image?: string;
+  variation_barcode_image_key?: string;
+  variation_barcode_format?: "CODE128" | "EAN13" | "UPC" | "ITF14" | "CUSTOM";
   variation_image?: string;        // legacy single
   variation_image_key?: string;    // legacy single
   variation_images?: string[];      // multi-image gallery (first = primary)

@@ -21,6 +21,8 @@ import {
   findLowStock,
   generateProductQr,
   bumpProductViewCount,
+  lookupProductByQrCode,
+  ensureBarcodeImage,
 } from "./product.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 const router = express.Router();
@@ -69,6 +71,17 @@ router.route("/low_stock").get(verifyToken("product_show"), findLowStock);
 // Phase F: generate QR for a product (admin) + bump view count (public)
 router.route("/qr").post(verifyToken("product_update"), generateProductQr);
 router.route("/view-count").post(bumpProductViewCount);
+
+// Phase 0.5+ Option 1: lazy barcode image generation. Admin print modal calls
+// this when it has the barcode NUMBER but no IMAGE URL. Idempotent — returns
+// cached URL if already generated.
+router
+  .route("/ensure-barcode-image")
+  .post(verifyToken("product_update"), ensureBarcodeImage);
+
+// Phase 1 (redesigned): public lookup by /q/<short_code> for the storefront
+// short-URL redirect route. No auth — printed QR labels are public artifacts.
+router.route("/by-qr-code/:code").get(lookupProductByQrCode);
 
 // get all dashboard product
 router.route("/dashboard").get(verifyToken("product_show"), findAllDashboardProduct);

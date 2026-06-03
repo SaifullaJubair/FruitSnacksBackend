@@ -146,6 +146,12 @@ export interface ISettingInterface {
   loyalty_redeem_rate?: number;
   // Optional cap so a single order can't be 100% paid with points.
   loyalty_max_redeem_percent?: number;
+
+  // SKU / Barcode / QR (Phase 1) — owner-tunable per-shop.
+  sku_prefix?: string;
+  barcode_auto_generate?: boolean;
+  barcode_default_format?: "CODE128" | "EAN13" | "UPC" | "ITF14";
+  qr_storefront_base_url?: string;
 }
 
 export interface IManualMfsMethod {

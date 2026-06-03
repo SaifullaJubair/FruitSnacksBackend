@@ -117,7 +117,9 @@ export const findAProductDetailsServices = async (
       product_id: targetProductId,
     })
       .select(
-        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_image_key -variation_sku -createdAt -updatedAt",
+        // variation_sku is INCLUDED — surfaced on PDP for buyer reference.
+        // variation_barcode + image stay EXCLUDED (warehouse-only artifacts).
+        "-__v -variation_buying_price -variation_alert_quantity -variation_barcode -variation_barcode_image -variation_barcode_image_key -variation_image_key -createdAt -updatedAt",
       )
       .lean();
 
@@ -3168,6 +3170,88 @@ export const isImageStillReferenced = (
     if ((v?.variation_images || []).includes(url)) return true;
   }
   return false;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image-swap S3 orphan cleanup (Batch 2 D wire-in).
+//
+// Called from updateProduct AFTER the new product/variation docs are saved,
+// with the BEFORE snapshot (existingProduct + existingVariations) and the
+// AFTER state (nextProduct + nextVariations). Any S3 key that was in the
+// BEFORE state but is no longer referenced anywhere in the AFTER state gets
+// deleted from S3 (best-effort — failures swallowed, monthly orphan cron
+// will catch stragglers).
+//
+// Cross-product reuse is NOT checked (per owner decision). Within-product
+// reuse IS checked — if the admin reassigns the same URL to a different slot
+// (e.g. moves main_image into other_images), the URL stays referenced and
+// is not deleted.
+// ─────────────────────────────────────────────────────────────────────────────
+const collectKeysFromState = (
+  product: any,
+  variations: any[],
+): { keys: Set<string>; urls: Set<string> } => {
+  const keys = new Set<string>();
+  const urls = new Set<string>();
+  if (product?.main_image) urls.add(product.main_image);
+  if (product?.main_image_key) keys.add(product.main_image_key);
+  if (product?.size_chart) urls.add(product.size_chart);
+  if (product?.size_chart_key) keys.add(product.size_chart_key);
+  if (product?.main_video) urls.add(product.main_video);
+  if (product?.main_video_key) keys.add(product.main_video_key);
+  (product?.other_images || []).forEach((o: any) => {
+    if (o?.other_image) urls.add(o.other_image);
+    if (o?.other_image_key) keys.add(o.other_image_key);
+  });
+  (variations || []).forEach((v: any) => {
+    if (v?.variation_image) urls.add(v.variation_image);
+    if (v?.variation_image_key) keys.add(v.variation_image_key);
+    (v?.variation_images || []).forEach((u: string) => u && urls.add(u));
+    (v?.variation_images_keys || []).forEach((k: string) => k && keys.add(k));
+    if (v?.variation_video) urls.add(v.variation_video);
+    if (v?.variation_video_key) keys.add(v.variation_video_key);
+  });
+  return { keys, urls };
+};
+
+export const cleanupOrphanedProductMedia = async (
+  prevProduct: any,
+  prevVariations: any[],
+  nextProductId: string,
+): Promise<{ deleted: number; skipped: number }> => {
+  const prev = collectKeysFromState(prevProduct, prevVariations);
+  const nextProduct = await ProductModel.findById(nextProductId).lean();
+  const nextVariations = await VariationModel.find({ product_id: nextProductId })
+    .select(
+      "variation_image variation_image_key variation_images variation_images_keys variation_video variation_video_key",
+    )
+    .lean();
+  const next = collectKeysFromState(nextProduct, nextVariations);
+
+  let deleted = 0;
+  let skipped = 0;
+  for (const key of prev.keys) {
+    if (!key) continue;
+    if (next.keys.has(key)) {
+      skipped++;
+      continue;
+    }
+    // Key dropped from the doc — also check whether the URL form still lives
+    // somewhere (defensive — admin moving URL between slots without key).
+    const urlForKey = Array.from(prev.urls).find((u) => u.includes(key));
+    if (urlForKey && next.urls.has(urlForKey)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await FileUploadHelper.deleteFromSpaces(key);
+      deleted++;
+    } catch {
+      // Best-effort. Monthly orphan-cleanup cron handles stragglers.
+      skipped++;
+    }
+  }
+  return { deleted, skipped };
 };
 
 // Delete a Product — cascades:

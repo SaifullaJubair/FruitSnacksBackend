@@ -56,6 +56,12 @@ const orderProductSchema = new Schema<IOrderProductInterface>(
       ref: "users",
       required: true,
     },
+
+    // Snapshot at placement (Phase 1 SKU/Barcode/QR). Write-once.
+    product_sku_snapshot: { type: String },
+    variation_sku_snapshot: { type: String },
+    product_barcode_snapshot: { type: String },
+    variation_barcode_snapshot: { type: String },
   },
   {
     timestamps: true,
