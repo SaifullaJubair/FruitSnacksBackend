@@ -3458,19 +3458,23 @@ export const patchProductImagesServices = async (
       throw new ApiError(400, "ordered_keys required");
     }
     const existing = (product.other_images as any[]) || [];
+    // Legacy uploads may have entries without `other_image_key`. They can't
+    // appear in `ordered_keys` (FE filters them out), so the keyed-equality
+    // check would falsely 400. Fix: only enforce length parity against the
+    // KEYED subset; keyless legacy entries are preserved appended to the end.
+    const keyed = existing.filter((o: any) => o?.other_image_key);
+    const keyless = existing.filter((o: any) => !o?.other_image_key);
     const map = new Map<string, any>(
-      existing.map((o: any) => [o?.other_image_key, o]),
+      keyed.map((o: any) => [o.other_image_key, o]),
     );
-    const reordered = orderedKeys
-      .map((k) => map.get(k))
-      .filter(Boolean);
-    if (reordered.length !== existing.length) {
+    const reordered = orderedKeys.map((k) => map.get(k)).filter(Boolean);
+    if (reordered.length !== keyed.length) {
       throw new ApiError(
         400,
-        "ordered_keys must reference every existing image exactly once",
+        "ordered_keys must reference every keyed image exactly once",
       );
     }
-    product.other_images = reordered as any;
+    product.other_images = [...reordered, ...keyless] as any;
     await product.save();
   } else {
     throw new ApiError(400, `Unknown mode: ${mode}`);
