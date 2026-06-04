@@ -38,13 +38,39 @@ export const getSettingServices = async (): Promise<
   return getSetting || [];
 };
 
-// admin-only — returns FULL doc including secrets. Caller (controller)
-// must guard with verifyToken("setting_secrets_update").
-export const getSettingWithSecretsServices = async (): Promise<
-  ISettingInterface | null
-> => {
+// admin-only — returns lastFour summary of each secret, NOT the raw
+// values. The admin UI only needs the masked display (`••••3a4f`),
+// never the full token. Even though this endpoint is permission-guarded,
+// returning full tokens here would put them in browser memory / DevTools
+// history for no UX gain.
+//
+// To rotate a secret the admin types a NEW value into the form — we
+// never read the existing one back into the browser.
+export const getSettingWithSecretsServices = async (): Promise<any> => {
   const setting = await SettingModel.findOne({}).lean();
-  return setting || null;
+  if (!setting) return null;
+
+  const lastFour = (v: any) =>
+    typeof v === "string" && v.length > 0
+      ? v.length > 4
+        ? v.slice(-4)
+        : v
+      : "";
+
+  // Mirror the public doc + add a `secrets_summary` object with
+  // lastFour-only previews for the admin UI to mask.
+  const publicView: any = { ...setting };
+  for (const f of SETTING_SECRET_FIELDS) {
+    delete publicView[f];
+  }
+  publicView.secrets_summary = SETTING_SECRET_FIELDS.reduce(
+    (acc: any, f) => {
+      acc[f] = lastFour((setting as any)[f]);
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
+  return publicView;
 };
 
 // admin-only — patches ONLY secret fields. Other fields ignored even if
@@ -75,7 +101,13 @@ export const updateSettingSecretsServices = async (
 
   await SettingModel.updateOne({ _id: setting._id }, { $set: patch });
   invalidateSettingCache();
-  const updated = await SettingModel.findById(setting._id).lean();
+  // Strip secrets from the returned doc — even though this endpoint is
+  // admin-only, secrets in a PATCH response sit in Network/Redux
+  // DevTools history. The admin already knows what they typed; the
+  // updated doc just confirms which non-secret fields surround it.
+  const updated = await SettingModel.findById(setting._id)
+    .select(PUBLIC_PROJECTION)
+    .lean();
   return updated;
 };
 
