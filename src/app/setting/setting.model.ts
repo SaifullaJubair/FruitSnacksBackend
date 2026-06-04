@@ -3,8 +3,10 @@ import { ISettingInterface } from "./setting.interface";
 
 const settingSchema = new Schema<ISettingInterface>(
   {
+    // M28 currency tri-field — see setting.interface.ts for rationale.
     currency_symbol: { type: String },
     currency_code: { type: String },
+    currency_name: { type: String },
     inside_dhaka_shipping_charge: { type: Number },
     outside_dhaka_shipping_charge: { type: Number },
     inside_dhaka_shipping_days: { type: Number },

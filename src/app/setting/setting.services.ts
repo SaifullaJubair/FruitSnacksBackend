@@ -11,11 +11,46 @@ export const getSettingServices = async (): Promise<
 };
 
 // Currency code from settings (singleton). Falls back to "BDT" when unset.
+// Used by payment gateways (SSLCommerz expects ISO 4217) + product feed XML.
 export const getCurrencyCode = async (): Promise<string> => {
   const setting: any = await SettingModel.findOne({})
     .select("currency_code")
     .lean();
   return setting?.currency_code || "BDT";
+};
+
+// M28: symbol for "৳500" style prefix display. Fallback "৳" matches the
+// historical hardcoded default; any clone can override via Admin Settings.
+export const getCurrencySymbol = async (): Promise<string> => {
+  const setting: any = await SettingModel.findOne({})
+    .select("currency_symbol")
+    .lean();
+  return setting?.currency_symbol || "৳";
+};
+
+// M28: name for spelled-out display ("500 টাকা"). Used in SMS/email/order
+// confirmation copy where symbol alone reads awkwardly. Fallback "টাকা".
+export const getCurrencyName = async (): Promise<string> => {
+  const setting: any = await SettingModel.findOne({})
+    .select("currency_name")
+    .lean();
+  return setting?.currency_name || "টাকা";
+};
+
+// M28: bundle accessor — saves a roundtrip when caller needs more than one.
+export const getCurrencyBundle = async (): Promise<{
+  symbol: string;
+  code: string;
+  name: string;
+}> => {
+  const setting: any = await SettingModel.findOne({})
+    .select("currency_symbol currency_code currency_name")
+    .lean();
+  return {
+    symbol: setting?.currency_symbol || "৳",
+    code: setting?.currency_code || "BDT",
+    name: setting?.currency_name || "টাকা",
+  };
 };
 
 // Create A Setting

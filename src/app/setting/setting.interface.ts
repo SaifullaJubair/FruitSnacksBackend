@@ -1,7 +1,11 @@
 export interface ISettingInterface {
   _id?: any;
+  // Currency tri-field (M28). Symbol for prefix display ("৳500"), code for
+  // payment-gateway calls + ISO data ("BDT"), name for spelled-out display
+  // ("500 টাকা"). Defaults are Bangladesh; any clone overrides via Admin.
   currency_symbol?: string;
   currency_code?: string;
+  currency_name?: string;
   inside_dhaka_shipping_charge?: number;
   outside_dhaka_shipping_charge?: number;
   inside_dhaka_shipping_days?: number;
