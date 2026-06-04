@@ -240,6 +240,15 @@ export interface IProductInterface {
   group_prices?: Array<{ group: "wholesale" | "vip"; price: number }>;
   /** Per-product VAT override (beats settings.vat_percentage when present + > 0). */
   vat_percentage_override?: number;
+
+  // ── M20 (2026-06-04): per-product delivery rule. Lets owner mark specific
+  // products as "always free shipping", "flat 60 per line", or "free above N
+  // units bought" without changing global settings. Strategy is per-line
+  // additive (Shopify-style) — each line contributes its own shipping cost;
+  // `inherit` lines share the zone charge proportionally.
+  delivery_mode?: "inherit" | "free" | "flat" | "qty_threshold";
+  delivery_flat_amount?: number;
+  delivery_free_after_qty?: number;
 }
 
 export const productSearchableField = [

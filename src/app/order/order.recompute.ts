@@ -62,6 +62,10 @@ export interface RecomputedLine {
   variation_sku_snapshot?: string;
   product_barcode_snapshot?: string;
   variation_barcode_snapshot?: string;
+  /** M20 — per-product delivery rule (captured for recomputeShippingCost). */
+  delivery_mode?: "inherit" | "free" | "flat" | "qty_threshold";
+  delivery_flat_amount?: number;
+  delivery_free_after_qty?: number;
 }
 
 export interface RecomputedOrder {
@@ -100,6 +104,97 @@ export interface RecomputedOrder {
   loyalty_redeem_points?: number;
   loyalty_redeem_amount?: number;
 }
+
+/**
+ * M20 — per-line-additive shipping recompute (server-trusted).
+ *
+ * Why: client-sent shipping_cost was previously trusted. A tampered request
+ * could ship for 0৳. Now server-recomputes from settings + per-product
+ * delivery rules.
+ *
+ * Strategy (owner-locked D1 2026-06-04, Shopify-like):
+ *   - Each line contributes its OWN shipping cost; final = Σ per-line.
+ *   - `inherit` lines share the zone charge proportionally (zone/N).
+ *   - Global free_delivery rule (always / min_order on inherit subtotal)
+ *     applies ONLY to `inherit` lines — explicit per-product overrides
+ *     (free / flat / qty_threshold) bypass it so admins never get
+ *     surprise-discounted.
+ *
+ * Zone axis (D2 lock): use `requestData.billing_state` (= FE's division name,
+ * e.g. "Dhaka" / "Chittagong"). DO NOT use the BE-stored `user_district`
+ * field — the controller swap at order.controller.ts:285-286 means stored
+ * field names don't match their semantic content. Reading the raw request
+ * value sidesteps the legacy swap.
+ */
+const recomputeShippingCost = (
+  requestData: any,
+  lines: RecomputedLine[],
+  settings: any,
+): number => {
+  if (lines.length === 0) return 0;
+
+  // Zone detection — case-insensitive match on division name.
+  const zoneName = String(requestData?.billing_state || "").trim().toLowerCase();
+  const isInsideDhaka = zoneName === "dhaka";
+  const zoneCharge = isInsideDhaka
+    ? Number(settings?.inside_dhaka_shipping_charge) || 0
+    : Number(settings?.outside_dhaka_shipping_charge) || 0;
+
+  const inheritLines = lines.filter(
+    (l) => !l.delivery_mode || l.delivery_mode === "inherit",
+  );
+  const overrideLines = lines.filter(
+    (l) => l.delivery_mode && l.delivery_mode !== "inherit",
+  );
+
+  // Global free-delivery rule (applies only to inherit lines).
+  const inheritSubtotal = inheritLines.reduce(
+    (s, l) => s + l.product_grand_total_price,
+    0,
+  );
+  const freeType = settings?.free_delivery_type;
+  const freeMin = Number(settings?.free_delivery_min_amount) || 0;
+  const globalFreeApplies =
+    settings?.free_delivery_enabled === true &&
+    (freeType === "always" || (freeType === "min_order" && inheritSubtotal >= freeMin));
+
+  const inheritShare =
+    inheritLines.length > 0 && !globalFreeApplies
+      ? Math.round(zoneCharge / inheritLines.length)
+      : 0;
+
+  let total = 0;
+
+  // Inherit lines: each pays its share unless global free applies.
+  total += inheritLines.length * inheritShare;
+
+  // Override lines: apply per-product rule.
+  for (const line of overrideLines) {
+    const mode = line.delivery_mode;
+    if (mode === "free") {
+      // Always free for this product.
+      continue;
+    }
+    if (mode === "flat") {
+      total += Number(line.delivery_flat_amount) || 0;
+      continue;
+    }
+    if (mode === "qty_threshold") {
+      const threshold = Number(line.delivery_free_after_qty) || 0;
+      if (threshold > 0 && line.product_quantity >= threshold) {
+        // Hit threshold — free.
+        continue;
+      }
+      // Below threshold — fall back to inherit-share if any inherit lines
+      // exist, else use zone charge directly (single-product cart with
+      // qty_threshold mode).
+      total += inheritLines.length > 0 ? inheritShare : zoneCharge;
+      continue;
+    }
+  }
+
+  return total;
+};
 
 /**
  * Recompute an order entirely from DB state. Returns server-trusted line items
@@ -236,6 +331,11 @@ export const recomputeOrderTotals = async (
       variation_sku_snapshot: variation?.variation_sku || undefined,
       product_barcode_snapshot: product?.barcode || undefined,
       variation_barcode_snapshot: variation?.variation_barcode || undefined,
+      // M20 — capture per-product delivery rule so recomputeShippingCost can
+      // apply the per-line-additive formula without re-fetching products.
+      delivery_mode: product?.delivery_mode || "inherit",
+      delivery_flat_amount: Number(product?.delivery_flat_amount) || 0,
+      delivery_free_after_qty: Number(product?.delivery_free_after_qty) || 0,
     });
   }
 
@@ -288,8 +388,15 @@ export const recomputeOrderTotals = async (
     }
   }
 
-  // Shipping: trust client for now (B1 scope — recompute later w/ delivery zone).
-  const shipping_cost = Number(requestData?.shipping_cost) || 0;
+  // M20 (2026-06-04): server-recompute shipping — was previously trusted from
+  // client. Per-line-additive (D1) + zone axis = billing_state (D2). Global
+  // free-delivery rule applies ONLY to `inherit` lines so explicit per-product
+  // overrides (free / flat / qty_threshold) never get hidden by the global
+  // rule. See sprint doc M20 section for full formula.
+  //
+  // TODO (post-sprint): per-customer-group shipping interaction — wholesale /
+  // VIP groups may eventually want different rates. YAGNI for this sprint.
+  const shipping_cost = recomputeShippingCost(requestData, lines, setting);
 
   // ── Phase G3 (F1b): cart-side loyalty redeem ─────────────────────────────
   // Buyer optionally asks to redeem `loyalty_redeem_points` at checkout. We

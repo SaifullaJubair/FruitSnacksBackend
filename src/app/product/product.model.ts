@@ -466,6 +466,18 @@ const productSchema = new Schema<IProductInterface>(
       },
     ],
     vat_percentage_override: { type: Number },
+
+    // ── M20 (2026-06-04): per-product delivery rule. Default `inherit` means
+    // this product follows the global zone charge + free-delivery rule. Other
+    // modes override per-line. See order.recompute.ts recomputeShippingCost
+    // for the per-line-additive formula.
+    delivery_mode: {
+      type: String,
+      enum: ["inherit", "free", "flat", "qty_threshold"],
+      default: "inherit",
+    },
+    delivery_flat_amount: { type: Number },
+    delivery_free_after_qty: { type: Number },
   },
   {
     timestamps: true,

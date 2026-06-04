@@ -10,6 +10,7 @@ import {
 import AttributeModel from "./attribute.model";
 import ProductModel from "../product/product.model";
 import {
+  countProductsUsingAttribute,
   deleteAttributeServices,
   findAllAttributeServices,
   findAllAttributeUsingCategoryIDServices,
@@ -312,6 +313,9 @@ export const updateAttribute: RequestHandler = async (
 // admin UpdateAttribute form uses this for the "change will affect N
 // products" warning (MOD #8). product_attributes[].attribute_id is the
 // authoritative reference (variant_axes mirrors it for axis-flagged ones).
+// B2 (2026-06-04) — delegates to shared `countProductsUsingAttribute` helper
+// so this endpoint and the delete guard cannot drift on what counts as "in
+// use". Response shape unchanged for back-compat (still `{ count }`).
 export const getAttributeUsageCount: RequestHandler = async (
   req: Request,
   res: Response,
@@ -320,9 +324,7 @@ export const getAttributeUsageCount: RequestHandler = async (
   try {
     const { id } = req.params;
     if (!id) throw new ApiError(400, "attribute id required");
-    const count = await ProductModel.countDocuments({
-      "product_attributes.attribute_id": id,
-    });
+    const { count } = await countProductsUsingAttribute(id);
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -335,6 +337,11 @@ export const getAttributeUsageCount: RequestHandler = async (
 };
 
 // delete A Attribute item
+// B2 (2026-06-04) — guard: refuse to delete an attribute that is referenced
+// by any product. Returns 409 with the affected count + up to 10 sample
+// product ids so the admin can deep-link to "view affected products" before
+// retrying. Previous commented-out check was hard-blocking without count,
+// the new path is informative.
 export const deleteAAttributeInfo = async (
   req: Request,
   res: Response,
@@ -342,11 +349,18 @@ export const deleteAAttributeInfo = async (
 ) => {
   try {
     const _id = req.body._id;
-    // const existProduct: IProductInterface | null =
-    //   await findAAttributeInProductServices(_id);
-    // if (existProduct) {
-    //   throw new ApiError(400, "This Attribute is exist in products !");
-    // }
+    if (!_id) throw new ApiError(400, "attribute id required");
+
+    const usage = await countProductsUsingAttribute(_id);
+    if (usage.count > 0) {
+      return sendResponse(res, {
+        statusCode: httpStatus.CONFLICT,
+        success: false,
+        message: `Cannot delete — used by ${usage.count} product${usage.count === 1 ? "" : "s"}. Remove from products first.`,
+        data: usage,
+      });
+    }
+
     const result: IAttributeInterface | any = await deleteAttributeServices(
       _id
     );

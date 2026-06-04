@@ -71,6 +71,23 @@ export const findACoupon: RequestHandler = async (
     ) {
       throw new ApiError(400, "Coupon is expired");
     }
+    // M18: date-range validation. Mirrors order.recompute.ts logic so the cart
+    // UI claim and the order placement recompute agree on the same valid
+    // window. end_date uses end-of-day grace (+ 86400000ms) so a coupon dated
+    // "ends 2026-06-04" stays valid through that whole day.
+    const now = new Date();
+    const start = result?.coupon_start_date
+      ? new Date(result.coupon_start_date)
+      : null;
+    const end = result?.coupon_end_date
+      ? new Date(result.coupon_end_date)
+      : null;
+    if (start && now < start) {
+      throw new ApiError(400, "Coupon is not yet active");
+    }
+    if (end && now > new Date(end.getTime() + 86400000)) {
+      throw new ApiError(400, "Coupon has expired");
+    }
     if (result?.coupon_customer_type === "specific") {
       if (result?.coupon_specific_customer?.length > 0) {
         const isCustomerAllowed = result?.coupon_specific_customer?.some(

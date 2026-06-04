@@ -34,6 +34,7 @@ import {
   otpClearFields,
   OTP_MAX_ATTEMPTS,
 } from "../../utils/auth.otp";
+import { normalizeBdPhone } from "../../utils/phone";
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
 const jwt = require("jsonwebtoken");
@@ -117,42 +118,55 @@ export const postLogUser: RequestHandler = async (
   next: NextFunction,
 ) => {
   try {
-    const { user_password, user_phone } = req.body;
+    const { user_password, user_phone: rawPhone } = req.body;
 
-    if (!user_password || !user_phone)
+    if (!user_password || !rawPhone)
       throw new ApiError(400, "Phone and Password are required.");
 
-    const findUser: any = await UserModel.findOne({ user_phone });
+    // B1 (2026-06-04) — normalize then try BOTH the normalized phone AND the
+    // original. Legacy data in the DB may still be saved in a non-canonical
+    // shape; the backfill script will rewrite it but until then we look up
+    // either way so existing accounts keep working.
+    const user_phone = normalizeBdPhone(rawPhone);
+    const findUser: any = await UserModel.findOne({
+      $or: [{ user_phone }, { user_phone: rawPhone }],
+    });
     if (!findUser) throw new ApiError(400, "User not found.");
     if (findUser.user_status === "in-active")
       throw new ApiError(400, "Invalid User!");
 
+    // B1/D3 (2026-06-04) — security fix. The previous behaviour silently set
+    // whatever the caller typed as the account password when `user_password`
+    // was empty in the DB (the typical state for guest-order auto-created
+    // users via `findOrCreateUser`). Anyone who knew the victim's phone
+    // number could own that account by hitting `/login` once with any
+    // password string.
+    //
+    // Anonymous checkout is NOT affected — guest-order placement still
+    // creates the user with an empty password as it always did. What
+    // changed: the first time that user wants to SIGN IN, they must go
+    // through the OTP-gated set-password flow (`/forgetPassword` →
+    // `/verifyOTP` → `/setNewPassword`).
     if (!findUser.user_password) {
-      const hashedPassword = await bcrypt.hash(user_password, saltRounds);
-      const result = await UserModel.updateOne(
-        { user_phone },
-        {
-          user_password: hashedPassword,
-          user_verified: true,
-          user_type: "registered",
-        },
-        { runValidators: true },
+      throw new ApiError(
+        400,
+        "Account exists but no password set. Please use 'Forgot Password' to set one via OTP.",
       );
-      if (result.modifiedCount === 0)
-        throw new ApiError(400, "User update failed!");
-    } else {
-      const isPasswordValid = await bcrypt.compare(
-        user_password,
-        findUser.user_password,
-      );
-      if (!isPasswordValid) throw new ApiError(400, "Password does not match!");
     }
+    const isPasswordValid = await bcrypt.compare(
+      user_password,
+      findUser.user_password,
+    );
+    if (!isPasswordValid) throw new ApiError(400, "Password does not match!");
 
     // Phase D: token now carries _id (skip per-request phone lookup).
     // Access 30d (cart UX) + 90d refresh — see utils/auth.tokens.
+    // B1: token-stored phone = whatever's on the actual user doc (could be
+    // legacy raw shape pending backfill, never the inbound `rawPhone`).
     const _id = String(findUser._id);
-    const access = signUserAccess({ _id, user_phone });
-    const refresh = signUserRefresh({ _id, user_phone });
+    const tokenPhone = findUser.user_phone || user_phone;
+    const access = signUserAccess({ _id, user_phone: tokenPhone });
+    const refresh = signUserRefresh({ _id, user_phone: tokenPhone });
     setAccessCookie(res, "user", access);
     setRefreshCookie(res, refresh);
 
@@ -197,7 +211,13 @@ export const checkUserPhone: RequestHandler = async (req, res, next) => {
       throw new ApiError(400, "Phone number required!");
     }
 
-    const findUser: any = await UserModel.findOne({ user_phone: phone });
+    // B1 (2026-06-04) — normalize + dual-lookup so legacy data still
+    // resolves until the backfill script runs.
+    const phoneStr = String(phone);
+    const normalized = normalizeBdPhone(phoneStr);
+    const findUser: any = await UserModel.findOne({
+      $or: [{ user_phone: normalized }, { user_phone: phoneStr }],
+    });
 
     if (!findUser) {
       return sendResponse(res, {

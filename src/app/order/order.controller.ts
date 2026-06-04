@@ -41,6 +41,7 @@ import {
 } from "../payment/payment.service";
 import { markAbandonedCartRecoveredByPhone } from "../abandonedCart/abandonedCart.services";
 import { earnOnOrder, redeemOnOrder } from "../loyalty/loyalty.services";
+import { normalizeBdPhone } from "../../utils/phone";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -80,8 +81,19 @@ const findOrCreateUser = async (
     return;
   }
 
+  // B1 (2026-06-04) — normalize the inbound phone so guest-order auto-create
+  // doesn't spin up a duplicate account when the same buyer returns with a
+  // slightly different format. Look up against BOTH the normalized form AND
+  // the raw form until the backfill script rewrites legacy docs.
+  const rawPhone = requestData?.customer_phone;
+  const normalizedPhone = normalizeBdPhone(rawPhone);
+  requestData.customer_phone = normalizedPhone;
+
   const userCheck: any = await UserModel.findOne({
-    user_phone: requestData?.customer_phone,
+    $or: [
+      { user_phone: normalizedPhone },
+      { user_phone: rawPhone },
+    ],
   }).session(session);
 
   if (userCheck) {
