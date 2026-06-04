@@ -89,4 +89,20 @@ export interface IRoleInterface {
   faq_template_delete?: true | false;
   trust_point_show?: true | false;
   trust_point_update?: true | false;
+
+  // M2: Supplier (previously gated with verifyToken("") = any logged-in admin)
+  supplier_show?: true | false;
+  supplier_create?: true | false;
+  supplier_update?: true | false;
+  supplier_delete?: true | false;
+
+  // M3: Payment withdraw + payment method (previously had NO auth at all)
+  payment_withdraw_show?: true | false;
+  payment_withdraw_create?: true | false;
+  payment_withdraw_update?: true | false;
+  payment_withdraw_delete?: true | false;
+  payment_method_show?: true | false;
+  payment_method_create?: true | false;
+  payment_method_update?: true | false;
+  payment_method_delete?: true | false;
 }

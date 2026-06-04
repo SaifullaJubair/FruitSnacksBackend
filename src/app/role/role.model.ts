@@ -342,6 +342,22 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+
+    // ===== M2: Supplier =====
+    supplier_show: { type: Boolean, default: false },
+    supplier_create: { type: Boolean, default: false },
+    supplier_update: { type: Boolean, default: false },
+    supplier_delete: { type: Boolean, default: false },
+
+    // ===== M3: Payment withdraw + payment method =====
+    payment_withdraw_show: { type: Boolean, default: false },
+    payment_withdraw_create: { type: Boolean, default: false },
+    payment_withdraw_update: { type: Boolean, default: false },
+    payment_withdraw_delete: { type: Boolean, default: false },
+    payment_method_show: { type: Boolean, default: false },
+    payment_method_create: { type: Boolean, default: false },
+    payment_method_update: { type: Boolean, default: false },
+    payment_method_delete: { type: Boolean, default: false },
   },
   {
     timestamps: true,

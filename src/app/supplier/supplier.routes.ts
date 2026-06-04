@@ -9,15 +9,18 @@ import {
 } from "./supplier.controllers";
 const router = express.Router();
 
-// Create, Get Supplier
+// M2 fix: previously verifyToken("") accepted any logged-in admin (empty flag
+// bypasses the RBAC check). Now wired to real supplier_* permission flags.
 router
   .route("/")
-  .get(findAllSupplier)
-  .post(verifyToken(""), postSupplier)
-  .patch(verifyToken(""), updateSupplier)
-  .delete(verifyToken(""), deleteASupplierInfo);
+  .get(verifyToken("supplier_show"), findAllSupplier)
+  .post(verifyToken("supplier_create"), postSupplier)
+  .patch(verifyToken("supplier_update"), updateSupplier)
+  .delete(verifyToken("supplier_delete"), deleteASupplierInfo);
 
 // get all Supplier in dashboard
-router.route("/dashboard").get(verifyToken(""), findAllDashboardSupplier);
+router
+  .route("/dashboard")
+  .get(verifyToken("supplier_show"), findAllDashboardSupplier);
 
 export const SupplierRoutes = router;
