@@ -25,6 +25,24 @@ export interface IUserInterface {
 
   // Phase G3 — loyalty points balance (separate from wallet_amount currency).
   loyalty_points?: number;
+
+  // S6 (2026-06-04) — saved shipping addresses. Embedded array on the user
+  // doc (single-shop scale; per-tenant in future SaaS migration). Exactly
+  // one entry has is_default=true; backend enforces this invariant on every
+  // mutation. Orders snapshot delivery info at place-time so deleting an
+  // address here never breaks past order history.
+  addresses?: IUserAddress[];
+}
+
+export interface IUserAddress {
+  _id?: any;
+  label?: string;
+  recipient_name?: string;
+  recipient_phone?: string;
+  division?: string;
+  district?: string;
+  address_line?: string;
+  is_default?: boolean;
 }
 
 export const userSearchableField = [

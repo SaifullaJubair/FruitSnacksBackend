@@ -45,6 +45,30 @@ const userSchema = new Schema<IUserInterface>(
 
     // Phase G3 — loyalty points balance.
     loyalty_points: { type: Number, default: 0 },
+
+    // S6 (2026-06-04) — saved shipping addresses. See IUserAddress in the
+    // interface for field semantics. Backend enforces exactly-one default
+    // on every mutation; deleting the default promotes the first remaining
+    // address. Existing docs without this field still work via the default.
+    addresses: {
+      type: [
+        new Schema(
+          {
+            label: { type: String, maxlength: 50 },
+            recipient_name: { type: String, maxlength: 100 },
+            recipient_phone: { type: String, maxlength: 20 },
+            division: { type: String, maxlength: 100 },
+            district: { type: String, maxlength: 100 },
+            // Cap matches Pathao's billing-address limit so we don't queue
+            // an order at place-time that the courier rejects.
+            address_line: { type: String, maxlength: 250 },
+            is_default: { type: Boolean, default: false },
+          },
+          { timestamps: true, _id: true },
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );

@@ -12,8 +12,15 @@ import {
   verifyUserOTP,
   refreshUser,
   logoutUserOwn,
+  // S6 (2026-06-04) — address CRUD for the logged-in storefront user.
+  listMyAddresses,
+  addMyAddress,
+  updateMyAddress,
+  deleteMyAddress,
+  setMyDefaultAddress,
 } from "./user.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
+import { verifyUserToken } from "../../middlewares/verify.user.token";
 // F002: per-IP rate limits on public auth/OTP surface.
 import {
   authLimiter,
@@ -61,5 +68,19 @@ router
 router
   .route("/setNewPassword")
   .post(authLimiter, updateforgotPasswordUsersChangeNewPassword);
+
+// S6 (2026-06-04) — saved-address CRUD. All require an active storefront
+// session via verifyUserToken; nothing here affects the anonymous FB-ads
+// checkout flow which keeps using inline billing fields on the order body.
+// `/addresses` (plural) collection; `/address/:address_id` single ops.
+router.route("/addresses").get(verifyUserToken, listMyAddresses);
+router.route("/address").post(verifyUserToken, addMyAddress);
+router
+  .route("/address/:address_id")
+  .patch(verifyUserToken, updateMyAddress)
+  .delete(verifyUserToken, deleteMyAddress);
+router
+  .route("/address/:address_id/default")
+  .patch(verifyUserToken, setMyDefaultAddress);
 
 export const UserRegRoutes = router;

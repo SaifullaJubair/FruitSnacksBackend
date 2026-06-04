@@ -584,3 +584,188 @@ export const logoutUserOwn: RequestHandler = (req, res, next) => {
     next(error);
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S6 (2026-06-04) — Address CRUD for the logged-in storefront user. Embedded
+// `user.addresses[]` (single-shop scale). Invariant: at most one address has
+// is_default=true. Each mutation reasserts this invariant atomically so two
+// concurrent requests can't both end up default. Anonymous FB-ads checkout
+// path is NOT touched here — order.controller.ts still uses the inline
+// billing fields from the request body, not these saved addresses.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const sanitizeAddressInput = (body: any) => {
+  const out: any = {};
+  if (body?.label !== undefined) out.label = String(body.label).slice(0, 50);
+  if (body?.recipient_name !== undefined)
+    out.recipient_name = String(body.recipient_name).slice(0, 100);
+  if (body?.recipient_phone !== undefined)
+    out.recipient_phone = String(body.recipient_phone).slice(0, 20);
+  if (body?.division !== undefined)
+    out.division = String(body.division).slice(0, 100);
+  if (body?.district !== undefined)
+    out.district = String(body.district).slice(0, 100);
+  if (body?.address_line !== undefined)
+    out.address_line = String(body.address_line).slice(0, 250);
+  if (body?.is_default !== undefined) out.is_default = !!body.is_default;
+  return out;
+};
+
+// GET /user/addresses — list logged-in user's saved addresses
+export const listMyAddresses = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const user: any = await UserModel.findById(userId).select("addresses").lean();
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Addresses fetched.",
+      data: user?.addresses || [],
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /user/address — add a new address; if it's the first one (or
+// is_default was sent) it becomes the default and all others are unset.
+export const addMyAddress = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const payload = sanitizeAddressInput(req.body);
+    const user: any = await UserModel.findById(userId);
+    if (!user) throw new ApiError(404, "User not found.");
+    const list: any[] = user.addresses || [];
+    // First address always becomes the default no matter what the client
+    // sent — otherwise checkout has no address to auto-fill from.
+    const makeDefault = list.length === 0 ? true : !!payload.is_default;
+    if (makeDefault) list.forEach((a: any) => (a.is_default = false));
+    list.push({ ...payload, is_default: makeDefault });
+    user.addresses = list;
+    await user.save();
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: "Address added.",
+      data: user.addresses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /user/address/:address_id — edit one field-by-field
+export const updateMyAddress = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const { address_id } = req.params;
+    if (!address_id) throw new ApiError(400, "Missing address_id.");
+    const payload = sanitizeAddressInput(req.body);
+    const user: any = await UserModel.findById(userId);
+    if (!user) throw new ApiError(404, "User not found.");
+    const list: any[] = user.addresses || [];
+    const target = list.find((a: any) => String(a._id) === String(address_id));
+    if (!target) throw new ApiError(404, "Address not found.");
+    // If client flips this row to default, unset every other row first.
+    if (payload.is_default === true) {
+      list.forEach((a: any) => (a.is_default = false));
+    }
+    Object.assign(target, payload);
+    user.addresses = list;
+    await user.save();
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Address updated.",
+      data: user.addresses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /user/address/:address_id — remove; if removed was default,
+// the first remaining address is promoted so the list always has exactly
+// one default when non-empty.
+export const deleteMyAddress = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const { address_id } = req.params;
+    if (!address_id) throw new ApiError(400, "Missing address_id.");
+    const user: any = await UserModel.findById(userId);
+    if (!user) throw new ApiError(404, "User not found.");
+    const list: any[] = user.addresses || [];
+    const idx = list.findIndex(
+      (a: any) => String(a._id) === String(address_id),
+    );
+    if (idx === -1) throw new ApiError(404, "Address not found.");
+    const wasDefault = !!list[idx].is_default;
+    list.splice(idx, 1);
+    if (wasDefault && list.length > 0) {
+      list[0].is_default = true;
+    }
+    user.addresses = list;
+    await user.save();
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Address removed.",
+      data: user.addresses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PATCH /user/address/:address_id/default — explicitly promote one to
+// default. Unsetting the default without picking a new one is not allowed
+// (UI should call update with a different row's is_default=true instead).
+export const setMyDefaultAddress = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const { address_id } = req.params;
+    if (!address_id) throw new ApiError(400, "Missing address_id.");
+    const user: any = await UserModel.findById(userId);
+    if (!user) throw new ApiError(404, "User not found.");
+    const list: any[] = user.addresses || [];
+    const target = list.find((a: any) => String(a._id) === String(address_id));
+    if (!target) throw new ApiError(404, "Address not found.");
+    list.forEach((a: any) => (a.is_default = false));
+    target.is_default = true;
+    user.addresses = list;
+    await user.save();
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Default address updated.",
+      data: user.addresses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
