@@ -4,6 +4,7 @@ import ApiError from "../../errors/ApiError";
 import sendResponse from "../../shared/sendResponse";
 import { IUserInterface, userSearchableField } from "./user.interface";
 import {
+  countDashboardUserServices,
   deleteUserServices,
   findAllDashboardUserServices,
   postUserServices,
@@ -426,28 +427,21 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
   };
 
 // ── Find All Dashboard Users ───────────────────────────────────────────────────
+// B1 (2026-06-04) — accepts optional ?user_type=guest|registered query for
+// the admin customer list Type-column filter chip.
 export const findAllDashboardUser: RequestHandler = async (req, res, next) => {
   try {
-    const { page, limit, searchTerm } = req.query;
+    const { page, limit, searchTerm, user_type } = req.query as Record<
+      string,
+      string
+    >;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
-    const result = await findAllDashboardUserServices(
-      limitNumber,
-      skip,
-      searchTerm,
-    );
-    const andCondition = [];
-    if (searchTerm) {
-      andCondition.push({
-        $or: userSearchableField.map((field) => ({
-          [field]: { $regex: searchTerm, $options: "i" },
-        })),
-      });
-    }
-    const whereCondition =
-      andCondition.length > 0 ? { $and: andCondition } : {};
-    const total = await UserModel.countDocuments(whereCondition);
+    const [result, total] = await Promise.all([
+      findAllDashboardUserServices(limitNumber, skip, searchTerm, user_type),
+      countDashboardUserServices(searchTerm, user_type),
+    ]);
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,

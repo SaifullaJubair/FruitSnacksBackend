@@ -6,6 +6,9 @@ import {
   deleteAProductInfo,
   findADashboardProduct,
   findAllDashboardProduct,
+  findAllDashboardProductRich,
+  patchProductQuick,
+  patchProductImages,
   findAProductDetails,
   findBrandMatchProduct,
   findCartProduct,
@@ -85,6 +88,27 @@ router.route("/by-qr-code/:code").get(lookupProductByQrCode);
 
 // get all dashboard product
 router.route("/dashboard").get(verifyToken("product_show"), findAllDashboardProduct);
+
+// A2 (2026-06-04) — operational list with computed fields (variation_count,
+// stock_total, low/out flags, has_theme, has_page_content). Used by the
+// rewritten admin product list page.
+router
+  .route("/dashboard-rich")
+  .get(verifyToken("product_show"), findAllDashboardProductRich);
+
+// A2 — whitelisted partial update for the inline toggles + per-column edit
+// modals (price/stock/etc). Avoids the full-rebuild trap on /product PATCH.
+router.route("/quick").patch(verifyToken("product_update"), patchProductQuick);
+
+// A2 — Images modal: main swap, add to other, reorder, remove. Body field
+// `mode` chooses the operation. Files via multer.any().
+router
+  .route("/images")
+  .patch(
+    verifyToken("product_update"),
+    FileUploadHelper.ImageUpload.any(),
+    patchProductImages,
+  );
 
 // get a dashboard product
 router.route("/dashboard/:_id").get(findADashboardProduct);

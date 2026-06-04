@@ -380,6 +380,25 @@ export const updateCategoryServices = async (
   }
 };
 
+// M24 — count descendants + attached products for a re-parent confirmation
+// dialog. Cheap pair of countDocuments queries — admin sees the blast radius
+// before they confirm the move.
+export const getReparentImpactServices = async (
+  _id: string,
+): Promise<{ descendant_count: number; product_count: number }> => {
+  const thisIdObj = new Types.ObjectId(_id);
+  const descendant_count = await CategoryModel.countDocuments({
+    category_path: thisIdObj,
+  });
+  const product_count = await ProductModel.countDocuments({
+    $or: [
+      { category_id: thisIdObj },
+      { category_path: thisIdObj },
+    ],
+  });
+  return { descendant_count, product_count };
+};
+
 // Delete a Category
 export const deleteCategoryServices = async (
   _id: string

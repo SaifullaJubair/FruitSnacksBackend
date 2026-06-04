@@ -7,6 +7,7 @@ import {
   getCategoryChildren,
   getCategoryDefaults,
   getCategoryTree,
+  getReparentImpact,
   getSixFeaturedCategory,
   postCategory,
   updateCategory,
@@ -48,6 +49,9 @@ router.route("/dashboard").get(verifyToken("category_show"), findAllDashboardCat
 
 // Breadcrumb (ancestors → node) for one node — keep above /children to avoid clash
 router.route("/breadcrumb/:id").get(getCategoryBreadcrumb);
+
+// M24 — re-parent impact preview (descendant + product counts) for confirm dialog.
+router.route("/reparent-impact/:id").get(verifyToken("category_update"), getReparentImpact);
 
 // Direct children of one node (drill-down). :id = node id, or "root".
 router.route("/children/:id").get(getCategoryChildren);

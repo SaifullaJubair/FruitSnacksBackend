@@ -14,6 +14,10 @@ import {
   deleteProductServices,
   findADashboardProductServices,
   findAllDashboardProductServices,
+  findAllDashboardProductRichServices,
+  countDashboardProductRichServices,
+  patchProductQuickServices,
+  patchProductImagesServices,
   findAProductDetailsServices,
   findBrandMatchProductServices,
   findCartProductServices,
@@ -1705,6 +1709,137 @@ export const findAllDashboardProduct: RequestHandler = async (
       message: "Product Found Successfully !",
       data: result,
       totalData: total,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// A2 (2026-06-04) — operational dashboard list endpoint. Adds annotated
+// fields (variation_count, stock_total, low/out flags, flag tags, has_theme,
+// has_page_content) the new product list page needs. Original /dashboard is
+// left untouched so other consumers keep working.
+export const findAllDashboardProductRich: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<IProductInterface | any> => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      searchTerm,
+      status,
+      stock,
+      has_variation,
+      category_id,
+      brand_id,
+      has_theme,
+      product_type,
+      sort = "new",
+    } = req.query as Record<string, string>;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const filters = {
+      status,
+      stock,
+      has_variation,
+      category_id,
+      brand_id,
+      has_theme,
+      product_type,
+    };
+
+    const [result, total] = await Promise.all([
+      findAllDashboardProductRichServices(
+        limitNumber,
+        skip,
+        searchTerm,
+        filters,
+        sort,
+      ),
+      countDashboardProductRichServices(searchTerm, filters),
+    ]);
+
+    return sendResponse<IProductInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Product list (rich) fetched",
+      data: result,
+      totalData: total,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// A2 — whitelisted partial update for the quick toggles + per-column edit
+// modals. Goes around the full-rebuild `PATCH /product` flow that wipes
+// fields not in the payload.
+export const patchProductQuick: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { _id, ...body } = req.body;
+    const result = await patchProductQuickServices(
+      _id,
+      body,
+      (req as any).user?._id,
+    );
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Product updated",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// A2 — Images modal endpoint: swap main / add to other / reorder / remove.
+// Mode + payload come from req.body; files come from multer.any() (because
+// the field names are fixed: main_image, other_images).
+export const patchProductImages: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { _id, mode, removed_keys, ordered_keys } = req.body;
+    // multer .any() returns an array; group by fieldname for the service.
+    const filesArr = (req.files as any[]) || [];
+    const grouped: any = { main_image: [], other_images: [] };
+    filesArr.forEach((f) => {
+      if (f.fieldname === "main_image") grouped.main_image.push(f);
+      else if (f.fieldname === "other_images") grouped.other_images.push(f);
+    });
+    const parsedRemoved = Array.isArray(removed_keys)
+      ? removed_keys
+      : removed_keys
+        ? JSON.parse(removed_keys)
+        : [];
+    const parsedOrdered = Array.isArray(ordered_keys)
+      ? ordered_keys
+      : ordered_keys
+        ? JSON.parse(ordered_keys)
+        : [];
+    const result = await patchProductImagesServices(
+      _id,
+      mode,
+      grouped,
+      { removed_keys: parsedRemoved, ordered_keys: parsedOrdered },
+      (req as any).user?._id,
+    );
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Product images updated",
+      data: result,
     });
   } catch (error: any) {
     next(error);

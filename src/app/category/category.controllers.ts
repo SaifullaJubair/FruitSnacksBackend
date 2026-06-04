@@ -14,6 +14,7 @@ import {
   getCategoryBreadcrumbServices,
   getCategoryChildrenServices,
   getCategoryTreeServices,
+  getReparentImpactServices,
   getSixFeaturedCategoryServices,
   postCategoryServices,
   resolveCategoryDefaults,
@@ -119,6 +120,25 @@ export const getCategoryBreadcrumb: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Category Breadcrumb Found Successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// M24 — re-parent impact preview (descendant + product counts) for confirm dialog.
+export const getReparentImpact: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await getReparentImpactServices(req.params.id);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Re-parent impact computed",
       data: result,
     });
   } catch (error: any) {

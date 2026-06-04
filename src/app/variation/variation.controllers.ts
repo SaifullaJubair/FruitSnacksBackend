@@ -37,12 +37,19 @@ export const patchVariation: RequestHandler = async (
     const allowedKeys = [
       "variation_weight_grams",
       "variation_badge_text",
+      "variation_badge_icon_key",
       "variation_price",
       "variation_discount_price",
+      "variation_buying_price",
       "variation_quantity",
       "variation_alert_quantity",
       "variation_sku",
       "variation_barcode",
+      // A2 (2026-06-04) — admin Stock/Variations Modal needs to toggle a
+      // single variation on/off without re-running the full product-update
+      // flow (which wipes other fields). Also used by Quick Stock save.
+      "is_active",
+      "variation_name",
     ] as const;
     const update: any = {};
     for (const k of allowedKeys) {
