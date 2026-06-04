@@ -1,7 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import { MetaEventData } from "./meta.pixel.interface";
-import SettingModel from "../setting/setting.model";
+import { getCachedSetting } from "../../helpers/settingCache";
 
 const API_VERSION = "v18.0";
 
@@ -16,23 +16,30 @@ const normalizePhone = (phone: string): string => {
 };
 
 export const sendMetaEvent = async (data: MetaEventData) => {
-  // ✅ DB থেকে শুধু enabled check
-  const setting = await SettingModel.findOne({}).lean();
+  // S4+S5 Phase 1A — single cached settings read (5min TTL).
+  const setting = await getCachedSetting();
   if (!setting?.meta_pixel_enabled) return;
   if (!setting?.meta_capi_enabled) return;
 
-  // ✅ Credentials .env থেকে
-  const pixelId = process.env.META_PIXEL_ID;
-  const accessToken = process.env.META_ACCESS_TOKEN;
+  // S4+S5 Phase 1A — DB-driven with .env fallback for back-compat
+  // (existing clones still booting from env will keep working).
+  const pixelId = setting?.meta_pixel_id || process.env.META_PIXEL_ID;
+  const accessToken =
+    setting?.meta_capi_access_token || process.env.META_ACCESS_TOKEN;
+  const testEventCode =
+    setting?.meta_test_event_code || process.env.META_TEST_EVENT_CODE;
+
   if (!pixelId || !accessToken) {
-    console.warn("Meta CAPI: META_PIXEL_ID or META_ACCESS_TOKEN not set in .env");
+    console.warn(
+      "Meta CAPI: pixel_id or access_token not set (DB Settings or .env)",
+    );
     return;
   }
 
   const API_URL = `https://graph.facebook.com/${API_VERSION}/${pixelId}/events`;
 
   try {
-    const payload = {
+    const payload: any = {
       data: [
         {
           event_name: data.event_name,
@@ -53,8 +60,8 @@ export const sendMetaEvent = async (data: MetaEventData) => {
           custom_data: data.custom_data,
         },
       ],
-      test_event_code: process.env.META_TEST_EVENT_CODE || undefined,
     };
+    if (testEventCode) payload.test_event_code = testEventCode;
 
     const response = await axios.post(`${API_URL}?access_token=${accessToken}`, payload);
     return response.data;

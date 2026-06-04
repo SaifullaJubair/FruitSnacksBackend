@@ -56,16 +56,27 @@ const settingSchema = new Schema<ISettingInterface>(
     },
     free_delivery_min_amount: { type: Number, default: 0 },
 
-    // ✅ Analytics — শুধু enabled toggles, ID/token নেই (সেগুলো .env এ)
+    // ✅ Analytics — S4+S5 Phase 1A: IDs + secrets now in DB.
+    // Secrets stripped from public /setting via .select(-...) in services.
     meta_pixel_enabled: { type: Boolean, default: false },
     meta_capi_enabled: { type: Boolean, default: false },
+    meta_pixel_id: { type: String },
+    meta_capi_access_token: { type: String }, // SECRET
+    meta_test_event_code: { type: String }, // SECRET
 
     tiktok_pixel_enabled: { type: Boolean, default: false },
     tiktok_capi_enabled: { type: Boolean, default: false },
+    tiktok_pixel_id: { type: String },
+    tiktok_capi_access_token: { type: String }, // SECRET
+    tiktok_test_event_code: { type: String }, // SECRET
 
     gtm_enabled: { type: Boolean, default: false },
+    gtm_id: { type: String },
     ga4_enabled: { type: Boolean, default: false },
+    ga4_id: { type: String },
     clarity_enabled: { type: Boolean, default: false },
+    clarity_id: { type: String },
+    google_verification_meta: { type: String },
 
     // ✅ SMS Provider
     sms_provider_name: { type: String },

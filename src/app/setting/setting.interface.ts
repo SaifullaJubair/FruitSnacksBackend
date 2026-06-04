@@ -51,16 +51,32 @@ export interface ISettingInterface {
   free_delivery_type?: "always" | "min_order";
   free_delivery_min_amount?: number;
 
-  // ✅ Analytics Pixels
+  // ✅ Analytics Pixels — S4+S5 Phase 1A (2026-06-05).
+  // 3-tier model:
+  //   Tier 1 (PUBLIC ID): visible in /setting GET — browser already shows
+  //   these in pixel scripts, no extra leak vs current architecture.
+  //   Tier 2 (SECRET): stripped from public /setting via .select(-...) and
+  //   only readable via /setting/secrets (admin-only, setting_secrets_update
+  //   permission flag required). Never reach the browser.
   meta_pixel_enabled?: boolean;
   meta_capi_enabled?: boolean;
+  meta_pixel_id?: string; // Tier 1 public
+  meta_capi_access_token?: string; // Tier 2 secret
+  meta_test_event_code?: string; // Tier 2 secret (debug-only test events)
 
   tiktok_pixel_enabled?: boolean;
   tiktok_capi_enabled?: boolean;
-  
+  tiktok_pixel_id?: string; // Tier 1 public
+  tiktok_capi_access_token?: string; // Tier 2 secret
+  tiktok_test_event_code?: string; // Tier 2 secret
+
   gtm_enabled?: boolean;
+  gtm_id?: string; // Tier 1 public
   ga4_enabled?: boolean;
+  ga4_id?: string; // Tier 1 public
   clarity_enabled?: boolean;
+  clarity_id?: string; // Tier 1 public
+  google_verification_meta?: string; // Tier 1 public (Search Console verify)
 
   // ✅ SMS Provider
   sms_provider_name?: string;

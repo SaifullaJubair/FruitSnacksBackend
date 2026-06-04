@@ -260,6 +260,11 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    // S4+S5 Phase 1A — owner/superadmin only by default.
+    setting_secrets_update: {
+      type: Boolean,
+      default: false,
+    },
     page_seo_show: {
       type: Boolean,
       default: false,

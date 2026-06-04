@@ -1,7 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import { ITikTokEventData } from "./tiktok.pixel.interface";
-import SettingModel from "../setting/setting.model";
+import { getCachedSetting } from "../../helpers/settingCache";
 
 const API_URL = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
 
@@ -19,16 +19,25 @@ const normalizePhone = (phone: string): string => {
 };
 
 export const sendTikTokEvent = async (data: ITikTokEventData) => {
-  const setting = await SettingModel.findOne({}).lean();
+  // S4+S5 Phase 1A — single cached settings read (5min TTL).
+  const setting = await getCachedSetting();
   if (!setting?.tiktok_pixel_enabled) return;
   if (!setting?.tiktok_capi_enabled) return;
 
-  const pixelId = process.env.TIKTOK_PIXEL_ID?.trim();
-  const accessToken = process.env.TIKTOK_ACCESS_TOKEN?.trim();
+  // DB-driven with .env fallback for back-compat.
+  const pixelId = (
+    setting?.tiktok_pixel_id || process.env.TIKTOK_PIXEL_ID || ""
+  ).trim();
+  const accessToken = (
+    setting?.tiktok_capi_access_token || process.env.TIKTOK_ACCESS_TOKEN || ""
+  ).trim();
+  const testEventCode = (
+    setting?.tiktok_test_event_code || process.env.TIKTOK_TEST_EVENT_CODE || ""
+  ).trim();
 
   if (!pixelId || !accessToken) {
     console.warn(
-      "TikTok Events API: TIKTOK_PIXEL_ID or TIKTOK_ACCESS_TOKEN not set in .env",
+      "TikTok Events API: pixel_id or access_token not set (DB Settings or .env)",
     );
     return;
   }
@@ -57,10 +66,7 @@ export const sendTikTokEvent = async (data: ITikTokEventData) => {
             }),
           },
           properties: data.properties || {},
-          // test event code থাকলে
-          ...(process.env.TIKTOK_TEST_EVENT_CODE && {
-            test_event_code: process.env.TIKTOK_TEST_EVENT_CODE,
-          }),
+          ...(testEventCode && { test_event_code: testEventCode }),
         },
       ],
     };

@@ -5,7 +5,9 @@ import ApiError from "../../errors/ApiError";
 import { ISettingInterface } from "./setting.interface";
 import {
   getSettingServices,
+  getSettingWithSecretsServices,
   postSettingServices,
+  updateSettingSecretsServices,
   updateSettingServices,
 } from "./setting.services";
 
@@ -57,6 +59,44 @@ export const getSetting: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Setting Get successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// S4+S5 Phase 1A — admin-only secret accessors. Guarded by
+// verifyToken("setting_secrets_update") in routes.ts.
+export const getSettingSecrets: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await getSettingWithSecretsServices();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Setting (with secrets) fetched",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const updateSettingSecrets: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await updateSettingSecretsServices(req.body || {});
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Secrets updated",
       data: result,
     });
   } catch (error: any) {

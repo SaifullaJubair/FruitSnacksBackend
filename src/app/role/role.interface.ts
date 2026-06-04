@@ -67,6 +67,10 @@ export interface IRoleInterface {
   slider_delete?: true | false;
   slider_show?: true | false;
   site_setting_update?: true | false;
+  // S4+S5 Phase 1A — CAPI tokens + provider passwords gated by this
+  // separate flag so general settings-admins cannot rotate the owner's
+  // Meta/TikTok access tokens or read SMS/email/courier credentials.
+  setting_secrets_update?: true | false;
   page_seo_show?: true | false;
   page_seo_update?: true | false;
   order_show?: true | false;
