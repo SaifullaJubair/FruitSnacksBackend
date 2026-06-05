@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { productSearchableField } from "../product/product.interface";
 import ProductModel from "../product/product.model";
 import { IOfferInterface, offerSearchableField } from "./offer.interface";
@@ -22,12 +22,17 @@ export const findActiveOffersByProductIdServices = async (
   productId: string,
 ): Promise<any[]> => {
   if (!productId) return [];
+  // Reject malformed param early so global error handler returns 400 not 500.
+  // Without the cast, Mongoose auto-coerces (works), but a non-ObjectId string
+  // currently throws CastError mid-query. Belt-and-suspenders.
+  if (!mongoose.isValidObjectId(productId)) return [];
+  const productObjectId = new Types.ObjectId(productId);
   const today = new Date().toISOString().substring(0, 10);
   const offers = await OfferModel.find({
     offer_status: "active",
     offer_start_date: { $lte: today },
     offer_end_date: { $gte: today },
-    "offer_products.offer_product_id": productId,
+    "offer_products.offer_product_id": productObjectId,
   })
     .select(
       "_id offer_title offer_description offer_image offer_end_date offer_products",
