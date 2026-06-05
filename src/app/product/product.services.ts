@@ -2617,6 +2617,21 @@ export const updateProductPageContentServices = async (
 };
 
 // update A Product
+//
+// Item 10 fix (2026-06-05): optional foreign keys (`brand_id`, `category_id`)
+// need explicit $unset on clear because the full-edit controller always sets
+// the key in `data` — either with a value, or with undefined when admin
+// removed the selection. Mongoose treats `$set: { brand_id: undefined }` as
+// a no-op and would leave the stale id behind, so the admin's "remove brand"
+// click silently failed. We now scan a small allow-list and divert any
+// falsy/empty-string/null value into $unset.
+//
+// `category_path` is intentionally NOT in the allow-list: the controller
+// always sends it as `[]` for "no category" (via resolveProductCategoryPath),
+// and `$set: { category_path: [] }` correctly wipes the array. Adding it to
+// the unset list would break subtree filter consistency.
+const OPTIONAL_FK_FIELDS = ["brand_id", "category_id"] as const;
+
 export const updateProductServices = async (
   _id: any,
   data: IProductInterface,
@@ -2628,24 +2643,26 @@ export const updateProductServices = async (
   if (!updateFindProduct) {
     throw new Error("Product not found");
   }
-  // আপডেট করার ডেটা তৈরি করা হচ্ছে
   const updateData: any = { ...data };
-
-  // sub/child category retired — single leaf category_id + category_path are
-  // always set by the controller now; only brand_id needs the unset fallback.
   const unsetData: any = {};
-  if (!data.hasOwnProperty("brand_id")) {
-    unsetData.brand_id = "";
+
+  for (const field of OPTIONAL_FK_FIELDS) {
+    const present = Object.prototype.hasOwnProperty.call(data, field);
+    const value = (data as any)[field];
+    const isCleared =
+      !present || value === undefined || value === null || value === "";
+    if (isCleared) {
+      unsetData[field] = "";
+      delete updateData[field];
+    }
   }
 
-  const updateProduct = await ProductModel.updateOne(
-    { _id: _id },
-    {
-      $set: updateData, // পাঠানো ফিল্ড আপডেট করা
-      $unset: unsetData, // পাঠানো না হলে ফিল্ডগুলো মুছে ফেলা
-    },
-    { runValidators: true },
-  );
+  const writeOps: any = { $set: updateData };
+  if (Object.keys(unsetData).length) writeOps.$unset = unsetData;
+
+  const updateProduct = await ProductModel.updateOne({ _id }, writeOps, {
+    runValidators: true,
+  });
 
   return updateProduct;
 };
