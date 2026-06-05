@@ -194,6 +194,7 @@ export const postCategory: RequestHandler = async (
       const findCategorySerialExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_serial: requestData?.category_serial,
+          parent_id: requestData?.parent_id || null,
         });
       if (findCategorySerialExit) {
         if (req.files.category_logo[0]) {
@@ -208,7 +209,10 @@ export const postCategory: RequestHandler = async (
         requestData?.feature_category_show == "true"
       ) {
         const findFeatureCategoryIsMoreThanSix =
-          await CategoryModel.countDocuments({ feature_category_show: true });
+          await CategoryModel.countDocuments({
+            feature_category_show: true,
+            category_status: "active",
+          });
         if (findFeatureCategoryIsMoreThanSix >= 6) {
           if (req.files.category_logo[0]) {
             fs.unlinkSync(req.files.category_logo[0].path);
@@ -223,7 +227,10 @@ export const postCategory: RequestHandler = async (
         requestData?.explore_category_show == "true"
       ) {
         const findExploreCategoryIsMoreThanSix =
-          await CategoryModel.countDocuments({ explore_category_show: true });
+          await CategoryModel.countDocuments({
+            explore_category_show: true,
+            category_status: "active",
+          });
         if (findExploreCategoryIsMoreThanSix >= 3) {
           if (req.files.category_logo[0]) {
             fs.unlinkSync(req.files.category_logo[0].path);
@@ -288,6 +295,7 @@ export const postCategory: RequestHandler = async (
       }
       const findCategorySerialExit = await CategoryModel.exists({
         category_serial: requestData?.category_serial,
+        parent_id: requestData?.parent_id || null,
       });
       if (findCategorySerialExit) {
         throw new ApiError(400, "Serial Number Previously Added !");
@@ -298,6 +306,7 @@ export const postCategory: RequestHandler = async (
       ) {
         const featureCount = await CategoryModel.countDocuments({
           feature_category_show: true,
+          category_status: "active",
         });
         if (featureCount >= 6) {
           throw new ApiError(400, "Already 6 Feature Selected !");
@@ -309,6 +318,7 @@ export const postCategory: RequestHandler = async (
       ) {
         const exploreCount = await CategoryModel.countDocuments({
           explore_category_show: true,
+          category_status: "active",
         });
         if (exploreCount >= 3) {
           throw new ApiError(400, "Already 3 Explore Selected !");
@@ -419,14 +429,27 @@ export const updateCategory: RequestHandler = async (
         }
         throw new ApiError(400, "Already Added !");
       }
+      // Sibling-scoped serial check. Re-parent path resolves new sibling list
+      // inside updateCategoryServices, so use the EFFECTIVE parent here: caller
+      // payload's parent_id when explicitly sent, else the existing doc's parent.
+      const existingDoc: any = requestData?._id
+        ? await CategoryModel.findById(requestData._id)
+            .select("parent_id")
+            .lean()
+        : null;
+      const effectiveParentId = Object.prototype.hasOwnProperty.call(
+        requestData || {},
+        "parent_id",
+      )
+        ? requestData?.parent_id || null
+        : existingDoc?.parent_id || null;
       const findCategorySerialExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_serial: requestData?.category_serial,
+          parent_id: effectiveParentId,
+          _id: { $ne: requestData?._id },
         });
-      if (
-        findCategorySerialExit &&
-        requestData?._id !== findCategorySerialExit?._id.toString()
-      ) {
+      if (findCategorySerialExit) {
         if (req.files.category_logo[0]) {
           fs.unlinkSync(req.files.category_logo[0].path);
         } else {
@@ -438,6 +461,7 @@ export const updateCategory: RequestHandler = async (
       if (requestData?.feature_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           feature_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 6) {
@@ -452,6 +476,7 @@ export const updateCategory: RequestHandler = async (
       if (requestData?.explore_category_show == true) {
         const findExploreCategoryIsMoreThanThree = await CategoryModel.find({
           explore_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findExploreCategoryIsMoreThanThree?.length >= 3) {
@@ -526,19 +551,34 @@ export const updateCategory: RequestHandler = async (
       ) {
         throw new ApiError(400, "Already Added !");
       }
+      // Sibling-scoped serial check (no-file branch). Re-parent path resolves
+      // new sibling list inside updateCategoryServices, so use the EFFECTIVE
+      // parent here: caller payload's parent_id when explicitly sent, else the
+      // existing doc's parent.
+      const existingDocNoFile: any = requestData?._id
+        ? await CategoryModel.findById(requestData._id)
+            .select("parent_id")
+            .lean()
+        : null;
+      const effectiveParentIdNoFile = Object.prototype.hasOwnProperty.call(
+        requestData || {},
+        "parent_id",
+      )
+        ? requestData?.parent_id || null
+        : existingDocNoFile?.parent_id || null;
       const findCategorySerialExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_serial: requestData?.category_serial,
+          parent_id: effectiveParentIdNoFile,
+          _id: { $ne: requestData?._id },
         });
-      if (
-        findCategorySerialExit &&
-        requestData?._id !== findCategorySerialExit?._id.toString()
-      ) {
+      if (findCategorySerialExit) {
         throw new ApiError(400, "Serial Number Previously Added !");
       }
       if (requestData?.feature_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           feature_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 6) {
@@ -548,6 +588,7 @@ export const updateCategory: RequestHandler = async (
       if (requestData?.explore_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           explore_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 3) {

@@ -648,34 +648,6 @@ export const findTrendingProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -691,23 +663,7 @@ export const findTrendingProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" },
-              { child_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -740,34 +696,6 @@ export const findTrendingProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories", // Link the product's child-category
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
       },
     },
     {
@@ -866,25 +794,9 @@ export const findTrendingProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" }, // Allow active child-category
-              { child_category: null }, // Or no child-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -1153,30 +1065,8 @@ export const findBrandMatchProductServices = async (
       },
     },
     {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-        ],
       },
     },
     {
@@ -1210,20 +1100,6 @@ export const findBrandMatchProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
       },
     },
     {
@@ -1322,14 +1198,6 @@ export const findBrandMatchProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-        ],
       },
     },
     {
@@ -1594,20 +1462,6 @@ export const findPopularProductServices = async (
       },
       {
         $lookup: {
-          from: "subcategories",
-          localField: "sub_category_id",
-          foreignField: "_id",
-          as: "sub_category",
-        },
-      },
-      {
-        $unwind: {
-          path: "$sub_category",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
           from: "brands",
           localField: "brand_id",
           foreignField: "_id",
@@ -1623,17 +1477,7 @@ export const findPopularProductServices = async (
       {
         $match: {
           "category.category_status": "active",
-          $and: [
-            {
-              $or: [
-                { "sub_category.sub_category_status": "active" },
-                { sub_category: null },
-              ],
-            },
-            {
-              $or: [{ "brand.brand_status": "active" }, { brand: null }],
-            },
-          ],
+          $or: [{ "brand.brand_status": "active" }, { brand: null }],
         },
       },
       {
@@ -1662,20 +1506,6 @@ export const findPopularProductServices = async (
         $unwind: {
           path: "$category",
           preserveNullAndEmptyArrays: false, // Only include products with a valid category
-        },
-      },
-      {
-        $lookup: {
-          from: "subcategories", // Link the product's sub-category
-          localField: "sub_category_id",
-          foreignField: "_id",
-          as: "sub_category",
-        },
-      },
-      {
-        $unwind: {
-          path: "$sub_category",
-          preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
         },
       },
       {
@@ -1749,19 +1579,9 @@ export const findPopularProductServices = async (
       {
         $match: {
           "category.category_status": "active", // Ensure the category is active
-          $and: [
-            {
-              $or: [
-                { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-                { sub_category: null }, // Or no sub-category
-              ],
-            },
-            {
-              $or: [
-                { "brand.brand_status": "active" }, // Allow active brand
-                { brand: null }, // Or no brand
-              ],
-            },
+          $or: [
+            { "brand.brand_status": "active" }, // Allow active brand
+            { brand: null }, // Or no brand
           ],
         },
       },
@@ -1899,20 +1719,6 @@ export const findPopularProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -1928,17 +1734,7 @@ export const findPopularProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -1967,20 +1763,6 @@ export const findPopularProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
       },
     },
     {
@@ -2053,19 +1835,9 @@ export const findPopularProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -2207,34 +1979,6 @@ export const findECommerceChoiceProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -2250,23 +1994,7 @@ export const findECommerceChoiceProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" },
-              { child_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -2298,34 +2026,6 @@ export const findECommerceChoiceProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories", // Link the product's child-category
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
       },
     },
     {
@@ -2397,25 +2097,9 @@ export const findECommerceChoiceProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" }, // Allow active child-category
-              { child_category: null }, // Or no child-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -2581,34 +2265,6 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $lookup: {
-            from: "subcategories", // Link the product's sub-category
-            localField: "sub_category_id",
-            foreignField: "_id",
-            as: "sub_category",
-          },
-        },
-        {
-          $unwind: {
-            path: "$sub_category",
-            preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-          },
-        },
-        {
-          $lookup: {
-            from: "childcategories", // Link the product's child-category
-            localField: "child_category_id",
-            foreignField: "_id",
-            as: "child_category",
-          },
-        },
-        {
-          $unwind: {
-            path: "$child_category",
-            preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
-          },
-        },
-        {
-          $lookup: {
             from: "brands", // Link the product's brand
             localField: "brand_id",
             foreignField: "_id",
@@ -2677,25 +2333,9 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $match: {
-            $and: [
-              {
-                $or: [
-                  { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-                  { sub_category: null }, // Or no sub-category
-                ],
-              },
-              {
-                $or: [
-                  { "child_category.child_category_status": "active" }, // Allow active child-category
-                  { child_category: null }, // Or no child-category
-                ],
-              },
-              {
-                $or: [
-                  { "brand.brand_status": "active" }, // Allow active brand
-                  { brand: null }, // Or no brand
-                ],
-              },
+            $or: [
+              { "brand.brand_status": "active" }, // Allow active brand
+              { brand: null }, // Or no brand
             ],
           },
         },

@@ -400,6 +400,11 @@ export const getReparentImpactServices = async (
 };
 
 // Delete a Category
+// Controller already enforces leaf-only + no-direct-products before calling
+// this. After deletion we still $pull the deleted id from any product's
+// category_path snapshot — covers the edge case where a product previously
+// attached to a deeper descendant kept the deleted node as an ancestor in its
+// snapshot (e.g. re-parent then delete).
 export const deleteCategoryServices = async (
   _id: string
 ): Promise<ICategoryInterface | any> => {
@@ -414,6 +419,12 @@ export const deleteCategoryServices = async (
       runValidators: true,
     }
   );
+  if (Category?.deletedCount > 0) {
+    await ProductModel.updateMany(
+      { category_path: new Types.ObjectId(_id) },
+      { $pull: { category_path: new Types.ObjectId(_id) } },
+    );
+  }
   return Category;
 };
 

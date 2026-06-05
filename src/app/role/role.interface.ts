@@ -10,14 +10,6 @@ export interface IRoleInterface {
   category_update?: true | false;
   category_delete?: true | false;
   category_show?: true | false;
-  sub_category_post?: true | false;
-  sub_category_update?: true | false;
-  sub_category_show?: true | false;
-  sub_category_delete?: true | false;
-  child_category_post?: true | false;
-  child_category_update?: true | false;
-  child_category_delete?: true | false;
-  child_category_show?: true | false;
   brand_post?: true | false;
   brand_update?: true | false;
   brand_show?: true | false;

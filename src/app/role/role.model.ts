@@ -32,38 +32,6 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
-    sub_category_post: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_delete: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_update: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_show: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_post: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_delete: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_update: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_show: {
-      type: Boolean,
-      default: false,
-    },
     brand_post: {
       type: Boolean,
       default: false,
