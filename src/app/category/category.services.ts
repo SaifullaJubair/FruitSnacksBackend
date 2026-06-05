@@ -268,10 +268,28 @@ export const updateCategoryServices = async (
     // 1. Resolve new position from new parent.
     const newPos = await resolveTreePosition(newParentId);
 
-    // 2. Sibling-serial collision: auto-assign max + 1 in the new sibling list
-    //    (unless caller already provided category_serial in the payload).
+    // 2. Sibling-serial: when re-parenting, the admin form ALWAYS sends the
+    //    node's existing serial (which may collide with the new sibling list).
+    //    Auto-resolve in two cases:
+    //      (a) caller omitted serial → use max+1
+    //      (b) caller's serial collides with an existing sibling in the new
+    //          parent → silently bump to max+1 instead of rejecting
+    //    Item 8 audit follow-up: previously only (a) was handled, so a
+    //    re-parent with the form's auto-included serial would hit the
+    //    controller's pre-check and be rejected with a confusing "serial
+    //    already added" error.
     let newSerial = (data as any).category_serial;
-    if (newSerial === undefined || newSerial === null) {
+    const needsAutoSerial =
+      newSerial === undefined || newSerial === null;
+    let collides = false;
+    if (!needsAutoSerial) {
+      collides = !!(await CategoryModel.exists({
+        parent_id: newPos.parent_id,
+        category_serial: newSerial,
+        _id: { $ne: _id },
+      }).session(session));
+    }
+    if (needsAutoSerial || collides) {
       const maxSibling: any = await CategoryModel.findOne({
         parent_id: newPos.parent_id,
       })

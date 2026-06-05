@@ -430,35 +430,42 @@ export const updateCategory: RequestHandler = async (
         throw new ApiError(400, "Already Added !");
       }
       // Sibling-scoped serial check. Re-parent path resolves new sibling list
-      // inside updateCategoryServices, so use the EFFECTIVE parent here: caller
-      // payload's parent_id when explicitly sent, else the existing doc's parent.
+      // inside updateCategoryServices (auto-resolves any collision), so SKIP
+      // the pre-check entirely when caller is changing parent_id — otherwise
+      // admin gets a confusing "serial already added" error when re-parenting.
       const existingDoc: any = requestData?._id
         ? await CategoryModel.findById(requestData._id)
             .select("parent_id")
             .lean()
         : null;
-      const effectiveParentId = Object.prototype.hasOwnProperty.call(
-        requestData || {},
-        "parent_id",
-      )
-        ? requestData?.parent_id || null
-        : existingDoc?.parent_id || null;
-      const findCategorySerialExit: boolean | null | undefined | any =
-        await CategoryModel.exists({
-          category_serial: requestData?.category_serial,
-          parent_id: effectiveParentId,
-          _id: { $ne: requestData?._id },
-        });
-      if (findCategorySerialExit) {
-        if (req.files.category_logo[0]) {
-          fs.unlinkSync(req.files.category_logo[0].path);
-        } else {
-          fs.unlinkSync(req.files.category_video[0].path);
+      const isReparentRequest =
+        Object.prototype.hasOwnProperty.call(requestData || {}, "parent_id") &&
+        String(requestData?.parent_id ?? "") !==
+          String(existingDoc?.parent_id ?? "");
+      if (!isReparentRequest) {
+        const findCategorySerialExit: boolean | null | undefined | any =
+          await CategoryModel.exists({
+            category_serial: requestData?.category_serial,
+            parent_id: existingDoc?.parent_id || null,
+            _id: { $ne: requestData?._id },
+          });
+        if (findCategorySerialExit) {
+          if (req.files.category_logo[0]) {
+            fs.unlinkSync(req.files.category_logo[0].path);
+          } else {
+            fs.unlinkSync(req.files.category_video[0].path);
+          }
+          throw new ApiError(400, "Serial Number Previously Added !");
         }
-        throw new ApiError(400, "Serial Number Previously Added !");
       }
 
-      if (requestData?.feature_category_show == true) {
+      // Multipart bodies coerce booleans to strings, so check both forms.
+      // Without `== "true"` the cap check is silently skipped in this branch
+      // and admin can exceed the featured/explore limits via image-upload PATCH.
+      if (
+        requestData?.feature_category_show == true ||
+        requestData?.feature_category_show == "true"
+      ) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           feature_category_show: true,
           category_status: "active",
@@ -473,7 +480,10 @@ export const updateCategory: RequestHandler = async (
           throw new ApiError(400, "Already 6 Selected !");
         }
       }
-      if (requestData?.explore_category_show == true) {
+      if (
+        requestData?.explore_category_show == true ||
+        requestData?.explore_category_show == "true"
+      ) {
         const findExploreCategoryIsMoreThanThree = await CategoryModel.find({
           explore_category_show: true,
           category_status: "active",
@@ -552,28 +562,29 @@ export const updateCategory: RequestHandler = async (
         throw new ApiError(400, "Already Added !");
       }
       // Sibling-scoped serial check (no-file branch). Re-parent path resolves
-      // new sibling list inside updateCategoryServices, so use the EFFECTIVE
-      // parent here: caller payload's parent_id when explicitly sent, else the
-      // existing doc's parent.
+      // new sibling list inside updateCategoryServices (auto-resolves any
+      // collision), so SKIP the pre-check entirely when caller is changing
+      // parent_id — otherwise admin gets a confusing "serial already added"
+      // error when re-parenting.
       const existingDocNoFile: any = requestData?._id
         ? await CategoryModel.findById(requestData._id)
             .select("parent_id")
             .lean()
         : null;
-      const effectiveParentIdNoFile = Object.prototype.hasOwnProperty.call(
-        requestData || {},
-        "parent_id",
-      )
-        ? requestData?.parent_id || null
-        : existingDocNoFile?.parent_id || null;
-      const findCategorySerialExit: boolean | null | undefined | any =
-        await CategoryModel.exists({
-          category_serial: requestData?.category_serial,
-          parent_id: effectiveParentIdNoFile,
-          _id: { $ne: requestData?._id },
-        });
-      if (findCategorySerialExit) {
-        throw new ApiError(400, "Serial Number Previously Added !");
+      const isReparentRequestNoFile =
+        Object.prototype.hasOwnProperty.call(requestData || {}, "parent_id") &&
+        String(requestData?.parent_id ?? "") !==
+          String(existingDocNoFile?.parent_id ?? "");
+      if (!isReparentRequestNoFile) {
+        const findCategorySerialExit: boolean | null | undefined | any =
+          await CategoryModel.exists({
+            category_serial: requestData?.category_serial,
+            parent_id: existingDocNoFile?.parent_id || null,
+            _id: { $ne: requestData?._id },
+          });
+        if (findCategorySerialExit) {
+          throw new ApiError(400, "Serial Number Previously Added !");
+        }
       }
       if (requestData?.feature_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
