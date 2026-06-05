@@ -2595,14 +2595,17 @@ export const updateProductPageContentServices = async (
   for (const field of PAGE_CONTENT_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
     const value = data[field];
-    // theme_id: empty / null is treated as "no change" (skip), NOT "remove
-    // theme". The Page Content form may legitimately send an empty value while
-    // the theme dropdown is still loading its option list — clearing the field
-    // in that case wiped the admin's selection and dropped the product back to
-    // the default theme. To intentionally clear a theme, use the product edit
-    // form (full PATCH /product).
+    // theme_id: explicit `null` clears the theme (admin "remove theme"
+    // button); `undefined` / missing key = no change (skip). Empty string
+    // is treated as `undefined` to guard against form-load races where the
+    // dropdown sends "" before its options resolve. Item 10 audit follow-up:
+    // previously even `null` was skipped, so theme was unclearable anywhere.
     if (field === "theme_id") {
-      if (value === "" || value === null || value === undefined) continue;
+      if (value === undefined || value === "") continue;
+      if (value === null) {
+        unset.theme_id = "";
+        continue;
+      }
       set.theme_id = value;
       continue;
     }
@@ -2613,24 +2616,42 @@ export const updateProductPageContentServices = async (
   if (Object.keys(set).length) update.$set = set;
   if (Object.keys(unset).length) update.$unset = unset;
 
-  return ProductModel.updateOne({ _id }, update, { runValidators: true });
+  // findOneAndUpdate so the theme-usage counter pre/post hooks in
+  // product.model.ts fire when theme_id changes/clears (Item 10 audit).
+  // Without this, themes.used_in_products drifts and is_deletable goes stale.
+  return ProductModel.findOneAndUpdate({ _id }, update, {
+    new: true,
+    runValidators: true,
+  });
 };
 
 // update A Product
 //
-// Item 10 fix (2026-06-05): optional foreign keys (`brand_id`, `category_id`)
-// need explicit $unset on clear because the full-edit controller always sets
-// the key in `data` — either with a value, or with undefined when admin
-// removed the selection. Mongoose treats `$set: { brand_id: undefined }` as
-// a no-op and would leave the stale id behind, so the admin's "remove brand"
-// click silently failed. We now scan a small allow-list and divert any
-// falsy/empty-string/null value into $unset.
+// Item 10 fix (2026-06-05): optional foreign keys need explicit $unset on
+// clear because the full-edit controller always sets the key in `data` —
+// either with a value, or with undefined when admin removed the selection.
+// Mongoose treats `$set: { brand_id: undefined }` as a no-op and would leave
+// the stale id behind, so the admin's "remove brand" click silently failed.
+// We scan an allow-list and divert any falsy/empty-string/null value into
+// $unset.
+//
+// Item 10 post-hoc audit (2026-06-05) — expanded OPTIONAL_FK_FIELDS to also
+// cover `product_supplier_id`, `warehouse_id`, and `theme_id`. All three had
+// the same silent-fail-on-clear bug; the audit also flagged that switching
+// from `updateOne` to `findOneAndUpdate` is required for the existing
+// theme-usage counter hooks in product.model.ts (pre/post findOneAndUpdate)
+// to actually fire — otherwise theme.used_in_products drifts permanently.
 //
 // `category_path` is intentionally NOT in the allow-list: the controller
 // always sends it as `[]` for "no category" (via resolveProductCategoryPath),
-// and `$set: { category_path: [] }` correctly wipes the array. Adding it to
-// the unset list would break subtree filter consistency.
-const OPTIONAL_FK_FIELDS = ["brand_id", "category_id"] as const;
+// and `$set: { category_path: [] }` correctly wipes the array.
+const OPTIONAL_FK_FIELDS = [
+  "brand_id",
+  "category_id",
+  "product_supplier_id",
+  "warehouse_id",
+  "theme_id",
+] as const;
 
 export const updateProductServices = async (
   _id: any,
@@ -2657,14 +2678,27 @@ export const updateProductServices = async (
     }
   }
 
-  const writeOps: any = { $set: updateData };
+  const writeOps: any = {};
+  if (Object.keys(updateData).length) writeOps.$set = updateData;
   if (Object.keys(unsetData).length) writeOps.$unset = unsetData;
 
-  const updateProduct = await ProductModel.updateOne({ _id }, writeOps, {
-    runValidators: true,
-  });
+  // findOneAndUpdate (not updateOne) so the theme-usage counter pre/post
+  // hooks in product.model.ts fire — they track theme_id transitions and
+  // keep themes.used_in_products in sync (drives the is_deletable flag).
+  // updateOne does NOT fire those hooks by Mongoose design.
+  const updateProduct = await ProductModel.findOneAndUpdate(
+    { _id },
+    writeOps,
+    { new: true, runValidators: true },
+  );
 
-  return updateProduct;
+  // Match the old return shape (controller checks `result?.modifiedCount`).
+  // We can't easily compute modifiedCount from findOneAndUpdate, so synthesize
+  // it as 1 if a doc was returned (it always returns the post-update doc when
+  // matched). Callers downstream only check truthiness; this is safe.
+  return updateProduct
+    ? { acknowledged: true, modifiedCount: 1, matchedCount: 1 }
+    : { acknowledged: true, modifiedCount: 0, matchedCount: 0 };
 };
 
 // Find all dashboard Product

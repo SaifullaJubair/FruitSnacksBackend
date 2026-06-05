@@ -187,8 +187,12 @@ const buildPhaseFHFields = (r: any): Record<string, any> => {
     if (Number.isFinite(n) && n >= 0) out.vat_percentage_override = n;
   }
 
-  if (r?.warehouse_id !== undefined && r.warehouse_id !== "") {
-    out.warehouse_id = r.warehouse_id;
+  // Pass warehouse_id through even when empty string — admin clearing the
+  // selection sends "". updateProductServices' OPTIONAL_FK_FIELDS loop then
+  // converts empty to $unset. Old gate (`!== ""`) silently dropped the
+  // clear intent so admin could never remove a warehouse assignment.
+  if (r?.warehouse_id !== undefined) {
+    out.warehouse_id = r.warehouse_id || "";
   }
 
   if (r?.tier_prices !== undefined && r.tier_prices !== "") {
