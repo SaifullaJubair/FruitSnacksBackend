@@ -18,6 +18,8 @@ import {
   updateMyAddress,
   deleteMyAddress,
   setMyDefaultAddress,
+  // S4+S5 Phase 1C — optional email opt-in for logged-in users.
+  setMyEmail,
 } from "./user.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 import { verifyUserToken } from "../../middlewares/verify.user.token";
@@ -82,5 +84,11 @@ router
 router
   .route("/address/:address_id/default")
   .patch(verifyUserToken, setMyDefaultAddress);
+
+// S4+S5 Phase 1C — opt-in email for logged-in users. Used by the
+// Profile Setting page and the post-order prompt when the buyer is
+// already signed in. Guests use PATCH /order/:order_id/email instead
+// (in order.routes.ts) so anon FB-ads flow doesn't need auth.
+router.route("/me/email").patch(verifyUserToken, setMyEmail);
 
 export const UserRegRoutes = router;

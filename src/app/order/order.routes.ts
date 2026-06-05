@@ -14,6 +14,8 @@ import {
   updateOrder,
   cancelSteadfastOrder,
   updateOrderDeliveryInfo, // ✅ নতুন import
+  // S4+S5 Phase 1C — post-order opt-in email for guest checkout.
+  setOrderEmail,
 } from "./order.controller";
 
 const router = express.Router();
@@ -48,6 +50,16 @@ router.route("/order_tracking").post(getOrderTrackingInfo);
 router
   .route("/delivery-info/:order_id")
   .patch(verifyToken("order_update"), updateOrderDeliveryInfo);
+
+// S4+S5 Phase 1C — opt-in email collection for guest orders, called
+// from the post-order success-page prompt. Public (no auth) by
+// design — the order_id in the URL is the bearer; security model is
+// the same as the existing /:order_id GET. Single-use semantics:
+// once customer_email is set we reject overwrites to prevent
+// spoofing by anyone who guesses an order_id.
+//
+// ⚠️ MUST be before /:order_id route below to avoid CastError.
+router.route("/:order_id/email").patch(setOrderEmail);
 
 // Order details with products
 // ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard

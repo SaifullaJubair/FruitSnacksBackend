@@ -89,6 +89,14 @@ const orderSchema = new Schema<IOrderInterface>(
       required: true,
       type: String,
     },
+    // S4+S5 Phase 1C — optional. Post-order prompt writes here for
+    // guest orders; on later user registration with matching phone,
+    // auth controller backfills user.user_email.
+    customer_email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
     order_updated_by: {
       type: Schema.Types.ObjectId,
       ref: "admins",

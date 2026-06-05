@@ -3,6 +3,12 @@ export interface IUserInterface {
   user_password?: string;
   user_name?: string;
   user_phone: string;
+  // S4+S5 Phase 1C (2026-06-05) — optional. Bangladesh storefront stays
+  // phone-OTP first; email is collected opportunistically from Profile
+  // Setting page, post-order prompt, or sign-up form. Used by Meta/TikTok
+  // CAPI for the `em` Advanced Matching field → ~30% EMQ boost where set.
+  // Unique-sparse index allows many rows with no email.
+  user_email?: string;
   user_image?: string;
   user_image_key?: string;
   user_country?: string;

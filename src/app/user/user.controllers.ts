@@ -72,13 +72,23 @@ export const postUser: RequestHandler = async (
 
     if (existingUser) {
       // Guest user → password set করছে
+      // Phase 1C — also save optional email if buyer typed one in
+      // the sign-up form and the existing guest record has none.
+      const optionalEmail = (requestData?.user_email || "")
+        .toString()
+        .trim()
+        .toLowerCase();
+      const updateFields: any = {
+        user_password: hashedPassword,
+        user_verified: true, // ✅
+        user_type: "registered", // ✅
+      };
+      if (optionalEmail && !existingUser.user_email) {
+        updateFields.user_email = optionalEmail;
+      }
       const updateResult = await UserModel.updateOne(
         { user_phone: requestData?.user_phone },
-        {
-          user_password: hashedPassword,
-          user_verified: true, // ✅
-          user_type: "registered", // ✅
-        },
+        updateFields,
         { runValidators: true },
       );
       if (updateResult.modifiedCount > 0) {
@@ -91,8 +101,15 @@ export const postUser: RequestHandler = async (
         throw new ApiError(400, "User Update Failed !");
       }
     } else {
+      // Phase 1C — lowercase the optional email before persisting so
+      // the unique-sparse index sees consistent values.
+      const optionalEmail = (requestData?.user_email || "")
+        .toString()
+        .trim()
+        .toLowerCase();
       const newUser = await postUserServices({
         ...requestData,
+        user_email: optionalEmail || undefined,
         user_password: hashedPassword,
         user_verified: true, // ✅ normal signup = verified
         user_type: "registered", // ✅
@@ -108,6 +125,12 @@ export const postUser: RequestHandler = async (
       }
     }
   } catch (error: any) {
+    // Phase 1C — friendly message on duplicate email collision.
+    if (error?.code === 11000 && error?.keyPattern?.user_email) {
+      return next(
+        new ApiError(409, "This email is already linked to another account."),
+      );
+    }
     next(error);
   }
 };
@@ -413,6 +436,35 @@ export const updateforgotPasswordUsersChangeNewPassword: RequestHandler =
       );
 
       if (users?.modifiedCount > 0) {
+        // S4+S5 Phase 1C — guest→registered email merge. If the user
+        // submitted an email at the post-order prompt before signing
+        // up, backfill user.user_email from the most recent guest
+        // order on the same phone. Best-effort: silent on failure
+        // (e.g. duplicate-email collision with an older account).
+        try {
+          const userDoc: any = await UserModel.findOne({ user_phone })
+            .select("_id user_email")
+            .lean();
+          if (userDoc && !userDoc.user_email) {
+            const lastEmailOrder: any = await OrderModel.findOne({
+              customer_phone: user_phone,
+              customer_email: { $exists: true, $ne: null },
+            })
+              .sort({ createdAt: -1 })
+              .select("customer_email")
+              .lean();
+            if (lastEmailOrder?.customer_email) {
+              await UserModel.updateOne(
+                { _id: userDoc._id },
+                { $set: { user_email: lastEmailOrder.customer_email } },
+              );
+            }
+          }
+        } catch (mergeErr) {
+          // Don't fail the registration flow for a backfill miss.
+          console.warn("Phase 1C email merge skipped:", mergeErr);
+        }
+
         return sendResponse(res, {
           statusCode: httpStatus.OK,
           success: true,
@@ -766,6 +818,50 @@ export const setMyDefaultAddress = async (
       data: user.addresses,
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// S4+S5 Phase 1C — opt-in email for the logged-in storefront user.
+// Accepts { user_email } in body. Validates basic email shape; the
+// unique-sparse index on user_email handles duplicate-collision at
+// DB layer (Mongo throws E11000, global handler maps to 4xx).
+//
+// Empty / missing field is rejected — to remove an email use a
+// separate DELETE flow (not built; out of scope for Phase 1C).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const setMyEmail = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) throw new ApiError(401, "Login required.");
+    const raw = (req.body?.user_email || "").trim().toLowerCase();
+    if (!raw || !EMAIL_RE.test(raw)) {
+      throw new ApiError(400, "Please provide a valid email address.");
+    }
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: { user_email: raw } },
+      { new: true, runValidators: true },
+    ).select("-user_password -forgot_otp");
+    if (!user) throw new ApiError(404, "User not found.");
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Email saved.",
+      data: { user_email: user.user_email },
+    });
+  } catch (error: any) {
+    // E11000 = unique violation (another user already has this email).
+    if (error?.code === 11000) {
+      return next(
+        new ApiError(409, "This email is already linked to another account."),
+      );
+    }
     next(error);
   }
 };

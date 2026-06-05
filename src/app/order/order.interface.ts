@@ -30,6 +30,12 @@ export interface IOrderInterface {
   coupon_id?: Types.ObjectId | ICouponInterface;
   customer_id: Types.ObjectId | IAdminInterface;
   customer_phone: string;
+  // S4+S5 Phase 1C — optional. Collected at post-order prompt (guest
+  // path). When a guest later registers with the same phone, on OTP
+  // verify we backfill user.user_email from the most recent order's
+  // customer_email so loyalty/Meta `em` keeps working across the
+  // guest→registered transition.
+  customer_email?: string;
   order_updated_by?: Types.ObjectId | IAdminInterface;
   tracking_code?: string;
   pathao_city_id: number;

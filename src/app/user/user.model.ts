@@ -6,6 +6,16 @@ const userSchema = new Schema<IUserInterface>(
     user_password: { type: String },
     user_name: { type: String },
     user_phone: { type: String },
+    // S4+S5 Phase 1C — optional. unique-sparse so many rows can have
+    // no email (BD storefront is phone-OTP first), but real values
+    // must be unique. lowercase+trim so case/whitespace can't bypass.
+    user_email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
     user_image: { type: String },
     user_image_key: { type: String },
     user_country: { type: String, default: "Bangladesh" },

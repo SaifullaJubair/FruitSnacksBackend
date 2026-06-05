@@ -1049,3 +1049,60 @@ export const updateOrderDeliveryInfo: RequestHandler = async (
     next(error);
   }
 };
+
+// S4+S5 Phase 1C — opt-in email collection from the post-order
+// success-page prompt. Public (no auth) — same security model as
+// the order_id-in-URL details endpoint that already exists.
+//
+// Single-use: rejects overwrite if customer_email already set, so
+// someone who guesses an order_id can't replace the real buyer's
+// email later. Returns 200 silently when the email matches what's
+// already stored (idempotent retry on flaky network).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const setOrderEmail: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { order_id } = req.params;
+    const raw = (req.body?.customer_email || "").trim().toLowerCase();
+    if (!raw || !EMAIL_RE.test(raw)) {
+      throw new ApiError(400, "Please provide a valid email address.");
+    }
+    const order: any = await OrderModel.findById(order_id).select(
+      "customer_email customer_id",
+    );
+    if (!order) throw new ApiError(404, "Order not found.");
+
+    if (order.customer_email && order.customer_email !== raw) {
+      throw new ApiError(
+        409,
+        "Email already set on this order; cannot be changed.",
+      );
+    }
+
+    if (order.customer_email === raw) {
+      return sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Email already saved.",
+        data: { customer_email: raw },
+      });
+    }
+
+    await OrderModel.updateOne(
+      { _id: order_id },
+      { $set: { customer_email: raw } },
+    );
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Email saved for this order.",
+      data: { customer_email: raw },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
