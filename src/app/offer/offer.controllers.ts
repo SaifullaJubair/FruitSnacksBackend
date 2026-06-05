@@ -7,6 +7,7 @@ import { FileUploadHelper } from "../../helpers/image.upload";
 import {
   deleteOfferServices,
   findAOfferServices,
+  findActiveOffersByProductIdServices,
   findAllDashboardOfferServices,
   findAllOfferServices,
   findProductToAddOfferServices,
@@ -84,6 +85,26 @@ export const findAllOffer: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Offer Found Successfully !",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// Active offers containing one product (for the PDP discovery banner).
+export const findActiveOffersByProductId: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { product_id } = req.params;
+    const result = await findActiveOffersByProductIdServices(product_id);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Active offers for product found",
       data: result,
     });
   } catch (error: any) {

@@ -14,6 +14,46 @@ export const postOfferServices = async (
   return createOffer;
 };
 
+// Active offers that contain a given product. Used by the PDP discovery banner
+// so a customer browsing a single item sees "this is also part of [bundle] —
+// save N% if you buy the set." Only returns lightweight fields the banner
+// needs; full bundle render goes through `findAOffer` on the offer page.
+export const findActiveOffersByProductIdServices = async (
+  productId: string,
+): Promise<any[]> => {
+  if (!productId) return [];
+  const today = new Date().toISOString().substring(0, 10);
+  const offers = await OfferModel.find({
+    offer_status: "active",
+    offer_start_date: { $lte: today },
+    offer_end_date: { $gte: today },
+    "offer_products.offer_product_id": productId,
+  })
+    .select(
+      "_id offer_title offer_description offer_image offer_end_date offer_products",
+    )
+    .sort({ _id: -1 })
+    .lean();
+
+  // Surface only the matching line's discount so the banner can show
+  // "save 20%" without the consumer re-iterating.
+  return offers.map((o: any) => {
+    const match = (o.offer_products || []).find(
+      (p: any) => String(p.offer_product_id) === String(productId),
+    );
+    return {
+      _id: o._id,
+      offer_title: o.offer_title,
+      offer_description: o.offer_description,
+      offer_image: o.offer_image,
+      offer_end_date: o.offer_end_date,
+      product_count: (o.offer_products || []).length,
+      offer_discount_price: match?.offer_discount_price,
+      offer_discount_type: match?.offer_discount_type,
+    };
+  });
+};
+
 export const findAllOfferServices = async (): Promise<
   IOfferInterface[] | []
 > => {
