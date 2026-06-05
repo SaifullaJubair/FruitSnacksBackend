@@ -199,6 +199,11 @@ const orderSchema = new Schema<IOrderInterface>(
     // Phase G3 (F1b) cart-side loyalty redeem.
     loyalty_redeem_points: { type: Number, default: 0 },
     loyalty_redeem_amount: { type: Number, default: 0 },
+
+    // S4+S5 Phase 1B — server-side Purchase event dedup. CAPI services
+    // skip re-fire when these flags are true (set after first success).
+    meta_purchase_sent: { type: Boolean, default: false },
+    tiktok_purchase_sent: { type: Boolean, default: false },
   },
   {
     timestamps: true,

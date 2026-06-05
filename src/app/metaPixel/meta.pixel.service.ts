@@ -2,12 +2,17 @@ import axios from "axios";
 import crypto from "crypto";
 import { MetaEventData } from "./meta.pixel.interface";
 import { getCachedSetting } from "../../helpers/settingCache";
+import { enrichFromIp } from "../../helpers/geoipEnrich";
+import OrderModel from "../order/order.model";
 
 const API_VERSION = "v18.0";
 
 const hashData = (data: string): string => {
   if (!data) return "";
-  return crypto.createHash("sha256").update(data.trim().toLowerCase()).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(data.trim().toLowerCase())
+    .digest("hex");
 };
 
 const normalizePhone = (phone: string): string => {
@@ -15,14 +20,26 @@ const normalizePhone = (phone: string): string => {
   return phone.replace(/\D/g, "");
 };
 
-export const sendMetaEvent = async (data: MetaEventData) => {
-  // S4+S5 Phase 1A — single cached settings read (5min TTL).
-  const setting = await getCachedSetting();
-  if (!setting?.meta_pixel_enabled) return;
-  if (!setting?.meta_capi_enabled) return;
+// Hash-or-undefined helper — keeps the user_data object clean (Meta
+// ignores undefined fields, complains on empty strings).
+const h = (v?: string) =>
+  v && v.trim().length > 0 ? hashData(v) : undefined;
 
-  // S4+S5 Phase 1A — DB-driven with .env fallback for back-compat
-  // (existing clones still booting from env will keep working).
+export interface CapiSendResult {
+  ok: boolean;
+  skipped?: "disabled" | "dedup" | "no_credentials";
+  events_received?: number;
+  error?: string;
+}
+
+export const sendMetaEvent = async (
+  data: MetaEventData,
+): Promise<CapiSendResult> => {
+  const setting = await getCachedSetting();
+  if (!setting?.meta_pixel_enabled || !setting?.meta_capi_enabled) {
+    return { ok: false, skipped: "disabled" };
+  }
+
   const pixelId = setting?.meta_pixel_id || process.env.META_PIXEL_ID;
   const accessToken =
     setting?.meta_capi_access_token || process.env.META_ACCESS_TOKEN;
@@ -33,8 +50,28 @@ export const sendMetaEvent = async (data: MetaEventData) => {
     console.warn(
       "Meta CAPI: pixel_id or access_token not set (DB Settings or .env)",
     );
-    return;
+    return { ok: false, skipped: "no_credentials" };
   }
+
+  // S4+S5 Phase 1B — server-side Purchase dedup. Browser layer may
+  // miss when the user clears storage / shares the success URL; this
+  // is the ultimate guarantee. event_id alone isn't enough because
+  // Meta dedups on event_id+event_name within ~48h but caches roll.
+  const orderId = data.custom_data?.order_id;
+  if (data.event_name === "Purchase" && orderId) {
+    const order: any = await OrderModel.findById(orderId)
+      .select("meta_purchase_sent")
+      .lean();
+    if (order?.meta_purchase_sent) {
+      return { ok: true, skipped: "dedup" };
+    }
+  }
+
+  // S4+S5 Phase 1B — fill ct/st/country from IP geo when form data
+  // didn't supply them. Form-derived values WIN (passed in by FE),
+  // so logged-in/checkout flows that know the real shipping city
+  // override whatever the IP says.
+  const geo = enrichFromIp(data.user_data?.client_ip_address);
 
   const API_URL = `https://graph.facebook.com/${API_VERSION}/${pixelId}/events`;
 
@@ -45,15 +82,23 @@ export const sendMetaEvent = async (data: MetaEventData) => {
           event_name: data.event_name,
           event_time: Math.floor(Date.now() / 1000),
           event_id: data.event_id,
-          event_source_url: data.event_source_url || process.env.SITE_URL || "",
+          event_source_url:
+            data.event_source_url || process.env.SITE_URL || "",
           action_source: "website",
           user_data: {
             client_ip_address: data.user_data?.client_ip_address,
             client_user_agent: data.user_data?.client_user_agent,
-            ph: data.user_data?.ph ? hashData(normalizePhone(data.user_data.ph)) : undefined,
-            em: data.user_data?.em ? hashData(data.user_data.em) : undefined,
-            fn: data.user_data?.fn ? hashData(data.user_data.fn) : undefined,
-            external_id: data.user_data?.external_id ? hashData(data.user_data.external_id) : undefined,
+            ph: data.user_data?.ph
+              ? hashData(normalizePhone(data.user_data.ph))
+              : undefined,
+            em: h(data.user_data?.em),
+            fn: h(data.user_data?.fn),
+            ln: h(data.user_data?.ln),
+            ct: h(data.user_data?.ct || geo.ct),
+            st: h(data.user_data?.st || geo.st),
+            zp: h(data.user_data?.zp),
+            country: h(data.user_data?.country || geo.country),
+            external_id: h(data.user_data?.external_id),
             fbc: data.user_data?.fbc,
             fbp: data.user_data?.fbp,
           },
@@ -63,9 +108,41 @@ export const sendMetaEvent = async (data: MetaEventData) => {
     };
     if (testEventCode) payload.test_event_code = testEventCode;
 
-    const response = await axios.post(`${API_URL}?access_token=${accessToken}`, payload);
-    return response.data;
+    const response = await axios.post(
+      `${API_URL}?access_token=${accessToken}`,
+      payload,
+    );
+    const eventsReceived = response.data?.events_received ?? 0;
+    const eventsAccepted = eventsReceived > 0;
+
+    if (!eventsAccepted) {
+      console.warn(
+        "Meta CAPI: events_received=0, payload may be malformed",
+        response.data,
+      );
+    }
+
+    if (
+      eventsAccepted &&
+      data.event_name === "Purchase" &&
+      orderId
+    ) {
+      // Mark sent only after Meta confirms receipt.
+      await OrderModel.updateOne(
+        { _id: orderId },
+        { $set: { meta_purchase_sent: true } },
+      ).catch((e) =>
+        console.error("Meta CAPI: failed to mark order purchase_sent", e),
+      );
+    }
+
+    return {
+      ok: eventsAccepted,
+      events_received: eventsReceived,
+    };
   } catch (error: any) {
-    console.error("Meta CAPI error:", error?.response?.data || error.message);
+    const msg = error?.response?.data || error?.message || "unknown";
+    console.error("Meta CAPI error:", msg);
+    return { ok: false, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
   }
 };

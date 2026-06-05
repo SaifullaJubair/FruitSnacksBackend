@@ -95,6 +95,14 @@ export interface IOrderInterface {
   // admin can see the redemption on the order detail page.
   loyalty_redeem_points?: number;
   loyalty_redeem_amount?: number;
+
+  // S4+S5 Phase 1B — server-side guard against duplicate Meta/TikTok
+  // Purchase events. Browser layer (localStorage purchased_order_ids)
+  // is the first defense; this flag is the ultimate guarantee even
+  // when the user clears storage, shares the success-page URL, or
+  // visits from a different device.
+  meta_purchase_sent?: boolean;
+  tiktok_purchase_sent?: boolean;
 }
 
 export const orderSearchableField = [

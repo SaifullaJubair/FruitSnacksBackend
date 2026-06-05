@@ -2,6 +2,8 @@ import axios from "axios";
 import crypto from "crypto";
 import { ITikTokEventData } from "./tiktok.pixel.interface";
 import { getCachedSetting } from "../../helpers/settingCache";
+import { enrichFromIp } from "../../helpers/geoipEnrich";
+import OrderModel from "../order/order.model";
 
 const API_URL = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
 
@@ -18,13 +20,23 @@ const normalizePhone = (phone: string): string => {
   return phone.replace(/\D/g, "");
 };
 
-export const sendTikTokEvent = async (data: ITikTokEventData) => {
-  // S4+S5 Phase 1A — single cached settings read (5min TTL).
-  const setting = await getCachedSetting();
-  if (!setting?.tiktok_pixel_enabled) return;
-  if (!setting?.tiktok_capi_enabled) return;
+const h = (v?: string) =>
+  v && v.trim().length > 0 ? hashData(v) : undefined;
 
-  // DB-driven with .env fallback for back-compat.
+export interface TikTokSendResult {
+  ok: boolean;
+  skipped?: "disabled" | "dedup" | "no_credentials";
+  error?: string;
+}
+
+export const sendTikTokEvent = async (
+  data: ITikTokEventData,
+): Promise<TikTokSendResult> => {
+  const setting = await getCachedSetting();
+  if (!setting?.tiktok_pixel_enabled || !setting?.tiktok_capi_enabled) {
+    return { ok: false, skipped: "disabled" };
+  }
+
   const pixelId = (
     setting?.tiktok_pixel_id || process.env.TIKTOK_PIXEL_ID || ""
   ).trim();
@@ -39,8 +51,21 @@ export const sendTikTokEvent = async (data: ITikTokEventData) => {
     console.warn(
       "TikTok Events API: pixel_id or access_token not set (DB Settings or .env)",
     );
-    return;
+    return { ok: false, skipped: "no_credentials" };
   }
+
+  // Phase 1B Purchase dedup mirror.
+  const orderId = data.properties?.order_id;
+  if (data.event_name === "CompletePayment" && orderId) {
+    const order: any = await OrderModel.findById(orderId)
+      .select("tiktok_purchase_sent")
+      .lean();
+    if (order?.tiktok_purchase_sent) {
+      return { ok: true, skipped: "dedup" };
+    }
+  }
+
+  const geo = enrichFromIp(data.user_data?.client_ip_address);
 
   try {
     const payload = {
@@ -51,19 +76,24 @@ export const sendTikTokEvent = async (data: ITikTokEventData) => {
           event: data.event_name,
           event_time: Math.floor(Date.now() / 1000),
           event_id: data.event_id,
-          event_source_url: data.event_source_url || process.env.SITE_URL || "",
+          event_source_url:
+            data.event_source_url || process.env.SITE_URL || "",
           user: {
             ip: data.user_data?.client_ip_address || undefined,
             user_agent: data.user_data?.client_user_agent || undefined,
-            ...(data.user_data?.phone && {
-              phone: hashData(normalizePhone(data.user_data.phone)),
-            }),
-            ...(data.user_data?.email && {
-              email: hashData(data.user_data.email),
-            }),
-            ...(data.user_data?.external_id && {
-              external_id: hashData(data.user_data.external_id),
-            }),
+            phone: data.user_data?.phone
+              ? hashData(normalizePhone(data.user_data.phone))
+              : undefined,
+            email: h(data.user_data?.email),
+            first_name: h(data.user_data?.first_name),
+            last_name: h(data.user_data?.last_name),
+            city: h(data.user_data?.city || geo.ct),
+            state: h(data.user_data?.state || geo.st),
+            zip_code: h(data.user_data?.zip_code),
+            country: h(data.user_data?.country || geo.country),
+            external_id: h(data.user_data?.external_id),
+            ttclid: data.user_data?.ttclid,
+            ttp: data.user_data?.ttp,
           },
           properties: data.properties || {},
           ...(testEventCode && { test_event_code: testEventCode }),
@@ -78,11 +108,27 @@ export const sendTikTokEvent = async (data: ITikTokEventData) => {
       },
     });
 
-    return response.data;
+    // TikTok returns code 0 on success; non-zero = error.
+    const code = response.data?.code;
+    const ok = code === 0;
+
+    if (!ok) {
+      console.warn("TikTok CAPI: non-zero code", response.data);
+    }
+
+    if (ok && data.event_name === "CompletePayment" && orderId) {
+      await OrderModel.updateOne(
+        { _id: orderId },
+        { $set: { tiktok_purchase_sent: true } },
+      ).catch((e) =>
+        console.error("TikTok CAPI: failed to mark order purchase_sent", e),
+      );
+    }
+
+    return { ok };
   } catch (error: any) {
-    console.error(
-      "TikTok Events API error:",
-      error?.response?.data || error.message,
-    );
+    const msg = error?.response?.data || error?.message || "unknown";
+    console.error("TikTok Events API error:", msg);
+    return { ok: false, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
   }
 };
