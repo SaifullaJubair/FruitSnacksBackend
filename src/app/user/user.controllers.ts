@@ -126,7 +126,15 @@ export const postUser: RequestHandler = async (
     }
   } catch (error: any) {
     // Phase 1C — friendly message on duplicate email collision.
-    if (error?.code === 11000 && error?.keyPattern?.user_email) {
+    // Catches both the create path (postUserServices) and the
+    // existing-guest update path (UserModel.updateOne). Mongo error
+    // shape varies a little between driver versions — match either
+    // keyPattern or errmsg substring.
+    const isDupEmail =
+      error?.code === 11000 &&
+      (error?.keyPattern?.user_email ||
+        String(error?.errmsg || error?.message || "").includes("user_email"));
+    if (isDupEmail) {
       return next(
         new ApiError(409, "This email is already linked to another account."),
       );

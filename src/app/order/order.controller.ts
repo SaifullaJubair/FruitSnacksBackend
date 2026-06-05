@@ -315,6 +315,20 @@ export const postOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
+      const nameParts = String(requestData?.customer_name || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const fn = nameParts[0] || undefined;
+      const ln = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+      const numItems = Array.isArray(requestData?.order_products)
+        ? requestData.order_products.reduce(
+            (s: number, p: any) => s + (Number(p?.product_quantity) || 1),
+            0,
+          )
+        : 0;
+
       await sendMetaEvent({
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
@@ -323,7 +337,12 @@ export const postOrder: any = async (
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,
-          fn: requestData?.customer_name,
+          fn,
+          ln,
+          em: requestData?.customer_email,
+          ct: requestData?.billing_city,
+          st: requestData?.billing_state,
+          country: "bd",
           external_id: requestData?.customer_id,
           client_ip_address: clientIp,
           client_user_agent: req.headers["user-agent"] || "",
@@ -337,7 +356,7 @@ export const postOrder: any = async (
             (p: any) => p?.product_id,
           ),
           content_type: "product",
-          num_items: requestData?.order_products?.length,
+          num_items: numItems,
           order_id: result?._id?.toString(),
         },
       });
@@ -512,6 +531,20 @@ export const postSingleOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
+      const nameParts = String(requestData?.customer_name || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const fn = nameParts[0] || undefined;
+      const ln = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+      const numItems = Array.isArray(requestData?.order_products)
+        ? requestData.order_products.reduce(
+            (s: number, p: any) => s + (Number(p?.product_quantity) || 1),
+            0,
+          )
+        : 0;
+
       await sendMetaEvent({
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
@@ -519,7 +552,12 @@ export const postSingleOrder: any = async (
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,
-          fn: requestData?.customer_name,
+          fn,
+          ln,
+          em: requestData?.customer_email,
+          ct: requestData?.billing_city,
+          st: requestData?.billing_state,
+          country: "bd",
           external_id: requestData?.customer_id,
           client_ip_address: clientIp,
           client_user_agent: req.headers["user-agent"] || "",
@@ -533,7 +571,7 @@ export const postSingleOrder: any = async (
             (p: any) => p?.product_id,
           ),
           content_type: "product",
-          num_items: requestData?.order_products?.length,
+          num_items: numItems,
           order_id: result?._id?.toString(),
         },
       });
