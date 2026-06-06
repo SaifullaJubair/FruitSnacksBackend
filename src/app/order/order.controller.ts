@@ -1200,10 +1200,16 @@ export const postAdminOrder: any = async (
 
     await findOrCreateUser(requestData, session);
 
-    // Server-side recompute (same as storefront — prices trusted from DB)
+    // Capture admin-chosen shipping before recompute overwrites it.
+    // recomputeShippingCost re-derives from billing_state + settings; for POS
+    // the admin explicitly chose pickup (0) or a zone rate — trust that choice.
+    const adminChosenShipping = Number(requestData?.shipping_cost) || 0;
+
+    // Server-side recompute for product prices (trusted from DB)
     const recomputed = await recomputeOrderTotals(requestData, session);
     requestData.sub_total_amount = recomputed.sub_total_amount;
-    requestData.shipping_cost = recomputed.shipping_cost;
+    // Restore the admin-chosen shipping cost (overrides recompute's zone calc)
+    requestData.shipping_cost = adminChosenShipping;
     requestData.vat_amount = recomputed.vat_amount;
 
     // D11 — manual discount replaces coupon path for POS
@@ -1213,7 +1219,7 @@ export const postAdminOrder: any = async (
     requestData.coupon_id = undefined; // ensure no coupon leaks in
     requestData.grand_total_amount = Math.max(
       0,
-      recomputed.sub_total_amount + recomputed.shipping_cost + (recomputed.vat_amount || 0) - manualDiscount,
+      recomputed.sub_total_amount + adminChosenShipping + (recomputed.vat_amount || 0) - manualDiscount,
     );
     requestData.loyalty_redeem_points = 0;
     requestData.loyalty_redeem_amount = 0;
