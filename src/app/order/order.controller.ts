@@ -153,45 +153,55 @@ const handleCouponUsage = async (
 ) => {
   if (!requestData?.coupon_id) return;
 
-  const checkCouponIsUsed = await CouponUsedModel.findOne({
-    coupon_id: requestData?.coupon_id,
-    customer_id: requestData?.customer_id,
-  }).session(session);
+  // 11β D6 — anonymous BOGO allowed. If no customer_id (FB-ad guest checkout),
+  // skip the coupon_used per-user counter entirely; the global atomic decrement
+  // below still gates re-use via coupon_available.
+  if (requestData?.customer_id) {
+    const checkCouponIsUsed = await CouponUsedModel.findOne({
+      coupon_id: requestData?.coupon_id,
+      customer_id: requestData?.customer_id,
+    }).session(session);
 
-  if (!checkCouponIsUsed) {
-    const createCouponUsed = await createCouponUsedCustomer(
-      {
-        coupon_id: new mongoose.Types.ObjectId(
-          requestData?.coupon_id.toString(),
-        ),
-        customer_id: new mongoose.Types.ObjectId(
-          requestData?.customer_id.toString(),
-        ),
-        used: 1,
-      },
-      session,
-    );
-    if (!createCouponUsed) throw new ApiError(400, "Order Create Failed!");
-  } else {
-    const couponUsedUpdate = await CouponUsedModel.updateOne(
-      {
-        coupon_id: requestData?.coupon_id,
-        customer_id: requestData?.customer_id,
-      },
-      { $inc: { used: 1 } },
-      { session, runValidators: true },
-    );
-    if (couponUsedUpdate.modifiedCount === 0)
-      throw new ApiError(400, "Order Create Failed!");
+    if (!checkCouponIsUsed) {
+      const createCouponUsed = await createCouponUsedCustomer(
+        {
+          coupon_id: new mongoose.Types.ObjectId(
+            requestData?.coupon_id.toString(),
+          ),
+          customer_id: new mongoose.Types.ObjectId(
+            requestData?.customer_id.toString(),
+          ),
+          used: 1,
+        },
+        session,
+      );
+      if (!createCouponUsed) throw new ApiError(400, "Order Create Failed!");
+    } else {
+      const couponUsedUpdate = await CouponUsedModel.updateOne(
+        {
+          coupon_id: requestData?.coupon_id,
+          customer_id: requestData?.customer_id,
+        },
+        { $inc: { used: 1 } },
+        { session, runValidators: true },
+      );
+      if (couponUsedUpdate.modifiedCount === 0)
+        throw new ApiError(400, "Order Create Failed!");
+    }
   }
 
-  const mainCouponUpdate = await CouponModel.updateOne(
-    { _id: requestData?.coupon_id },
+  // 11β HIGH 7 — atomic decrement guard. Previously two concurrent orders both
+  // saw coupon_available > 0, both passed the recompute check, and both made
+  // it here → counter went to -1. findOneAndUpdate with $gt:0 filter is
+  // atomic at the document level; if it returns null another order won the
+  // race and we must reject this one cleanly.
+  const mainCouponUpdate = await CouponModel.findOneAndUpdate(
+    { _id: requestData?.coupon_id, coupon_available: { $gt: 0 } },
     { $inc: { coupon_available: -1 } },
-    { session, runValidators: true },
+    { new: true, session, runValidators: true },
   );
-  if (mainCouponUpdate.modifiedCount === 0)
-    throw new ApiError(400, "Order Create Failed!");
+  if (!mainCouponUpdate)
+    throw new ApiError(409, "Coupon stock exhausted — please try without it.");
 };
 
 // ================================================================

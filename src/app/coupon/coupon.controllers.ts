@@ -56,8 +56,12 @@ export const findACoupon: RequestHandler = async (
 ): Promise<ICouponInterface | any> => {
   try {
     const { coupon_code, customer_id, panel_owner_id } = req.body;
-    if (!coupon_code || !customer_id) {
-      throw new ApiError(400, "Coupon code or customer id is required");
+    // 11β HIGH 6 (D6 anon BOGO) — coupon_code is the only hard requirement.
+    // customer_id is OPTIONAL: BOGO coupons must work for anonymous FB-ad
+    // traffic, and even percent/fixed lookups should fail with a clearer
+    // message than "code or customer required".
+    if (!coupon_code) {
+      throw new ApiError(400, "Coupon code is required");
     }
     const result: ICouponInterface[] | any = await findACouponServices(
       coupon_code
@@ -88,7 +92,10 @@ export const findACoupon: RequestHandler = async (
     if (end && now > new Date(end.getTime() + 86400000)) {
       throw new ApiError(400, "Coupon has expired");
     }
-    if (result?.coupon_customer_type === "specific") {
+    // Customer-specific allowlist only enforceable when caller is logged in.
+    // Anonymous BOGO (D6) skips it; for non-BOGO + anon, the recompute path at
+    // checkout still re-validates so this isn't a security hole.
+    if (result?.coupon_customer_type === "specific" && customer_id) {
       if (result?.coupon_specific_customer?.length > 0) {
         const isCustomerAllowed = result?.coupon_specific_customer?.some(
           (customer: any) =>
@@ -100,13 +107,16 @@ export const findACoupon: RequestHandler = async (
         }
       }
     }
-    const getCouponUserIsUsedThisCoupon: ICouponUsedInterface | any =
-      await getCouponUserByIdServices(result?.coupon_id, customer_id);
-    if (getCouponUserIsUsedThisCoupon) {
-      if (
-        result?.coupon_use_per_person <= getCouponUserIsUsedThisCoupon?.used
-      ) {
-        throw new ApiError(400, "Already use this coupon");
+    // Per-user usage cap only checkable when we know who the user is.
+    if (customer_id) {
+      const getCouponUserIsUsedThisCoupon: ICouponUsedInterface | any =
+        await getCouponUserByIdServices(result?.coupon_id, customer_id);
+      if (getCouponUserIsUsedThisCoupon) {
+        if (
+          result?.coupon_use_per_person <= getCouponUserIsUsedThisCoupon?.used
+        ) {
+          throw new ApiError(400, "Already use this coupon");
+        }
       }
     }
     return sendResponse<ICouponInterface>(res, {

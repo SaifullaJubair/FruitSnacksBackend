@@ -22,8 +22,14 @@ const couponSchema = new Schema<ICouponInterface>(
       required: true,
     },
     coupon_amount: {
-      required: true,
+      // 11β BLOCKER 2 — BOGO coupons don't use coupon_amount (discount lives in
+      // bogo_get_discount_pct). Make required conditional so admins can save a
+      // BOGO without typing a dummy amount.
+      required: function (this: any) {
+        return this?.coupon_type !== "bogo";
+      },
       type: Number,
+      default: 0,
     },
     coupon_use_per_person: {
       required: true,
@@ -82,9 +88,10 @@ const couponSchema = new Schema<ICouponInterface>(
       ref: "admins",
     },
     // Phase E — BOGO fields (used only when coupon_type === "bogo")
-    bogo_buy_qty: { type: Number },
-    bogo_get_qty: { type: Number },
-    bogo_get_discount_pct: { type: Number },
+    // 11β N1 — min 1 on quantities; discount_pct stays free 0-100 (0 = nominal).
+    bogo_buy_qty: { type: Number, min: 1 },
+    bogo_get_qty: { type: Number, min: 1 },
+    bogo_get_discount_pct: { type: Number, min: 0, max: 100 },
   },
   {
     timestamps: true,

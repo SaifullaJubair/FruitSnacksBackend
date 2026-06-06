@@ -357,17 +357,20 @@ export const recomputeOrderTotals = async (
     // Phase E coupon hardening — per-user usage cap + total-available cap.
     // `coupon_use_per_person` = max uses per customer (0 / undefined = unlimited).
     // `coupon_available` = remaining global stock (decremented by handleCouponUsage).
+    // 11β D6 — per-person cap only applies when we know the customer (anon BOGO).
     let usageOk = true;
-    if (coupon && requestData?.customer_id) {
-      const perPerson = Number(coupon.coupon_use_per_person) || 0;
-      if (perPerson > 0) {
-        const used: any = await q(
-          CouponUsedModel.findOne({
-            coupon_id: coupon._id,
-            customer_id: requestData.customer_id,
-          }),
-        );
-        if (used && Number(used.used) >= perPerson) usageOk = false;
+    if (coupon) {
+      if (requestData?.customer_id) {
+        const perPerson = Number(coupon.coupon_use_per_person) || 0;
+        if (perPerson > 0) {
+          const used: any = await q(
+            CouponUsedModel.findOne({
+              coupon_id: coupon._id,
+              customer_id: requestData.customer_id,
+            }),
+          );
+          if (used && Number(used.used) >= perPerson) usageOk = false;
+        }
       }
       if (Number(coupon.coupon_available) <= 0) usageOk = false;
     }
@@ -383,6 +386,45 @@ export const recomputeOrderTotals = async (
         discount_amount = d;
       } else if (coupon.coupon_type === "fixed") {
         discount_amount = coupon.coupon_amount;
+      } else if (coupon.coupon_type === "bogo") {
+        // 11β BOGO math — "buy N get M at X% off cheapest qualifying line."
+        // Scope: if coupon_specific_product set, only those lines qualify;
+        // otherwise the whole cart. M3 — skip lines already brought to ≤ 0 by
+        // campaigns / per-product coupons (BOGO can't "double-discount" a
+        // free line).
+        const buyQty = Math.max(1, Number(coupon.bogo_buy_qty) || 1);
+        const getQty = Math.max(1, Number(coupon.bogo_get_qty) || 1);
+        const pct = Math.max(
+          0,
+          Math.min(100, Number(coupon.bogo_get_discount_pct) || 0),
+        );
+        const targetIds: string[] = Array.isArray(coupon.coupon_specific_product)
+          ? coupon.coupon_specific_product
+              .map((p: any) => String(p?.product_id || ""))
+              .filter(Boolean)
+          : [];
+        const eligible = lines.filter((ln: any) => {
+          if (Number(ln.product_unit_final_price) <= 0) return false;
+          if (targetIds.length === 0) return true;
+          return targetIds.includes(String(ln.product_id));
+        });
+        const totalEligibleQty = eligible.reduce(
+          (s: number, ln: any) => s + Number(ln.product_quantity || 0),
+          0,
+        );
+        if (totalEligibleQty >= buyQty + getQty && eligible.length > 0) {
+          // Pick cheapest qualifying unit price → that's the "free / discounted"
+          // line. discount = unit_final × getQty × pct/100.
+          const cheapest = eligible.reduce((min: any, ln: any) =>
+            Number(ln.product_unit_final_price) <
+            Number(min.product_unit_final_price)
+              ? ln
+              : min,
+          );
+          discount_amount = Math.round(
+            (Number(cheapest.product_unit_final_price) * getQty * pct) / 100,
+          );
+        }
       }
       if (discount_amount > sub_total_amount) discount_amount = sub_total_amount;
     }
