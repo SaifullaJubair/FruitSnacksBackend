@@ -2735,39 +2735,48 @@ export const findAllDashboardProductServices = async (
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
 
-  // Step 1: Find products with basic population
+  // Step 1: Fetch products — strip heavy fields not needed for list view
   const products = await ProductModel.find(whereCondition)
     .populate([
-      { path: "category_id", model: "categories" },
-      { path: "brand_id", model: "brands" },
+      { path: "category_id", model: "categories", select: "category_name category_slug" },
+      { path: "brand_id", model: "brands", select: "brand_name brand_slug" },
     ])
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
-    .select("-__v")
-    .lean(); // Return plain JavaScript objects for easier processing
+    .select(
+      "_id product_name product_slug product_sku main_image product_price " +
+      "product_sale_price product_quantity product_status is_variation " +
+      "category_id brand_id",
+    )
+    .lean();
 
-  // Step 2: For each product, conditionally fetch variations if is_variation is true
-  const productsWithVariations = await Promise.all(
-    products.map(async (product) => {
-      // Only fetch variations if is_variation is true
-      if (product?.is_variation) {
-        const variations = await VariationModel.find({
-          product_id: product?._id,
-        })
-          .select("-__v")
-          .lean();
+  // Step 2: Single bulk query for all variations (avoids N+1)
+  const variationProductIds = products
+    .filter((p) => p.is_variation)
+    .map((p) => p._id);
 
-        // Add variations to the product object
-        return { ...product, variations };
-      } else {
-        // Return the product as is without variations
-        return { ...product, variations: [] };
-      }
-    }),
-  );
+  const allVariations = variationProductIds.length
+    ? await VariationModel.find({ product_id: { $in: variationProductIds } })
+        .select(
+          "_id product_id variation_name variation_price variation_sale_price " +
+          "variation_discount_price variation_quantity variation_image variation_images variation_sku",
+        )
+        .lean()
+    : [];
 
-  return productsWithVariations;
+  // Group variations by product_id
+  const variationsByProduct: Record<string, any[]> = {};
+  for (const v of allVariations) {
+    const key = String(v.product_id);
+    if (!variationsByProduct[key]) variationsByProduct[key] = [];
+    variationsByProduct[key].push(v);
+  }
+
+  return products.map((p) => ({
+    ...p,
+    variations: variationsByProduct[String(p._id)] || [],
+  }));
 };
 
 // Find a dashboard Product
