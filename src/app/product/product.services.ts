@@ -2738,11 +2738,8 @@ export const findAllDashboardProductServices = async (
   // Step 1: Find products with basic population
   const products = await ProductModel.find(whereCondition)
     .populate([
-      { path: "product_supplier_id" },
-      { path: "category_id" },
-      { path: "brand_id" },
-      { path: "product_publisher_id" },
-      { path: "product_updated_by" },
+      { path: "category_id", model: "categories" },
+      { path: "brand_id", model: "brands" },
     ])
     .sort({ _id: -1 })
     .skip(skip)
