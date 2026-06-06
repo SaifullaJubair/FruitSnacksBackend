@@ -29,10 +29,10 @@ export const postReview: RequestHandler = async (
 
     // C13 BLOCKER 3 — FE hardcodes review_status:"active" (ToBeReviewedTab.jsx:41).
     // Strip it and override server-side based on the auto_approve_reviews toggle.
-    // Default to "active" when setting is absent (fresh DB / undefined).
+    // Default to "pending" when setting is absent (fresh DB / undefined) — matches model default.
     delete requestData.review_status;
     const setting = await getCachedSetting().catch(() => null);
-    const autoApprove = setting?.auto_approve_reviews ?? true;
+    const autoApprove = setting?.auto_approve_reviews ?? false;
     requestData.review_status = autoApprove ? "active" : "pending";
 
     if (req.files && "review_image" in req.files) {

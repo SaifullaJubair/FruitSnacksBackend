@@ -338,7 +338,7 @@ export const postOrder: any = async (
       },
       { session, runValidators: true },
     );
-    if (userUpdate.modifiedCount === 0)
+    if (userUpdate.matchedCount === 0)
       throw new ApiError(400, "Order Create Failed!");
 
     await session.commitTransaction();

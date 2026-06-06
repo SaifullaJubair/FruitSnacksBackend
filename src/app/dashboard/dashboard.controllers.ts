@@ -129,7 +129,7 @@ export const findTopSellingWidgetController: RequestHandler = async (
           total_qty: 1,
           total_revenue: 1,
           product_name: "$product.product_name",
-          product_thumbnail: "$product.product_thumbnail",
+          product_thumbnail: "$product.main_image",
         },
       },
     ]);
