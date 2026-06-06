@@ -116,7 +116,7 @@ export const sendTestEmail: RequestHandler = async (
       throw new ApiError(400, "Valid recipient email required!");
     }
     const { SendEmailOTP } = require("../../middlewares/send.otp.email");
-    const sent = await SendEmailOTP(123456, to, "Admin");
+    const sent = await SendEmailOTP(123456, to, "Admin", { ignoreEnabledFlag: true });
     if (!sent) {
       throw new ApiError(503, "Email could not be sent. Check your SMTP settings (host, port, username, password).");
     }

@@ -96,9 +96,10 @@ export const SendEmailOTP = async (
   otp: number,
   toEmail: string,
   adminName: string,
+  { ignoreEnabledFlag = false } = {},
 ): Promise<boolean> => {
   try {
-    const cfg = await getEmailConfig();
+    const cfg = await getEmailConfig({ ignoreEnabledFlag });
     if (!cfg) {
       console.warn("SendEmailOTP: email disabled or unconfigured — skipping");
       return false;

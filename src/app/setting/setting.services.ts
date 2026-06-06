@@ -274,10 +274,12 @@ export interface IEmailConfig {
   fromName: string;
 }
 
-export const getEmailConfig = async (): Promise<IEmailConfig | null> => {
+export const getEmailConfig = async (
+  { ignoreEnabledFlag = false } = {},
+): Promise<IEmailConfig | null> => {
   const setting = await getCachedSetting().catch(() => null);
 
-  if (setting && setting.email_provider_enabled === false) {
+  if (!ignoreEnabledFlag && setting && setting.email_provider_enabled === false) {
     return null;
   }
 
