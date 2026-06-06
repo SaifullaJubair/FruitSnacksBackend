@@ -2869,8 +2869,8 @@ export const findAllDashboardProductRichServices = async (
     .populate([
       { path: "category_id", select: "category_name category_slug" },
       { path: "brand_id", select: "brand_name" },
-      { path: "product_publisher_id", select: "admin_name -admin_password" },
-      { path: "product_updated_by", select: "admin_name -admin_password" },
+      { path: "product_publisher_id", select: "admin_name" },
+      { path: "product_updated_by", select: "admin_name" },
     ])
     .sort(sortStage)
     .skip(skip)
