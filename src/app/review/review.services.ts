@@ -383,6 +383,29 @@ export const findAllSeededReviewServices = async (
   return { reviews, totalCount };
 };
 
+// Track D — Reviews carousel manual-pick: fetch specific reviews by IDs.
+// Filters deleted/inactive reviews so stale IDs in settings don't crash FE.
+export const findReviewsByIdsServices = async (
+  ids: string[],
+): Promise<IReviewInterface[]> => {
+  if (!ids || ids.length === 0) return [];
+  const objectIds = ids
+    .map((id) => {
+      try { return new mongoose.Types.ObjectId(id); }
+      catch { return null; }
+    })
+    .filter(Boolean);
+
+  return ReviewModel.find({
+    _id: { $in: objectIds },
+    review_status: "active",
+  })
+    .populate("review_user_id", "user_name")
+    .sort({ _id: -1 })
+    .select("-__v")
+    .lean();
+};
+
 // // Project the desired fields (Inclusion-based approach)
 // {
 //   $project: {

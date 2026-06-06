@@ -203,6 +203,111 @@ export interface ISettingInterface {
   // false → strip is_seeded reviews from storefront GET /review/:id (real reviews only)
   // true  → show all reviews including seeded ones (default: show them for fresh shops)
   enable_seeded_reviews?: boolean;
+
+  // ─── Track D — Home Layout Builder ────────────────────────────────────────
+
+  // Section order + enabled state. Typed subdoc array (NOT Mixed) so Mongoose
+  // change-detection works without .markModified(). Backfilled to L9 DTC
+  // defaults on first GET if missing. `enabled` here is the canonical source
+  // of truth — flat `_show` fields were dropped to avoid dual-source conflict.
+  home_section_array?: IHomeSectionItem[];
+
+  // 0. Topbar
+  topbar_show?: boolean;
+  topbar_announcement_text?: string;
+  topbar_show_track_order?: boolean;
+  topbar_show_hotline?: boolean;
+
+  // 1. Navbar
+  nav_category_mode?: "simple" | "mega" | "hamburger" | "auto";
+  nav_show_search_sticky?: boolean;
+  nav_show_wishlist_icon?: boolean;
+  nav_show_compare_icon?: boolean;
+  nav_extra_links_json?: string; // JSON string, max 4 links [{label,url}]
+
+  // 2. Hero
+  hero_show?: boolean;
+  hero_variant?: "single" | "carousel" | "split";
+  hero_autoplay_seconds?: number; // 0 = disabled
+  hero_show_arrows?: boolean;
+
+  // 3. Trust strip
+  trust_strip_source?: "trust_point" | "static_4";
+
+  // 4. Featured Categories
+  feature_categories_limit?: number;
+  feature_categories_title?: string;
+
+  // 5. Product strip config (7 strips × 2 = 14 fields — _show dropped, enabled comes from home_section_array)
+  flash_sale_limit?: number;
+  flash_sale_title?: string;
+  trending_products_limit?: number;
+  trending_products_title?: string;
+  bestsellers_limit?: number;
+  bestsellers_title?: string;
+  new_arrivals_limit?: number;
+  new_arrivals_title?: string;
+  just_for_you_limit?: number;
+  just_for_you_title?: string;
+  ecommerce_choice_limit?: number;
+  ecommerce_choice_title?: string;
+  category_wise_strip_limit?: number;
+  category_wise_strip_title?: string;
+  category_wise_strip_category_id?: string; // ObjectId ref to category
+
+  // 6. Offer block
+  offers_block_limit?: number;
+  offers_block_title?: string;
+  offers_block_layout?: "grid" | "carousel";
+
+  // 7. Promo banner
+  promo_banner_image?: string;
+  promo_banner_image_key?: string; // S3 key for cleanup on replace
+  promo_banner_url?: string;
+  promo_banner_text_overlay?: string;
+
+  // 8a. Brand story
+  brand_story_title?: string;
+  brand_story_text?: string;
+  brand_story_image?: string;
+  brand_story_image_key?: string; // S3 key for cleanup on replace
+  brand_story_cta_label?: string;
+  brand_story_cta_url?: string;
+
+  // 8b. Reviews carousel
+  reviews_carousel_source?: "auto_featured" | "manual_pick";
+  reviews_carousel_ids?: string; // JSON string — array of review _id strings
+  reviews_carousel_limit?: number;
+  reviews_carousel_title?: string;
+
+  // 8c. Site FAQ (content lives in siteFaq collection)
+  site_faq_title?: string;
+
+  // 8d. Newsletter
+  newsletter_title?: string;
+  newsletter_collect?: "email" | "phone" | "both";
+
+  // 9. Footer
+  footer_show_payment_strip?: boolean;
+  footer_payment_methods?: string; // JSON string, preset icon keys
+  footer_show_delivery_strip?: boolean;
+  footer_delivery_partners?: string; // JSON string, preset icon keys
+  footer_show_mini_newsletter?: boolean;
+
+  // 10. Chat widgets
+  // chat_whatsapp_show reuses existing enable_whatsapp_chat (C13)
+  chat_messenger_show?: boolean;
+  chat_messenger_page_id?: string;
+  chat_livechat_show?: boolean;
+  // stored via /setting/secrets — arbitrary embed JS treated as sensitive
+  chat_livechat_embed_code?: string;
+  chat_widgets_position?: "bottom-right" | "bottom-left";
+}
+
+export interface IHomeSectionItem {
+  id: string;
+  enabled: boolean;
+  order: number;
 }
 
 export interface IManualMfsMethod {

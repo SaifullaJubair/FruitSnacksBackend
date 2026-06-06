@@ -109,4 +109,15 @@ export interface IRoleInterface {
   payment_method_create?: true | false;
   payment_method_update?: true | false;
   payment_method_delete?: true | false;
+
+  // Track D: Site FAQ
+  site_faq_show?: true | false;
+  site_faq_post?: true | false;
+  site_faq_update?: true | false;
+  site_faq_delete?: true | false;
+
+  // Track D: Newsletter Subscribers
+  newsletter_show?: true | false;
+  newsletter_delete?: true | false;
+  newsletter_export?: true | false;
 }

@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import { ISettingInterface } from "./setting.interface";
+import { IHomeSectionItem, ISettingInterface } from "./setting.interface";
 
 const settingSchema = new Schema<ISettingInterface>(
   {
@@ -219,6 +219,140 @@ const settingSchema = new Schema<ISettingInterface>(
 
     // Sprint 3 — Seed Review visibility on storefront
     enable_seeded_reviews: { type: Boolean, default: true },
+
+    // ─── Track D — Home Layout Builder ──────────────────────────────────────
+
+    // Typed subdoc array (not Mixed) — Mongoose tracks changes automatically.
+    // Default is injected at read-time in getSettingServices (BE backfill).
+    home_section_array: {
+      type: [
+        {
+          _id: false,
+          id: { type: String, required: true },
+          enabled: { type: Boolean, default: true },
+          order: { type: Number, required: true },
+        },
+      ],
+      default: undefined,
+    },
+
+    // 0. Topbar
+    topbar_show: { type: Boolean, default: true },
+    topbar_announcement_text: { type: String, default: "" },
+    topbar_show_track_order: { type: Boolean, default: true },
+    topbar_show_hotline: { type: Boolean, default: true },
+
+    // 1. Navbar
+    nav_category_mode: {
+      type: String,
+      enum: ["simple", "mega", "hamburger", "auto"],
+      default: "auto",
+    },
+    nav_show_search_sticky: { type: Boolean, default: true },
+    nav_show_wishlist_icon: { type: Boolean, default: true },
+    nav_show_compare_icon: { type: Boolean, default: false },
+    nav_extra_links_json: { type: String, default: "[]" },
+
+    // 2. Hero
+    hero_show: { type: Boolean, default: true },
+    hero_variant: {
+      type: String,
+      enum: ["single", "carousel", "split"],
+      default: "carousel",
+    },
+    hero_autoplay_seconds: { type: Number, default: 5 },
+    hero_show_arrows: { type: Boolean, default: true },
+
+    // 3. Trust strip
+    trust_strip_source: {
+      type: String,
+      enum: ["trust_point", "static_4"],
+      default: "trust_point",
+    },
+
+    // 4. Featured Categories
+    feature_categories_limit: { type: Number, default: 6 },
+    feature_categories_title: { type: String, default: "ফিচারড ক্যাটাগরি" },
+
+    // 5. Product strips (7 × 2 fields)
+    flash_sale_limit: { type: Number, default: 8 },
+    flash_sale_title: { type: String, default: "ফ্ল্যাশ সেল" },
+    trending_products_limit: { type: Number, default: 8 },
+    trending_products_title: { type: String, default: "ট্রেন্ডিং পণ্য" },
+    bestsellers_limit: { type: Number, default: 8 },
+    bestsellers_title: { type: String, default: "বেস্টসেলার" },
+    new_arrivals_limit: { type: Number, default: 8 },
+    new_arrivals_title: { type: String, default: "নতুন পণ্য" },
+    just_for_you_limit: { type: Number, default: 8 },
+    just_for_you_title: { type: String, default: "শুধু আপনার জন্য" },
+    ecommerce_choice_limit: { type: Number, default: 8 },
+    ecommerce_choice_title: { type: String, default: "আমাদের পছন্দ" },
+    category_wise_strip_limit: { type: Number, default: 4 },
+    category_wise_strip_title: { type: String, default: "ক্যাটাগরি ওয়াইজ" },
+    category_wise_strip_category_id: { type: String },
+
+    // 6. Offer block
+    offers_block_limit: { type: Number, default: 3 },
+    offers_block_title: { type: String, default: "স্পেশাল অফার" },
+    offers_block_layout: {
+      type: String,
+      enum: ["grid", "carousel"],
+      default: "grid",
+    },
+
+    // 7. Promo banner
+    promo_banner_image: { type: String },
+    promo_banner_image_key: { type: String },
+    promo_banner_url: { type: String },
+    promo_banner_text_overlay: { type: String, default: "" },
+
+    // 8a. Brand story
+    brand_story_title: { type: String, default: "আমাদের গল্প" },
+    brand_story_text: { type: String, default: "" },
+    brand_story_image: { type: String },
+    brand_story_image_key: { type: String },
+    brand_story_cta_label: { type: String, default: "আরও জানুন" },
+    brand_story_cta_url: { type: String, default: "/about" },
+
+    // 8b. Reviews carousel
+    reviews_carousel_source: {
+      type: String,
+      enum: ["auto_featured", "manual_pick"],
+      default: "auto_featured",
+    },
+    reviews_carousel_ids: { type: String, default: "[]" },
+    reviews_carousel_limit: { type: Number, default: 5 },
+    reviews_carousel_title: { type: String, default: "কাস্টমারের ভালোবাসা" },
+
+    // 8c. Site FAQ
+    site_faq_title: { type: String, default: "সাধারণ প্রশ্ন" },
+
+    // 8d. Newsletter
+    newsletter_title: { type: String, default: "অফার পেতে সাইন আপ করুন" },
+    newsletter_collect: {
+      type: String,
+      enum: ["email", "phone", "both"],
+      default: "both",
+    },
+
+    // 9. Footer
+    footer_show_payment_strip: { type: Boolean, default: true },
+    footer_payment_methods: { type: String, default: "[]" },
+    footer_show_delivery_strip: { type: Boolean, default: true },
+    footer_delivery_partners: { type: String, default: "[]" },
+    footer_show_mini_newsletter: { type: Boolean, default: true },
+
+    // 10. Chat widgets
+    chat_messenger_show: { type: Boolean, default: false },
+    chat_messenger_page_id: { type: String, default: "" },
+    chat_livechat_show: { type: Boolean, default: false },
+    // stored via /setting/secrets — treat as sensitive (arbitrary JS embed)
+    chat_livechat_embed_code: { type: String, default: "" },
+    chat_widgets_position: {
+      type: String,
+      enum: ["bottom-right", "bottom-left"],
+      default: "bottom-right",
+    },
   },
   { timestamps: true },
 );

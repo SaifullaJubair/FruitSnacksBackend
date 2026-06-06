@@ -9,6 +9,7 @@ import {
   findAllDashboardReviewServices,
   findAllReviewServices,
   findAllSeededReviewServices,
+  findReviewsByIdsServices,
   findUnReviewedProductServices,
   findUserReviewServices,
   postReviewServices,
@@ -353,6 +354,31 @@ export const findAllSeededReview: RequestHandler = async (
       message: "Seeded reviews found!",
       data: reviews,
       totalData: totalCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Track D — Reviews carousel manual-pick: fetch specific reviews by IDs
+// GET /api/v1/review/by-ids?ids=id1,id2,id3 (public, for storefront carousel)
+export const findReviewsByIds: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const idsParam = req.query.ids as string;
+    if (!idsParam) {
+      return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Reviews fetched", data: [] });
+    }
+    const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
+    const result = await findReviewsByIdsServices(ids);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Reviews fetched",
+      data: result,
     });
   } catch (error) {
     next(error);

@@ -5,6 +5,7 @@ import {
   findAllReview,
   findAllSeededReview,
   findAllUnReviewProduct,
+  findReviewsByIds,
   findUserReview,
   postReview,
   seedReviewBulk,
@@ -36,6 +37,9 @@ router.route("/unreview_product").get(findAllUnReviewProduct);
 
 // get all Review in dashboard
 router.route("/dashboard").get(verifyToken("review_show"), findAllDashboardReview);
+
+// Track D — Reviews carousel manual-pick (public, before wildcard)
+router.route("/by-ids").get(findReviewsByIds);
 
 // Sprint 3 — Seed Review routes (admin only)
 router.route("/seed/bulk").post(verifyToken("review_seed_bulk"), seedReviewBulk);

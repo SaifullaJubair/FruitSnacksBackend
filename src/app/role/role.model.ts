@@ -345,6 +345,17 @@ const roleSchema = new Schema<IRoleInterface>(
     payment_method_create: { type: Boolean, default: false },
     payment_method_update: { type: Boolean, default: false },
     payment_method_delete: { type: Boolean, default: false },
+
+    // ===== Track D: Site FAQ =====
+    site_faq_show: { type: Boolean, default: false },
+    site_faq_post: { type: Boolean, default: false },
+    site_faq_update: { type: Boolean, default: false },
+    site_faq_delete: { type: Boolean, default: false },
+
+    // ===== Track D: Newsletter Subscribers =====
+    newsletter_show: { type: Boolean, default: false },
+    newsletter_delete: { type: Boolean, default: false },
+    newsletter_export: { type: Boolean, default: false },
   },
   {
     timestamps: true,

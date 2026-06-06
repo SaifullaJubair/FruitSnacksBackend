@@ -6,6 +6,8 @@ import { ISettingInterface } from "./setting.interface";
 import {
   getSettingServices,
   getSettingWithSecretsServices,
+  getHomeLayoutSettingServices,
+  updateHomeLayoutSettingServices,
   postSettingServices,
   updateSettingSecretsServices,
   updateSettingServices,
@@ -124,6 +126,43 @@ export const sendTestEmail: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Test email sent successfully! Check your inbox.",
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// Track D — Home Layout: GET + PATCH /setting/home_layout
+export const getHomeLayout: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await getHomeLayoutSettingServices();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Home layout settings fetched",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const updateHomeLayout: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await updateHomeLayoutSettingServices(req.body || {});
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Home layout settings updated",
+      data: result,
     });
   } catch (error: any) {
     next(error);
