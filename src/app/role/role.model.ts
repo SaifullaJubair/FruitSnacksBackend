@@ -316,6 +316,9 @@ const roleSchema = new Schema<IRoleInterface>(
       default: false,
     },
 
+    // ===== E20: Dashboard =====
+    dashboard_show: { type: Boolean, default: false },
+
     // ===== M2: Supplier =====
     supplier_show: { type: Boolean, default: false },
     supplier_create: { type: Boolean, default: false },

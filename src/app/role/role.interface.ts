@@ -86,6 +86,9 @@ export interface IRoleInterface {
   trust_point_show?: true | false;
   trust_point_update?: true | false;
 
+  // E20: Dashboard — revenue data must not leak to warehouse/limited staff
+  dashboard_show?: true | false;
+
   // M2: Supplier (previously gated with verifyToken("") = any logged-in admin)
   supplier_show?: true | false;
   supplier_create?: true | false;

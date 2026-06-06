@@ -218,6 +218,11 @@ const orderSchema = new Schema<IOrderInterface>(
   },
 );
 
+// E20 BLOCKER 2 — dashboard period + status aggregations need this to avoid
+// full collection scans. Also added to deploy-day checklist: run
+// db.orders.createIndex({ createdAt: -1, order_status: 1 }) on PROD.
+orderSchema.index({ createdAt: -1, order_status: 1 });
+
 const OrderModel = model<IOrderInterface>("orders", orderSchema);
 
 export default OrderModel;
