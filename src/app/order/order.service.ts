@@ -89,6 +89,7 @@ export const getDashboardOrderServices = async (
   searchTerm: any,
   order_status: any,
   courier_type?: any,
+  order_source?: any,
 ): Promise<any> => {
   const andCondition: any[] = [];
 
@@ -107,6 +108,11 @@ export const getDashboardOrderServices = async (
   // ✅ courier_type filter (Pathao tab এর জন্য)
   if (courier_type && courier_type !== "undefined" && courier_type !== "null") {
     andCondition.push({ courier_type });
+  }
+
+  // D18 M3 — POS Orders tab: filter by order_source
+  if (order_source && order_source !== "undefined" && order_source !== "null") {
+    andCondition.push({ order_source });
   }
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};

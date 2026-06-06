@@ -38,10 +38,11 @@ export interface IOrderInterface {
   customer_email?: string;
   order_updated_by?: Types.ObjectId | IAdminInterface;
   tracking_code?: string;
-  pathao_city_id: number;
-  pathao_city_name: string;
-  pathao_zone_id: number;
-  pathao_zone_name: string;
+  // D18 BLOCKER 3 — POS walk-in/pickup orders have no Pathao zone; all 4 optional
+  pathao_city_id?: number;
+  pathao_city_name?: string;
+  pathao_zone_id?: number;
+  pathao_zone_name?: string;
   pathao_status?: string;
   consignment_id?: string;
   delivery_fee?: number;
@@ -109,10 +110,17 @@ export interface IOrderInterface {
   // visits from a different device.
   meta_purchase_sent?: boolean;
   tiktok_purchase_sent?: boolean;
+
+  // D18 POS fields
+  order_source?: "storefront" | "admin";
+  admin_manual_discount?: number;
+  admin_created_by?: Types.ObjectId | IAdminInterface;
+  manual_discount_reason?: string;
 }
 
 export const orderSearchableField = [
   "invoice_id",
   "order_status",
   "customer_phone",
+  "order_source",
 ];

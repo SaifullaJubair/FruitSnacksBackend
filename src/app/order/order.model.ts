@@ -104,22 +104,11 @@ const orderSchema = new Schema<IOrderInterface>(
     tracking_code: {
       type: String,
     },
-    pathao_city_id: {
-      required: true,
-      type: Number,
-    },
-    pathao_city_name: {
-      required: true,
-      type: String,
-    },
-    pathao_zone_id: {
-      required: true,
-      type: Number,
-    },
-    pathao_zone_name: {
-      required: true,
-      type: String,
-    },
+    // D18 BLOCKER 3 — POS walk-in/pickup has no Pathao zone; all optional
+    pathao_city_id: { type: Number },
+    pathao_city_name: { type: String },
+    pathao_zone_id: { type: Number },
+    pathao_zone_name: { type: String },
     // Pathao status
     pathao_status: {
       type: String,
@@ -212,6 +201,16 @@ const orderSchema = new Schema<IOrderInterface>(
     // skip re-fire when these flags are true (set after first success).
     meta_purchase_sent: { type: Boolean, default: false },
     tiktok_purchase_sent: { type: Boolean, default: false },
+
+    // D18 POS fields
+    order_source: {
+      type: String,
+      enum: ["storefront", "admin"],
+      default: "storefront",
+    },
+    admin_manual_discount: { type: Number, default: 0 },
+    admin_created_by: { type: Schema.Types.ObjectId, ref: "admins" },
+    manual_discount_reason: { type: String },
   },
   {
     timestamps: true,

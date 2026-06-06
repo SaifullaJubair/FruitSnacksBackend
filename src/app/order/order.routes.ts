@@ -11,9 +11,10 @@ import {
   getOrderTrackingInfo,
   postOrder,
   postSingleOrder,
+  postAdminOrder,
   updateOrder,
   cancelSteadfastOrder,
-  updateOrderDeliveryInfo, // ✅ নতুন import
+  updateOrderDeliveryInfo,
   // S4+S5 Phase 1C — post-order opt-in email for guest checkout.
   setOrderEmail,
 } from "./order.controller";
@@ -29,6 +30,9 @@ router
 
 // Single order (guest checkout)
 router.route("/single_order").post(orderLimiter, postSingleOrder);
+
+// D18 — Admin POS order create (no rate limit — internal admin tool)
+router.route("/create-admin").post(verifyToken("order_create_admin"), postAdminOrder);
 
 // Dashboard orders
 router.route("/dashboard").get(verifyToken("order_show"), getDashboardOrder);

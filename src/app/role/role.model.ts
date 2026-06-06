@@ -319,6 +319,9 @@ const roleSchema = new Schema<IRoleInterface>(
     // ===== E20: Dashboard =====
     dashboard_show: { type: Boolean, default: false },
 
+    // ===== D18: POS admin order create =====
+    order_create_admin: { type: Boolean, default: false },
+
     // ===== M2: Supplier =====
     supplier_show: { type: Boolean, default: false },
     supplier_create: { type: Boolean, default: false },

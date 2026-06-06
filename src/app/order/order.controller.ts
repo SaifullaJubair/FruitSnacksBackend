@@ -786,7 +786,7 @@ export const getDashboardOrder: RequestHandler = async (
   next: NextFunction,
 ): Promise<any> => {
   try {
-    const { page, limit, searchTerm, order_status }: any = req.query;
+    const { page, limit, searchTerm, order_status, order_source }: any = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
@@ -796,6 +796,8 @@ export const getDashboardOrder: RequestHandler = async (
       skip,
       searchTerm,
       order_status,
+      undefined,
+      order_source,
     );
 
     const andCondition: any[] = [];
@@ -812,6 +814,13 @@ export const getDashboardOrder: RequestHandler = async (
       order_status !== "null"
     ) {
       andCondition.push({ order_status });
+    }
+    if (
+      order_source &&
+      order_source !== "undefined" &&
+      order_source !== "null"
+    ) {
+      andCondition.push({ order_source });
     }
     const whereCondition =
       andCondition.length > 0 ? { $and: andCondition } : {};
@@ -1145,6 +1154,137 @@ export const updateOrderDeliveryInfo: RequestHandler = async (
       message: "Delivery Info Updated Successfully!",
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// ================================================================
+// POST Admin / POS Order
+// ================================================================
+// D18 BLOCKER 1 — gated by verifyToken("order_create_admin") in routes.
+// D10 — no Meta/TikTok CAPI, no SMS for admin-source orders.
+// D11 — manual discount only (no coupon); coupon system untouched.
+// D18 BLOCKER 2 — userUpdate block SKIPPED (walk-in address must not
+//   overwrite the returning customer's saved address).
+export const postAdminOrder: any = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const requestData = req.body;
+
+    // Force order_source so the rest of the pipeline knows this is POS
+    requestData.order_source = "admin";
+    requestData.admin_created_by = (req as any).userId;
+
+    // M1 — pickup delivery type → shipping cost = 0
+    if (requestData?.delivery_type === "pickup") {
+      requestData.shipping_cost = 0;
+    }
+
+    // C13 HIGH 6 — min_order_amount still enforced for POS
+    const adminOrderSetting = await getCachedSetting().catch(() => null);
+    const adminMinOrder = adminOrderSetting?.min_order_amount ?? 0;
+    if (adminMinOrder > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < adminMinOrder) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${adminMinOrder}. Cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    await findOrCreateUser(requestData, session);
+
+    // Server-side recompute (same as storefront — prices trusted from DB)
+    const recomputed = await recomputeOrderTotals(requestData, session);
+    requestData.sub_total_amount = recomputed.sub_total_amount;
+    requestData.shipping_cost = recomputed.shipping_cost;
+    requestData.vat_amount = recomputed.vat_amount;
+
+    // D11 — manual discount replaces coupon path for POS
+    const manualDiscount = Math.max(0, Number(requestData?.admin_manual_discount) || 0);
+    requestData.admin_manual_discount = manualDiscount;
+    requestData.discount_amount = manualDiscount;
+    requestData.coupon_id = undefined; // ensure no coupon leaks in
+    requestData.grand_total_amount = Math.max(
+      0,
+      recomputed.sub_total_amount + recomputed.shipping_cost + (recomputed.vat_amount || 0) - manualDiscount,
+    );
+    requestData.loyalty_redeem_points = 0;
+    requestData.loyalty_redeem_amount = 0;
+
+    requestData.invoice_id = await generateInvoiceId();
+    const result: any = await postOrderServices(requestData, session);
+    if (!result) throw new ApiError(400, "Order Create Failed!");
+
+    for (const line of recomputed.order_products) {
+      const orderDetails = await OrderProductModel.create(
+        [
+          {
+            order_id: result?._id,
+            invoice_id: requestData.invoice_id,
+            product_id: line?.product_id,
+            variation_id: line?.variation_id,
+            product_unit_price: line?.product_unit_price,
+            product_unit_final_price: line?.product_unit_final_price,
+            product_quantity: line?.product_quantity,
+            product_grand_total_price: line?.product_grand_total_price,
+            campaign_id: line?.campaign_id,
+            product_main_price: line?.product_main_price,
+            product_main_discount_price: line?.product_main_discount_price,
+            customer_id: requestData?.customer_id,
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
+          },
+        ],
+        { session },
+      );
+      if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
+    }
+
+    // C13 D8 — maintain_stock respected for POS (admin flips toggle if needed for OOS)
+    const adminMaintainStock = adminOrderSetting?.maintain_stock ?? true;
+    if (adminMaintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
+    await bumpSoldCounts(recomputed.order_products, session);
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        requestData.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
+
+    // D18 BLOCKER 2 — skip userUpdate entirely for POS
+    // Returning customer's saved address must not be overwritten by walk-in address
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // D10 — NO Meta/TikTok CAPI event for admin-source orders
+    // D10 — NO SMS for admin-source orders
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "POS Order Created Successfully!",
+      data: {
+        order_id: result?._id,
+        invoice_id: requestData?.invoice_id,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     next(error);
   }
 };

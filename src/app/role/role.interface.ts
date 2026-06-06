@@ -89,6 +89,9 @@ export interface IRoleInterface {
   // E20: Dashboard — revenue data must not leak to warehouse/limited staff
   dashboard_show?: true | false;
 
+  // D18: POS admin order create
+  order_create_admin?: true | false;
+
   // M2: Supplier (previously gated with verifyToken("") = any logged-in admin)
   supplier_show?: true | false;
   supplier_create?: true | false;
