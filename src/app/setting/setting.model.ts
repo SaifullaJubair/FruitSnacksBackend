@@ -191,6 +191,11 @@ const settingSchema = new Schema<ISettingInterface>(
     // per-deploy override (e.g. staging vs production storefront hostname)
     // without redeploying the backend.
     qr_storefront_base_url: { type: String },
+
+    // C12 — storefront base URL for SMS body links + share copy. Empty
+    // falls back to env.SITE_URL, then a final hardcoded default. Same
+    // override pattern as qr_storefront_base_url above.
+    storefront_base_url: { type: String },
   },
   { timestamps: true },
 );

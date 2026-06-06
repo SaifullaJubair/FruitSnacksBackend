@@ -172,6 +172,11 @@ export interface ISettingInterface {
   barcode_auto_generate?: boolean;
   barcode_default_format?: "CODE128" | "EAN13" | "UPC" | "ITF14";
   qr_storefront_base_url?: string;
+
+  // C12 (Sprint 2): storefront base URL used in SMS body links + share copy.
+  // DB-first / .env-fallback / hardcoded last-ditch — buyer can change
+  // domain from Admin without a redeploy. Mirrors qr_storefront_base_url.
+  storefront_base_url?: string;
 }
 
 export interface IManualMfsMethod {

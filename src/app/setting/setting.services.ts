@@ -1,5 +1,8 @@
 import ApiError from "../../errors/ApiError";
-import { invalidateSettingCache } from "../../helpers/settingCache";
+import {
+  getCachedSetting,
+  invalidateSettingCache,
+} from "../../helpers/settingCache";
 import { ISettingInterface } from "./setting.interface";
 import SettingModel from "./setting.model";
 
@@ -164,16 +167,112 @@ export const postSettingServices = async (
 };
 
 // update A Setting
+//
+// C12 hardening (Sprint 2):
+// 1. Use `$set: data` instead of full-doc replace. Each settings tab in Admin
+//    sends only its own fields; the bare `data` form would silently wipe
+//    every other tab's values back to schema defaults.
+// 2. Strip any SETTING_SECRET_FIELDS key whose incoming value is empty —
+//    the SmsSettings/AnalyticsSettings tabs render secret inputs as empty
+//    strings in view mode (we never round-trip the real value to the
+//    browser). Without this guard, saving an unrelated field would wipe the
+//    stored CAPI token / SMS API key / etc.
+// 3. Drop `_id` from the payload before $set so we don't try to overwrite
+//    the doc's primary key.
 export const updateSettingServices = async (
-  data: ISettingInterface
+  data: ISettingInterface,
 ): Promise<ISettingInterface | any> => {
   const settingData = await SettingModel.findOne({ _id: data?._id });
   if (!settingData) {
     throw new ApiError(400, "Nothing found for update");
   }
-  const updateSetting = await SettingModel.updateOne({ _id: data?._id }, data, {
-    runValidators: true,
-  });
+
+  const patch: any = { ...data };
+  delete patch._id;
+  delete patch.createdAt;
+  delete patch.updatedAt;
+
+  for (const field of SETTING_SECRET_FIELDS) {
+    const incoming = patch[field];
+    if (
+      incoming === "" ||
+      incoming === null ||
+      incoming === undefined ||
+      (typeof incoming === "string" && incoming.trim().length === 0)
+    ) {
+      delete patch[field];
+    }
+  }
+
+  const updateSetting = await SettingModel.updateOne(
+    { _id: data?._id },
+    { $set: patch },
+    { runValidators: true },
+  );
   invalidateSettingCache();
   return updateSetting;
+};
+
+// ─── C12: SMS config resolver (single source of truth) ─────────────────────
+//
+// Replaces the inline `SettingModel.findOne()` + .env-fallback duplicated
+// across send.otp.phone.ts and send.order.sms.ts. Reads via the existing
+// 5-minute settingCache so per-SMS DB hits drop to zero in steady state.
+//
+// Returns `null` when `sms_enabled === false` so callers can short-circuit
+// without attempting BulkSMS. Returns `null` when api_key / sender_id are
+// both missing from DB AND .env (provider truly unconfigured).
+//
+// `secret` is treated as optional — BulkSMS BD only needs api_key + sender_id;
+// other providers (in future) may need both.
+export interface ISmsConfig {
+  apiKey: string;
+  senderId: string;
+  secret?: string;
+  providerName: string;
+}
+
+export const getSmsConfig = async (): Promise<ISmsConfig | null> => {
+  const setting = await getCachedSetting().catch(() => null);
+
+  // Owner explicitly disabled SMS — silent no-op.
+  if (setting && setting.sms_enabled === false) {
+    return null;
+  }
+
+  const apiKey =
+    (setting && setting.sms_api_key) || process.env.BULKSMS_API_KEY || "";
+  const senderId =
+    (setting && setting.sms_sender_id) || process.env.BULKSMS_SENDER_ID || "";
+  const secret =
+    (setting && setting.sms_api_secret) ||
+    process.env.BULKSMS_API_SECRET ||
+    "";
+  const providerName =
+    (setting && setting.sms_provider_name) || "BulkSMS BD";
+
+  if (!apiKey || !senderId) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    senderId,
+    secret: secret || undefined,
+    providerName,
+  };
+};
+
+// C12: storefront base URL for SMS links / share URLs. DB-first, .env
+// fallback, hardcoded last-ditch default. Mirrors qr_storefront_base_url
+// pattern so buyers can swap domain without redeploy.
+export const getStorefrontBaseUrl = async (): Promise<string> => {
+  const setting = await getCachedSetting().catch(() => null);
+  const fromDb =
+    (setting as any)?.storefront_base_url &&
+    String((setting as any).storefront_base_url).trim();
+  if (fromDb) return fromDb.replace(/\/+$/, "");
+  const fromEnv = process.env.SITE_URL && process.env.SITE_URL.trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  return "https://fruitsnacksbd.com";
 };
