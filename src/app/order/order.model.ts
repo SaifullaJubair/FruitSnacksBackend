@@ -211,6 +211,9 @@ const orderSchema = new Schema<IOrderInterface>(
     admin_manual_discount: { type: Number, default: 0 },
     admin_created_by: { type: Schema.Types.ObjectId, ref: "admins" },
     manual_discount_reason: { type: String },
+    // D18-B — POS payment method label (cash/bkash/nagad/card/bank). Separate
+    // from payment_method enum which stays "cod" for POS orders (no gateway).
+    payment_method_note: { type: String },
   },
   {
     timestamps: true,

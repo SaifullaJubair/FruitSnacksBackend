@@ -116,6 +116,7 @@ export interface IOrderInterface {
   admin_manual_discount?: number;
   admin_created_by?: Types.ObjectId | IAdminInterface;
   manual_discount_reason?: string;
+  payment_method_note?: string;
 }
 
 export const orderSearchableField = [

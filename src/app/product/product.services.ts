@@ -2706,8 +2706,11 @@ export const findAllDashboardProductServices = async (
   limit: number,
   skip: number,
   searchTerm: any,
+  categoryId?: string,
+  brandId?: string,
+  stockFilter?: string,
 ): Promise<any> => {
-  const andCondition = [];
+  const andCondition: any[] = [];
   if (searchTerm) {
     andCondition.push({
       $or: productSearchableField.map((field) => ({
@@ -2717,6 +2720,17 @@ export const findAllDashboardProductServices = async (
         },
       })),
     });
+  }
+  if (categoryId) {
+    andCondition.push({ category_id: categoryId });
+  }
+  if (brandId) {
+    andCondition.push({ brand_id: brandId });
+  }
+  if (stockFilter === "in_stock") {
+    andCondition.push({ product_quantity: { $gt: 0 } });
+  } else if (stockFilter === "low_stock") {
+    andCondition.push({ product_quantity: { $gt: 0, $lte: 10 } });
   }
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};

@@ -1686,22 +1686,42 @@ export const findAllDashboardProduct: RequestHandler = async (
   next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
-    const { page = 1, limit = 10, searchTerm } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      searchTerm,
+      category_id,
+      brand_id,
+      stock_filter,
+    } = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
     const result: IProductInterface[] | any =
-      await findAllDashboardProductServices(limitNumber, skip, searchTerm);
-    const andCondition = [];
+      await findAllDashboardProductServices(
+        limitNumber,
+        skip,
+        searchTerm,
+        category_id as string | undefined,
+        brand_id as string | undefined,
+        stock_filter as string | undefined,
+      );
+
+    // Build the same where condition for accurate total count
+    const andCondition: any[] = [];
     if (searchTerm) {
       andCondition.push({
         $or: productSearchableField.map((field) => ({
-          [field]: {
-            $regex: searchTerm,
-            $options: "i",
-          },
+          [field]: { $regex: searchTerm, $options: "i" },
         })),
       });
+    }
+    if (category_id) andCondition.push({ category_id });
+    if (brand_id) andCondition.push({ brand_id });
+    if (stock_filter === "in_stock") {
+      andCondition.push({ product_quantity: { $gt: 0 } });
+    } else if (stock_filter === "low_stock") {
+      andCondition.push({ product_quantity: { $gt: 0, $lte: 10 } });
     }
 
     const whereCondition =
