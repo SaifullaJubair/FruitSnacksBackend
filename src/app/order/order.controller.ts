@@ -331,8 +331,8 @@ export const postOrder: any = async (
       {
         $set: {
           user_country: requestData?.billing_country,
-          user_division: requestData?.billing_city,
-          user_district: requestData?.billing_state,
+          user_division: requestData?.billing_state,
+          user_district: requestData?.billing_city,
           user_address: requestData?.billing_address,
         },
       },
