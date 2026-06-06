@@ -402,10 +402,22 @@ export const forgotPasswordAdmin: RequestHandler = async (req, res, next) => {
     const otp = generateOtp();
     const otpFields = await buildOtpFields(otp);
 
+    // H fix-A — save OTP to DB FIRST, then attempt SMS. Previous order ran
+    // SMS first and never checked the DB save's modifiedCount → if the DB
+    // write failed silently the admin saw "OTP sent" but reset always failed
+    // with "OTP does not match". Mirrors user-side reset pattern.
+    const otpSave = await AdminModel.updateOne(
+      { admin_phone },
+      otpFields,
+      { runValidators: true },
+    );
+    // H fix-B — modifiedCount guard. If the doc didn't update (race / 0 match)
+    // bail loudly instead of silently succeeding.
+    if (otpSave?.modifiedCount === 0) {
+      throw new ApiError(500, "Could not save OTP. Please try again.");
+    }
+
     await SendPhoneOTP(otp, admin_phone, admin?.admin_name);
-    await AdminModel.updateOne({ admin_phone }, otpFields, {
-      runValidators: true,
-    });
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
@@ -448,19 +460,30 @@ export const resetPasswordAdmin: RequestHandler = async (req, res, next) => {
 
     const ok = await verifyOtp(admin_otp, admin.forgot_otp);
     if (!ok) {
-      await AdminModel.updateOne(
+      // H fix-C — modifiedCount guard on the attempt counter. If this write
+      // silently fails the 5-attempt cap can be bypassed (brute-force risk).
+      const incOk = await AdminModel.updateOne(
         { admin_phone },
         { $inc: { otp_attempts: 1 } },
       );
+      if (incOk?.modifiedCount === 0) {
+        throw new ApiError(500, "OTP attempt counter failed. Try again.");
+      }
       throw new ApiError(400, "OTP does not match!");
     }
 
     const hash = await bcrypt.hash(admin_password, saltRounds);
-    await AdminModel.updateOne(
+    // H fix-C — modifiedCount guard on password set + OTP clear. If this
+    // write fails, admin would see "Password reset successfully" but the
+    // password actually wouldn't change → next login fails confusingly.
+    const setOk = await AdminModel.updateOne(
       { admin_phone },
       { admin_password: hash, ...otpClearFields() },
       { runValidators: true },
     );
+    if (setOk?.modifiedCount === 0) {
+      throw new ApiError(500, "Password reset failed. Please try again.");
+    }
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
