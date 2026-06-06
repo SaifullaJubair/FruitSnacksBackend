@@ -2735,19 +2735,16 @@ export const findAllDashboardProductServices = async (
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
 
-  // Step 1: Fetch products — strip heavy fields not needed for list view
+  // Step 1: Fetch products — strip heavy fields not needed for list view.
+  // No populate here: some legacy docs store non-ObjectId strings in category_id/brand_id
+  // which causes Mongoose "Parameter obj to Document() must be an object" crash.
   const products = await ProductModel.find(whereCondition)
-    .populate([
-      { path: "category_id", model: "categories", select: "category_name category_slug" },
-      { path: "brand_id", model: "brands", select: "brand_name brand_slug" },
-    ])
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
     .select(
       "_id product_name product_slug product_sku main_image product_price " +
-      "product_sale_price product_quantity product_status is_variation " +
-      "category_id brand_id",
+      "product_sale_price product_quantity product_status is_variation",
     )
     .lean();
 
