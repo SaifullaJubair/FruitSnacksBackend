@@ -44,6 +44,8 @@ export interface IRoleInterface {
   role_show?: true | false;
   review_update?: true | false;
   review_show?: true | false;
+  review_seed_bulk?: true | false;
+  review_seed_manual?: true | false;
   question_update?: true | false;
   question_show?: true | false;
   coupon_create?: true | false;

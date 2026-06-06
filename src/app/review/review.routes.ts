@@ -3,9 +3,12 @@ import {
   deleteAReviewInfo,
   findAllDashboardReview,
   findAllReview,
+  findAllSeededReview,
   findAllUnReviewProduct,
   findUserReview,
   postReview,
+  seedReviewBulk,
+  seedReviewManual,
   updateReview,
 } from "./review.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
@@ -34,7 +37,16 @@ router.route("/unreview_product").get(findAllUnReviewProduct);
 // get all Review in dashboard
 router.route("/dashboard").get(verifyToken("review_show"), findAllDashboardReview);
 
-// get Review for a specific product
+// Sprint 3 — Seed Review routes (admin only)
+router.route("/seed/bulk").post(verifyToken("review_seed_bulk"), seedReviewBulk);
+router.route("/seed/manual").post(
+  verifyToken("review_seed_manual"),
+  FileUploadHelper.ImageUpload.fields([{ name: "review_image", maxCount: 1 }]),
+  seedReviewManual,
+);
+router.route("/seed/list").get(verifyToken("review_show"), findAllSeededReview);
+
+// get Review for a specific product (must be LAST — :review_product_id is a wildcard)
 router.route("/:review_product_id").get(findAllReview);
 
 export const ReviewRoutes = router;

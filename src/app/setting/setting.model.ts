@@ -216,6 +216,9 @@ const settingSchema = new Schema<ISettingInterface>(
     whatsapp_number: { type: String, default: "" },
     enable_reviews: { type: Boolean, default: true },
     auto_approve_reviews: { type: Boolean, default: false },
+
+    // Sprint 3 — Seed Review visibility on storefront
+    enable_seeded_reviews: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

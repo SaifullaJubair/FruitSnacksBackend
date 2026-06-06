@@ -14,6 +14,9 @@ import {
   findCartProduct,
   findCompareProduct,
   findECommerceChoiceProduct,
+  findTopSellingProduct,
+  findNewArrivalProduct,
+  findMostViewedProduct,
   findJustForYouProduct,
   findPopularProduct,
   findRelatedProduct,
@@ -59,13 +62,18 @@ router.route("/brand_match_product").get(findBrandMatchProduct);
 // find all Popular product
 router.route("/popular_product").get(findPopularProduct);
 
+// Sprint 3 — new semantic strip routes
+router.route("/top_selling").get(findTopSellingProduct);
+router.route("/new_arrival").get(findNewArrivalProduct);
+router.route("/most_viewed").get(findMostViewedProduct);
+
 // find all JustForYou product
 router.route("/just_for_you_product").get(findJustForYouProduct);
 
 // find all related product
 router.route("/related_product").get(findRelatedProduct);
 
-// find all EcommerceChoice product
+// find all EcommerceChoice product (deprecated — kept for backward compat, remove after FE migration)
 router.route("/ecommerce_choice_product").get(findECommerceChoiceProduct);
 
 // get low-stock products & variations (admin)

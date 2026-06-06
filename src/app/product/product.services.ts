@@ -3,6 +3,7 @@ import ApiError from "../../errors/ApiError";
 import VariationModel from "../variation/variation.model";
 import { IProductInterface, productSearchableField } from "./product.interface";
 import ProductModel from "./product.model";
+import ProductCountHistoryModel from "./productCountHistory.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import ReviewModel from "../review/review.model";
 import CategoryModel from "../category/category.model";
@@ -490,10 +491,11 @@ export const findRelatedProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -722,10 +724,11 @@ export const findTrendingProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1126,10 +1129,11 @@ export const findBrandMatchProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1809,10 +1813,11 @@ export const findPopularProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1951,6 +1956,181 @@ export const findPopularProductServices = async (
   return sendData;
 };
 
+// ─── Top Selling (সবচেয়ে বেশি বিক্রি) ──────────────────────────────────────
+// Sorts by sold_count desc — admin seeds a baseline; real orders accumulate.
+// category_id: optional filter for category-wise popular products strip.
+export const findTopSellingProductServices = async (
+  limit: number,
+  skip: number,
+  category_id?: any,
+): Promise<any> => {
+  const baseMatch: any = { product_status: "active" };
+  if (category_id) baseMatch.category_id = new Types.ObjectId(category_id);
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, sold_count: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { sold_count: -1, _id: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  return { data: products, totalCount };
+};
+
+// ─── New Arrival (নতুন পণ্য) ──────────────────────────────────────────────────
+// Sorts by createdAt desc — LatestProducts strip, always fresh inventory first.
+export const findNewArrivalProductServices = async (
+  limit: number,
+  skip: number,
+): Promise<any> => {
+  const baseMatch = { product_status: "active" };
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { createdAt: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  return { data: products, totalCount };
+};
+
+// ─── Most Viewed (সর্বাধিক দেখা) ─────────────────────────────────────────────
+// Sorts by view_count desc — bumpProductViewCount increments on every PDP fetch.
+// Phase 1: lifetime total only; windowed tracking deferred.
+export const findMostViewedProductServices = async (
+  limit: number,
+  skip: number,
+): Promise<any> => {
+  const baseMatch = { product_status: "active" };
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, view_count: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { view_count: -1, _id: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  return { data: products, totalCount };
+};
+
 // Find ECommerceChoiceProduct
 export const findECommerceChoiceProductServices = async (
   limit: number,
@@ -2071,10 +2251,11 @@ export const findECommerceChoiceProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -2308,10 +2489,11 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $lookup: {
-            from: "reviews", // Join with reviews collection
+            from: "reviews",
             localField: "_id",
             foreignField: "review_product_id",
             as: "reviews",
+            pipeline: [{ $match: { review_status: "active" } }],
           },
         },
         {
@@ -3040,6 +3222,9 @@ const PRODUCT_QUICK_WHITELIST = [
   "delivery_mode",
   "delivery_flat_amount",
   "delivery_free_after_qty",
+  // Analytics seed — admin-seeded baseline counts; real orders/views accumulate on top
+  "sold_count",
+  "view_count",
 ];
 
 export const patchProductQuickServices = async (
@@ -3073,6 +3258,21 @@ export const patchProductQuickServices = async (
     { $set: update },
     { new: true, runValidators: true },
   ).lean();
+
+  // Audit trail — log seed count changes (sold_count / view_count) to history collection.
+  const countFields = ["sold_count", "view_count"];
+  const countChanges: Record<string, any> = {};
+  for (const field of countFields) {
+    if (update[field] !== undefined) countChanges[field] = update[field];
+  }
+  if (Object.keys(countChanges).length > 0) {
+    ProductCountHistoryModel.create({
+      product_id: _id,
+      changed_by: updatedBy,
+      changes: countChanges,
+    }).catch(() => {}); // fire-and-forget, never block the response
+  }
+
   return result;
 };
 

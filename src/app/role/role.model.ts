@@ -168,6 +168,14 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    review_seed_bulk: {
+      type: Boolean,
+      default: false,
+    },
+    review_seed_manual: {
+      type: Boolean,
+      default: false,
+    },
     question_update: {
       type: Boolean,
       default: false,

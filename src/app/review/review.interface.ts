@@ -11,8 +11,13 @@ export interface IReviewInterface {
   review_ratting: number;
   review_status: "active" | "in-active" | "pending";
   review_product_id: Types.ObjectId | IProductInterface;
-  review_user_id: Types.ObjectId | IUserInterface;
+  review_user_id?: Types.ObjectId | IUserInterface;
   review_updated_by?: Types.ObjectId | IAdminInterface;
+  // Sprint 3 — seed review fields
+  is_seeded?: boolean;
+  source?: "customer" | "csv_bulk" | "manual_admin";
+  reviewer_name?: string;
+  reviewer_verified?: boolean;
 }
 
 export const reviewSearchableField = [

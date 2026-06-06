@@ -198,6 +198,11 @@ export interface ISettingInterface {
   whatsapp_number?: string;          // the merchant WhatsApp number (paired with toggle above)
   enable_reviews?: boolean;          // false → hide review section + form on PDP
   auto_approve_reviews?: boolean;    // true → review goes live immediately; false → pending queue
+
+  // Sprint 3 — Seed Review toggle
+  // false → strip is_seeded reviews from storefront GET /review/:id (real reviews only)
+  // true  → show all reviews including seeded ones (default: show them for fresh shops)
+  enable_seeded_reviews?: boolean;
 }
 
 export interface IManualMfsMethod {
