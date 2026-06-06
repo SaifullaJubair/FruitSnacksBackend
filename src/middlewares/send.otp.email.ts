@@ -108,7 +108,9 @@ export const SendEmailOTP = async (
     // Fetch site branding for the template
     const setting = await getCachedSetting().catch(() => null);
     const siteName = (setting as any)?.title || "FruitSnacks";
-    const logoUrl = (setting as any)?.logo || "";
+    const rawLogo = (setting as any)?.logo || "";
+    // Encode spaces/special chars in S3 URLs (e.g. "web logo.png" → "web%20logo.png")
+    const logoUrl = rawLogo ? rawLogo.replace(/ /g, "%20") : "";
 
     const transporter = nodemailer.createTransport({
       host: cfg.host,
