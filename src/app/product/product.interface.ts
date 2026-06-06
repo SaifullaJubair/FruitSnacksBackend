@@ -263,5 +263,5 @@ export const productSearchableField = [
   "unit",
   "meta_title",
   "meta_description",
-  "meta_keywords",
+  "meta_keywords.keyword",
 ];
