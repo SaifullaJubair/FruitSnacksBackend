@@ -1,4 +1,4 @@
-import { NextFunction, Request, RequestHandler, Response } from "express";
+﻿import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import ApiError from "../../errors/ApiError";
 import { IOrderInterface, orderSearchableField } from "./order.interface";
@@ -35,12 +35,14 @@ import {
   bumpSoldCounts,
 } from "./order.stock";
 import { getCurrencyCode } from "../setting/setting.services";
+import { getCachedSetting } from "../../helpers/settingCache";
 import {
   initiatePayment,
   initiateAdvancePayment,
 } from "../payment/payment.service";
 import { markAbandonedCartRecoveredByPhone } from "../abandonedCart/abandonedCart.services";
 import { earnOnOrder, redeemOnOrder } from "../loyalty/loyalty.services";
+import { normalizeBdPhone } from "../../utils/phone";
 
 const bcrypt = require("bcryptjs");
 const saltRounds = 10;
@@ -80,8 +82,19 @@ const findOrCreateUser = async (
     return;
   }
 
+  // B1 (2026-06-04) — normalize the inbound phone so guest-order auto-create
+  // doesn't spin up a duplicate account when the same buyer returns with a
+  // slightly different format. Look up against BOTH the normalized form AND
+  // the raw form until the backfill script rewrites legacy docs.
+  const rawPhone = requestData?.customer_phone;
+  const normalizedPhone = normalizeBdPhone(rawPhone);
+  requestData.customer_phone = normalizedPhone;
+
   const userCheck: any = await UserModel.findOne({
-    user_phone: requestData?.customer_phone,
+    $or: [
+      { user_phone: normalizedPhone },
+      { user_phone: rawPhone },
+    ],
   }).session(session);
 
   if (userCheck) {
@@ -141,45 +154,55 @@ const handleCouponUsage = async (
 ) => {
   if (!requestData?.coupon_id) return;
 
-  const checkCouponIsUsed = await CouponUsedModel.findOne({
-    coupon_id: requestData?.coupon_id,
-    customer_id: requestData?.customer_id,
-  }).session(session);
+  // 11β D6 — anonymous BOGO allowed. If no customer_id (FB-ad guest checkout),
+  // skip the coupon_used per-user counter entirely; the global atomic decrement
+  // below still gates re-use via coupon_available.
+  if (requestData?.customer_id) {
+    const checkCouponIsUsed = await CouponUsedModel.findOne({
+      coupon_id: requestData?.coupon_id,
+      customer_id: requestData?.customer_id,
+    }).session(session);
 
-  if (!checkCouponIsUsed) {
-    const createCouponUsed = await createCouponUsedCustomer(
-      {
-        coupon_id: new mongoose.Types.ObjectId(
-          requestData?.coupon_id.toString(),
-        ),
-        customer_id: new mongoose.Types.ObjectId(
-          requestData?.customer_id.toString(),
-        ),
-        used: 1,
-      },
-      session,
-    );
-    if (!createCouponUsed) throw new ApiError(400, "Order Create Failed!");
-  } else {
-    const couponUsedUpdate = await CouponUsedModel.updateOne(
-      {
-        coupon_id: requestData?.coupon_id,
-        customer_id: requestData?.customer_id,
-      },
-      { $inc: { used: 1 } },
-      { session, runValidators: true },
-    );
-    if (couponUsedUpdate.modifiedCount === 0)
-      throw new ApiError(400, "Order Create Failed!");
+    if (!checkCouponIsUsed) {
+      const createCouponUsed = await createCouponUsedCustomer(
+        {
+          coupon_id: new mongoose.Types.ObjectId(
+            requestData?.coupon_id.toString(),
+          ),
+          customer_id: new mongoose.Types.ObjectId(
+            requestData?.customer_id.toString(),
+          ),
+          used: 1,
+        },
+        session,
+      );
+      if (!createCouponUsed) throw new ApiError(400, "Order Create Failed!");
+    } else {
+      const couponUsedUpdate = await CouponUsedModel.updateOne(
+        {
+          coupon_id: requestData?.coupon_id,
+          customer_id: requestData?.customer_id,
+        },
+        { $inc: { used: 1 } },
+        { session, runValidators: true },
+      );
+      if (couponUsedUpdate.modifiedCount === 0)
+        throw new ApiError(400, "Order Create Failed!");
+    }
   }
 
-  const mainCouponUpdate = await CouponModel.updateOne(
-    { _id: requestData?.coupon_id },
+  // 11β HIGH 7 — atomic decrement guard. Previously two concurrent orders both
+  // saw coupon_available > 0, both passed the recompute check, and both made
+  // it here → counter went to -1. findOneAndUpdate with $gt:0 filter is
+  // atomic at the document level; if it returns null another order won the
+  // race and we must reject this one cleanly.
+  const mainCouponUpdate = await CouponModel.findOneAndUpdate(
+    { _id: requestData?.coupon_id, coupon_available: { $gt: 0 } },
     { $inc: { coupon_available: -1 } },
-    { session, runValidators: true },
+    { new: true, session, runValidators: true },
   );
-  if (mainCouponUpdate.modifiedCount === 0)
-    throw new ApiError(400, "Order Create Failed!");
+  if (!mainCouponUpdate)
+    throw new ApiError(409, "Coupon stock exhausted — please try without it.");
 };
 
 // ================================================================
@@ -194,6 +217,28 @@ export const postOrder: any = async (
   session.startTransaction();
   try {
     const requestData = req.body;
+
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
+    // Client-side hint is UX only; this is the real gate. DevTools bypass blocked.
+    const orderSetting = await getCachedSetting().catch(() => null);
+    const minOrderAmount = orderSetting?.min_order_amount ?? 0;
+    if (minOrderAmount > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < minOrderAmount) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${minOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    // C13 M9 — verify_phone_on_order: if ON, FE must send otp_verified:true.
+    // Default OFF preserves anonymous checkout (owner-locked rule).
+    const verifyPhoneOnOrder = orderSetting?.verify_phone_on_order ?? false;
+    if (verifyPhoneOnOrder && !requestData?.otp_verified) {
+      throw new ApiError(400, "Phone verification required before placing an order.");
+    }
+
     await findOrCreateUser(requestData, session);
 
     // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
@@ -250,8 +295,12 @@ export const postOrder: any = async (
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
 
-    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
-    await decrementStockForLines(recomputed.order_products, session);
+    // Decrement stock atomically at placement (guarded - never goes negative).
+    // C13 D8 - maintain_stock: false = pre-order / MTO mode. Skip BOTH guard and decrement.
+    const maintainStock = orderSetting?.maintain_stock ?? true;
+    if (maintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
     // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
@@ -282,14 +331,14 @@ export const postOrder: any = async (
       {
         $set: {
           user_country: requestData?.billing_country,
-          user_division: requestData?.billing_city,
-          user_district: requestData?.billing_state,
+          user_division: requestData?.billing_state,
+          user_district: requestData?.billing_city,
           user_address: requestData?.billing_address,
         },
       },
       { session, runValidators: true },
     );
-    if (userUpdate.modifiedCount === 0)
+    if (userUpdate.matchedCount === 0)
       throw new ApiError(400, "Order Create Failed!");
 
     await session.commitTransaction();
@@ -303,6 +352,20 @@ export const postOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
+      const nameParts = String(requestData?.customer_name || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const fn = nameParts[0] || undefined;
+      const ln = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+      const numItems = Array.isArray(requestData?.order_products)
+        ? requestData.order_products.reduce(
+            (s: number, p: any) => s + (Number(p?.product_quantity) || 1),
+            0,
+          )
+        : 0;
+
       await sendMetaEvent({
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
@@ -311,7 +374,12 @@ export const postOrder: any = async (
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,
-          fn: requestData?.customer_name,
+          fn,
+          ln,
+          em: requestData?.customer_email,
+          ct: requestData?.billing_city,
+          st: requestData?.billing_state,
+          country: "bd",
           external_id: requestData?.customer_id,
           client_ip_address: clientIp,
           client_user_agent: req.headers["user-agent"] || "",
@@ -325,7 +393,7 @@ export const postOrder: any = async (
             (p: any) => p?.product_id,
           ),
           content_type: "product",
-          num_items: requestData?.order_products?.length,
+          num_items: numItems,
           order_id: result?._id?.toString(),
         },
       });
@@ -415,6 +483,26 @@ export const postSingleOrder: any = async (
   session.startTransaction();
   try {
     const requestData = req.body;
+
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
+    const singleOrderSetting = await getCachedSetting().catch(() => null);
+    const singleMinOrderAmount = singleOrderSetting?.min_order_amount ?? 0;
+    if (singleMinOrderAmount > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < singleMinOrderAmount) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${singleMinOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    // C13 M9 — verify_phone_on_order gate.
+    const singleVerifyPhone = singleOrderSetting?.verify_phone_on_order ?? false;
+    if (singleVerifyPhone && !requestData?.otp_verified) {
+      throw new ApiError(400, "Phone verification required before placing an order.");
+    }
+
     await findOrCreateUser(requestData, session);
 
     // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
@@ -462,8 +550,12 @@ export const postSingleOrder: any = async (
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
 
-    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
-    await decrementStockForLines(recomputed.order_products, session);
+    // Decrement stock atomically at placement (guarded - never goes negative).
+    // C13 D8 - maintain_stock: false = pre-order / MTO mode. Skip BOTH guard and decrement.
+    const singleMaintainStock = singleOrderSetting?.maintain_stock ?? true;
+    if (singleMaintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
     // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
@@ -500,6 +592,20 @@ export const postSingleOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
+      const nameParts = String(requestData?.customer_name || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const fn = nameParts[0] || undefined;
+      const ln = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+      const numItems = Array.isArray(requestData?.order_products)
+        ? requestData.order_products.reduce(
+            (s: number, p: any) => s + (Number(p?.product_quantity) || 1),
+            0,
+          )
+        : 0;
+
       await sendMetaEvent({
         event_name: "Purchase",
         event_id: requestData?.purchase_event_id || `purchase-${result?._id}`,
@@ -507,7 +613,12 @@ export const postSingleOrder: any = async (
         action_source: "website",
         user_data: {
           ph: requestData?.customer_phone,
-          fn: requestData?.customer_name,
+          fn,
+          ln,
+          em: requestData?.customer_email,
+          ct: requestData?.billing_city,
+          st: requestData?.billing_state,
+          country: "bd",
           external_id: requestData?.customer_id,
           client_ip_address: clientIp,
           client_user_agent: req.headers["user-agent"] || "",
@@ -521,7 +632,7 @@ export const postSingleOrder: any = async (
             (p: any) => p?.product_id,
           ),
           content_type: "product",
-          num_items: requestData?.order_products?.length,
+          num_items: numItems,
           order_id: result?._id?.toString(),
         },
       });
@@ -675,7 +786,7 @@ export const getDashboardOrder: RequestHandler = async (
   next: NextFunction,
 ): Promise<any> => {
   try {
-    const { page, limit, searchTerm, order_status }: any = req.query;
+    const { page, limit, searchTerm, order_status, order_source }: any = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
@@ -685,6 +796,8 @@ export const getDashboardOrder: RequestHandler = async (
       skip,
       searchTerm,
       order_status,
+      undefined,
+      order_source,
     );
 
     const andCondition: any[] = [];
@@ -701,6 +814,13 @@ export const getDashboardOrder: RequestHandler = async (
       order_status !== "null"
     ) {
       andCondition.push({ order_status });
+    }
+    if (
+      order_source &&
+      order_source !== "undefined" &&
+      order_source !== "null"
+    ) {
+      andCondition.push({ order_source });
     }
     const whereCondition =
       andCondition.length > 0 ? { $and: andCondition } : {};
@@ -1032,6 +1152,200 @@ export const updateOrderDeliveryInfo: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Delivery Info Updated Successfully!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ================================================================
+// POST Admin / POS Order
+// ================================================================
+// D18 BLOCKER 1 — gated by verifyToken("order_create_admin") in routes.
+// D10 — no Meta/TikTok CAPI, no SMS for admin-source orders.
+// D11 — manual discount only (no coupon); coupon system untouched.
+// D18 BLOCKER 2 — userUpdate block SKIPPED (walk-in address must not
+//   overwrite the returning customer's saved address).
+export const postAdminOrder: any = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const requestData = req.body;
+
+    // Force order_source so the rest of the pipeline knows this is POS
+    requestData.order_source = "admin";
+    requestData.admin_created_by = (req as any).userId;
+
+    // M1 — pickup delivery type → shipping cost = 0
+    if (requestData?.delivery_type === "pickup") {
+      requestData.shipping_cost = 0;
+    }
+
+    // C13 HIGH 6 — min_order_amount still enforced for POS
+    const adminOrderSetting = await getCachedSetting().catch(() => null);
+    const adminMinOrder = adminOrderSetting?.min_order_amount ?? 0;
+    if (adminMinOrder > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < adminMinOrder) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${adminMinOrder}. Cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    await findOrCreateUser(requestData, session);
+
+    // Capture admin-chosen shipping before recompute overwrites it.
+    // recomputeShippingCost re-derives from billing_state + settings; for POS
+    // the admin explicitly chose pickup (0) or a zone rate — trust that choice.
+    const adminChosenShipping = Number(requestData?.shipping_cost) || 0;
+
+    // Server-side recompute for product prices (trusted from DB)
+    const recomputed = await recomputeOrderTotals(requestData, session);
+    requestData.sub_total_amount = recomputed.sub_total_amount;
+    // Restore the admin-chosen shipping cost (overrides recompute's zone calc)
+    requestData.shipping_cost = adminChosenShipping;
+    requestData.vat_amount = recomputed.vat_amount;
+
+    // D11 — manual discount replaces coupon path for POS
+    const manualDiscount = Math.max(0, Number(requestData?.admin_manual_discount) || 0);
+    requestData.admin_manual_discount = manualDiscount;
+    requestData.discount_amount = manualDiscount;
+    requestData.coupon_id = undefined; // ensure no coupon leaks in
+    requestData.grand_total_amount = Math.max(
+      0,
+      recomputed.sub_total_amount + adminChosenShipping + (recomputed.vat_amount || 0) - manualDiscount,
+    );
+    requestData.loyalty_redeem_points = 0;
+    requestData.loyalty_redeem_amount = 0;
+
+    requestData.invoice_id = await generateInvoiceId();
+    const result: any = await postOrderServices(requestData, session);
+    if (!result) throw new ApiError(400, "Order Create Failed!");
+
+    for (const line of recomputed.order_products) {
+      const orderDetails = await OrderProductModel.create(
+        [
+          {
+            order_id: result?._id,
+            invoice_id: requestData.invoice_id,
+            product_id: line?.product_id,
+            variation_id: line?.variation_id,
+            product_unit_price: line?.product_unit_price,
+            product_unit_final_price: line?.product_unit_final_price,
+            product_quantity: line?.product_quantity,
+            product_grand_total_price: line?.product_grand_total_price,
+            campaign_id: line?.campaign_id,
+            product_main_price: line?.product_main_price,
+            product_main_discount_price: line?.product_main_discount_price,
+            customer_id: requestData?.customer_id,
+            product_sku_snapshot: line?.product_sku_snapshot,
+            variation_sku_snapshot: line?.variation_sku_snapshot,
+            product_barcode_snapshot: line?.product_barcode_snapshot,
+            variation_barcode_snapshot: line?.variation_barcode_snapshot,
+          },
+        ],
+        { session },
+      );
+      if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
+    }
+
+    // C13 D8 — maintain_stock respected for POS (admin flips toggle if needed for OOS)
+    const adminMaintainStock = adminOrderSetting?.maintain_stock ?? true;
+    if (adminMaintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
+    await bumpSoldCounts(recomputed.order_products, session);
+    try {
+      await earnOnOrder(
+        requestData?.customer_id,
+        requestData.grand_total_amount,
+        requestData.invoice_id,
+        session,
+      );
+    } catch (_) {}
+
+    // D18 BLOCKER 2 — skip userUpdate entirely for POS
+    // Returning customer's saved address must not be overwritten by walk-in address
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // D10 — NO Meta/TikTok CAPI event for admin-source orders
+    // D10 — NO SMS for admin-source orders
+
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "POS Order Created Successfully!",
+      data: {
+        order_id: result?._id,
+        invoice_id: requestData?.invoice_id,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    next(error);
+  }
+};
+
+// S4+S5 Phase 1C — opt-in email collection from the post-order
+// success-page prompt. Public (no auth) — same security model as
+// the order_id-in-URL details endpoint that already exists.
+//
+// Single-use: rejects overwrite if customer_email already set, so
+// someone who guesses an order_id can't replace the real buyer's
+// email later. Returns 200 silently when the email matches what's
+// already stored (idempotent retry on flaky network).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const setOrderEmail: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { order_id } = req.params;
+    const raw = (req.body?.customer_email || "").trim().toLowerCase();
+    if (!raw || !EMAIL_RE.test(raw)) {
+      throw new ApiError(400, "Please provide a valid email address.");
+    }
+    const order: any = await OrderModel.findById(order_id).select(
+      "customer_email customer_id",
+    );
+    if (!order) throw new ApiError(404, "Order not found.");
+
+    if (order.customer_email && order.customer_email !== raw) {
+      throw new ApiError(
+        409,
+        "Email already set on this order; cannot be changed.",
+      );
+    }
+
+    if (order.customer_email === raw) {
+      return sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Email already saved.",
+        data: { customer_email: raw },
+      });
+    }
+
+    await OrderModel.updateOne(
+      { _id: order_id },
+      { $set: { customer_email: raw } },
+    );
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Email saved for this order.",
+      data: { customer_email: raw },
     });
   } catch (error) {
     next(error);

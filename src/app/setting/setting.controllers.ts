@@ -5,7 +5,9 @@ import ApiError from "../../errors/ApiError";
 import { ISettingInterface } from "./setting.interface";
 import {
   getSettingServices,
+  getSettingWithSecretsServices,
   postSettingServices,
+  updateSettingSecretsServices,
   updateSettingServices,
 } from "./setting.services";
 
@@ -58,6 +60,70 @@ export const getSetting: RequestHandler = async (
       success: true,
       message: "Setting Get successfully !",
       data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// S4+S5 Phase 1A — admin-only secret accessors. Guarded by
+// verifyToken("setting_secrets_update") in routes.ts.
+export const getSettingSecrets: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await getSettingWithSecretsServices();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Setting (with secrets) fetched",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const updateSettingSecrets: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await updateSettingSecretsServices(req.body || {});
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Secrets updated",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// H-B — send a test email so admin can verify SMTP config before going live
+export const sendTestEmail: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { to } = req.body;
+    if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      throw new ApiError(400, "Valid recipient email required!");
+    }
+    const { SendEmailOTP } = require("../../middlewares/send.otp.email");
+    const sent = await SendEmailOTP(123456, to, "Admin", { ignoreEnabledFlag: true });
+    if (!sent) {
+      throw new ApiError(503, "Email could not be sent. Check your SMTP settings (host, port, username, password).");
+    }
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Test email sent successfully! Check your inbox.",
     });
   } catch (error: any) {
     next(error);

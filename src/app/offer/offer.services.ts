@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { productSearchableField } from "../product/product.interface";
 import ProductModel from "../product/product.model";
 import { IOfferInterface, offerSearchableField } from "./offer.interface";
@@ -12,6 +12,51 @@ export const postOfferServices = async (
 ): Promise<IOfferInterface | {}> => {
   const createOffer: IOfferInterface | {} = await OfferModel.create(data);
   return createOffer;
+};
+
+// Active offers that contain a given product. Used by the PDP discovery banner
+// so a customer browsing a single item sees "this is also part of [bundle] —
+// save N% if you buy the set." Only returns lightweight fields the banner
+// needs; full bundle render goes through `findAOffer` on the offer page.
+export const findActiveOffersByProductIdServices = async (
+  productId: string,
+): Promise<any[]> => {
+  if (!productId) return [];
+  // Reject malformed param early so global error handler returns 400 not 500.
+  // Without the cast, Mongoose auto-coerces (works), but a non-ObjectId string
+  // currently throws CastError mid-query. Belt-and-suspenders.
+  if (!mongoose.isValidObjectId(productId)) return [];
+  const productObjectId = new Types.ObjectId(productId);
+  const today = new Date().toISOString().substring(0, 10);
+  const offers = await OfferModel.find({
+    offer_status: "active",
+    offer_start_date: { $lte: today },
+    offer_end_date: { $gte: today },
+    "offer_products.offer_product_id": productObjectId,
+  })
+    .select(
+      "_id offer_title offer_description offer_image offer_end_date offer_products",
+    )
+    .sort({ _id: -1 })
+    .lean();
+
+  // Surface only the matching line's discount so the banner can show
+  // "save 20%" without the consumer re-iterating.
+  return offers.map((o: any) => {
+    const match = (o.offer_products || []).find(
+      (p: any) => String(p.offer_product_id) === String(productId),
+    );
+    return {
+      _id: o._id,
+      offer_title: o.offer_title,
+      offer_description: o.offer_description,
+      offer_image: o.offer_image,
+      offer_end_date: o.offer_end_date,
+      product_count: (o.offer_products || []).length,
+      offer_discount_price: match?.offer_discount_price,
+      offer_discount_type: match?.offer_discount_type,
+    };
+  });
 };
 
 export const findAllOfferServices = async (): Promise<
@@ -166,50 +211,8 @@ export const findProductToAddOfferServices = async (
     },
     { $unwind: "$category_info" },
     {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "subcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$subcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "childcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$childcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
       $match: {
         "category_info.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "subcategory_info.sub_category_status": "active" },
-              { subcategory_info: { $exists: false } },
-            ],
-          },
-          {
-            $or: [
-              { "childcategory_info.child_category_status": "active" },
-              { childcategory_info: { $exists: false } },
-            ],
-          },
-        ],
       },
     },
     // Join with VariationModel if is_variation is true

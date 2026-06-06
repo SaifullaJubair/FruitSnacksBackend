@@ -3,6 +3,7 @@ import { FileUploadHelper } from "../../helpers/image.upload";
 import {
   deleteAOfferInfo,
   findAOffer,
+  findActiveOffersByProductId,
   findAllDashboardOffer,
   findAllOffer,
   findProductToAddOffer,
@@ -35,6 +36,10 @@ router.route("/dashboard").get(verifyToken("offer_show"), findAllDashboardOffer)
 router
   .route("/dashboard/add_offer_product")
   .get(findProductToAddOffer);
+
+// PDP discovery banner — active offers that include this product. Keep above
+// /:_id so the param matcher doesn't swallow `by-product`.
+router.route("/by-product/:product_id").get(findActiveOffersByProductId);
 
 // get a specific Offer
 router.route("/:_id").get(findAOffer);

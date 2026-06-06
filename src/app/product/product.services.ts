@@ -648,34 +648,6 @@ export const findTrendingProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -691,23 +663,7 @@ export const findTrendingProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" },
-              { child_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -740,34 +696,6 @@ export const findTrendingProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories", // Link the product's child-category
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
       },
     },
     {
@@ -866,25 +794,9 @@ export const findTrendingProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" }, // Allow active child-category
-              { child_category: null }, // Or no child-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -1153,30 +1065,8 @@ export const findBrandMatchProductServices = async (
       },
     },
     {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-        ],
       },
     },
     {
@@ -1210,20 +1100,6 @@ export const findBrandMatchProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
       },
     },
     {
@@ -1322,14 +1198,6 @@ export const findBrandMatchProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-        ],
       },
     },
     {
@@ -1594,20 +1462,6 @@ export const findPopularProductServices = async (
       },
       {
         $lookup: {
-          from: "subcategories",
-          localField: "sub_category_id",
-          foreignField: "_id",
-          as: "sub_category",
-        },
-      },
-      {
-        $unwind: {
-          path: "$sub_category",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
           from: "brands",
           localField: "brand_id",
           foreignField: "_id",
@@ -1623,17 +1477,7 @@ export const findPopularProductServices = async (
       {
         $match: {
           "category.category_status": "active",
-          $and: [
-            {
-              $or: [
-                { "sub_category.sub_category_status": "active" },
-                { sub_category: null },
-              ],
-            },
-            {
-              $or: [{ "brand.brand_status": "active" }, { brand: null }],
-            },
-          ],
+          $or: [{ "brand.brand_status": "active" }, { brand: null }],
         },
       },
       {
@@ -1662,20 +1506,6 @@ export const findPopularProductServices = async (
         $unwind: {
           path: "$category",
           preserveNullAndEmptyArrays: false, // Only include products with a valid category
-        },
-      },
-      {
-        $lookup: {
-          from: "subcategories", // Link the product's sub-category
-          localField: "sub_category_id",
-          foreignField: "_id",
-          as: "sub_category",
-        },
-      },
-      {
-        $unwind: {
-          path: "$sub_category",
-          preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
         },
       },
       {
@@ -1749,19 +1579,9 @@ export const findPopularProductServices = async (
       {
         $match: {
           "category.category_status": "active", // Ensure the category is active
-          $and: [
-            {
-              $or: [
-                { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-                { sub_category: null }, // Or no sub-category
-              ],
-            },
-            {
-              $or: [
-                { "brand.brand_status": "active" }, // Allow active brand
-                { brand: null }, // Or no brand
-              ],
-            },
+          $or: [
+            { "brand.brand_status": "active" }, // Allow active brand
+            { brand: null }, // Or no brand
           ],
         },
       },
@@ -1899,20 +1719,6 @@ export const findPopularProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -1928,17 +1734,7 @@ export const findPopularProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -1967,20 +1763,6 @@ export const findPopularProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
       },
     },
     {
@@ -2053,19 +1835,9 @@ export const findPopularProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -2207,34 +1979,6 @@ export const findECommerceChoiceProductServices = async (
     },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -2250,23 +1994,7 @@ export const findECommerceChoiceProductServices = async (
     {
       $match: {
         "category.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" },
-              { sub_category: null },
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" },
-              { child_category: null },
-            ],
-          },
-          {
-            $or: [{ "brand.brand_status": "active" }, { brand: null }],
-          },
-        ],
+        $or: [{ "brand.brand_status": "active" }, { brand: null }],
       },
     },
     {
@@ -2298,34 +2026,6 @@ export const findECommerceChoiceProductServices = async (
       $unwind: {
         path: "$category",
         preserveNullAndEmptyArrays: false, // Only include products with a valid category
-      },
-    },
-    {
-      $lookup: {
-        from: "subcategories", // Link the product's sub-category
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "sub_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$sub_category",
-        preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories", // Link the product's child-category
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "child_category",
-      },
-    },
-    {
-      $unwind: {
-        path: "$child_category",
-        preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
       },
     },
     {
@@ -2397,25 +2097,9 @@ export const findECommerceChoiceProductServices = async (
     {
       $match: {
         "category.category_status": "active", // Ensure the category is active
-        $and: [
-          {
-            $or: [
-              { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-              { sub_category: null }, // Or no sub-category
-            ],
-          },
-          {
-            $or: [
-              { "child_category.child_category_status": "active" }, // Allow active child-category
-              { child_category: null }, // Or no child-category
-            ],
-          },
-          {
-            $or: [
-              { "brand.brand_status": "active" }, // Allow active brand
-              { brand: null }, // Or no brand
-            ],
-          },
+        $or: [
+          { "brand.brand_status": "active" }, // Allow active brand
+          { brand: null }, // Or no brand
         ],
       },
     },
@@ -2581,34 +2265,6 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $lookup: {
-            from: "subcategories", // Link the product's sub-category
-            localField: "sub_category_id",
-            foreignField: "_id",
-            as: "sub_category",
-          },
-        },
-        {
-          $unwind: {
-            path: "$sub_category",
-            preserveNullAndEmptyArrays: true, // Include products even if sub-category details are not available
-          },
-        },
-        {
-          $lookup: {
-            from: "childcategories", // Link the product's child-category
-            localField: "child_category_id",
-            foreignField: "_id",
-            as: "child_category",
-          },
-        },
-        {
-          $unwind: {
-            path: "$child_category",
-            preserveNullAndEmptyArrays: true, // Include products even if child-category details are not available
-          },
-        },
-        {
-          $lookup: {
             from: "brands", // Link the product's brand
             localField: "brand_id",
             foreignField: "_id",
@@ -2677,25 +2333,9 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $match: {
-            $and: [
-              {
-                $or: [
-                  { "sub_category.sub_category_status": "active" }, // Allow active sub-category
-                  { sub_category: null }, // Or no sub-category
-                ],
-              },
-              {
-                $or: [
-                  { "child_category.child_category_status": "active" }, // Allow active child-category
-                  { child_category: null }, // Or no child-category
-                ],
-              },
-              {
-                $or: [
-                  { "brand.brand_status": "active" }, // Allow active brand
-                  { brand: null }, // Or no brand
-                ],
-              },
+            $or: [
+              { "brand.brand_status": "active" }, // Allow active brand
+              { brand: null }, // Or no brand
             ],
           },
         },
@@ -2955,14 +2595,17 @@ export const updateProductPageContentServices = async (
   for (const field of PAGE_CONTENT_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
     const value = data[field];
-    // theme_id: empty / null is treated as "no change" (skip), NOT "remove
-    // theme". The Page Content form may legitimately send an empty value while
-    // the theme dropdown is still loading its option list — clearing the field
-    // in that case wiped the admin's selection and dropped the product back to
-    // the default theme. To intentionally clear a theme, use the product edit
-    // form (full PATCH /product).
+    // theme_id: explicit `null` clears the theme (admin "remove theme"
+    // button); `undefined` / missing key = no change (skip). Empty string
+    // is treated as `undefined` to guard against form-load races where the
+    // dropdown sends "" before its options resolve. Item 10 audit follow-up:
+    // previously even `null` was skipped, so theme was unclearable anywhere.
     if (field === "theme_id") {
-      if (value === "" || value === null || value === undefined) continue;
+      if (value === undefined || value === "") continue;
+      if (value === null) {
+        unset.theme_id = "";
+        continue;
+      }
       set.theme_id = value;
       continue;
     }
@@ -2973,10 +2616,43 @@ export const updateProductPageContentServices = async (
   if (Object.keys(set).length) update.$set = set;
   if (Object.keys(unset).length) update.$unset = unset;
 
-  return ProductModel.updateOne({ _id }, update, { runValidators: true });
+  // findOneAndUpdate so the theme-usage counter pre/post hooks in
+  // product.model.ts fire when theme_id changes/clears (Item 10 audit).
+  // Without this, themes.used_in_products drifts and is_deletable goes stale.
+  return ProductModel.findOneAndUpdate({ _id }, update, {
+    new: true,
+    runValidators: true,
+  });
 };
 
 // update A Product
+//
+// Item 10 fix (2026-06-05): optional foreign keys need explicit $unset on
+// clear because the full-edit controller always sets the key in `data` —
+// either with a value, or with undefined when admin removed the selection.
+// Mongoose treats `$set: { brand_id: undefined }` as a no-op and would leave
+// the stale id behind, so the admin's "remove brand" click silently failed.
+// We scan an allow-list and divert any falsy/empty-string/null value into
+// $unset.
+//
+// Item 10 post-hoc audit (2026-06-05) — expanded OPTIONAL_FK_FIELDS to also
+// cover `product_supplier_id`, `warehouse_id`, and `theme_id`. All three had
+// the same silent-fail-on-clear bug; the audit also flagged that switching
+// from `updateOne` to `findOneAndUpdate` is required for the existing
+// theme-usage counter hooks in product.model.ts (pre/post findOneAndUpdate)
+// to actually fire — otherwise theme.used_in_products drifts permanently.
+//
+// `category_path` is intentionally NOT in the allow-list: the controller
+// always sends it as `[]` for "no category" (via resolveProductCategoryPath),
+// and `$set: { category_path: [] }` correctly wipes the array.
+const OPTIONAL_FK_FIELDS = [
+  "brand_id",
+  "category_id",
+  "product_supplier_id",
+  "warehouse_id",
+  "theme_id",
+] as const;
+
 export const updateProductServices = async (
   _id: any,
   data: IProductInterface,
@@ -2988,26 +2664,41 @@ export const updateProductServices = async (
   if (!updateFindProduct) {
     throw new Error("Product not found");
   }
-  // আপডেট করার ডেটা তৈরি করা হচ্ছে
   const updateData: any = { ...data };
-
-  // sub/child category retired — single leaf category_id + category_path are
-  // always set by the controller now; only brand_id needs the unset fallback.
   const unsetData: any = {};
-  if (!data.hasOwnProperty("brand_id")) {
-    unsetData.brand_id = "";
+
+  for (const field of OPTIONAL_FK_FIELDS) {
+    const present = Object.prototype.hasOwnProperty.call(data, field);
+    const value = (data as any)[field];
+    const isCleared =
+      !present || value === undefined || value === null || value === "";
+    if (isCleared) {
+      unsetData[field] = "";
+      delete updateData[field];
+    }
   }
 
-  const updateProduct = await ProductModel.updateOne(
-    { _id: _id },
-    {
-      $set: updateData, // পাঠানো ফিল্ড আপডেট করা
-      $unset: unsetData, // পাঠানো না হলে ফিল্ডগুলো মুছে ফেলা
-    },
-    { runValidators: true },
+  const writeOps: any = {};
+  if (Object.keys(updateData).length) writeOps.$set = updateData;
+  if (Object.keys(unsetData).length) writeOps.$unset = unsetData;
+
+  // findOneAndUpdate (not updateOne) so the theme-usage counter pre/post
+  // hooks in product.model.ts fire — they track theme_id transitions and
+  // keep themes.used_in_products in sync (drives the is_deletable flag).
+  // updateOne does NOT fire those hooks by Mongoose design.
+  const updateProduct = await ProductModel.findOneAndUpdate(
+    { _id },
+    writeOps,
+    { new: true, runValidators: true },
   );
 
-  return updateProduct;
+  // Match the old return shape (controller checks `result?.modifiedCount`).
+  // We can't easily compute modifiedCount from findOneAndUpdate, so synthesize
+  // it as 1 if a doc was returned (it always returns the post-update doc when
+  // matched). Callers downstream only check truthiness; this is safe.
+  return updateProduct
+    ? { acknowledged: true, modifiedCount: 1, matchedCount: 1 }
+    : { acknowledged: true, modifiedCount: 0, matchedCount: 0 };
 };
 
 // Find all dashboard Product
@@ -3015,8 +2706,11 @@ export const findAllDashboardProductServices = async (
   limit: number,
   skip: number,
   searchTerm: any,
+  categoryId?: string,
+  brandId?: string,
+  stockFilter?: string,
 ): Promise<any> => {
-  const andCondition = [];
+  const andCondition: any[] = [];
   if (searchTerm) {
     andCondition.push({
       $or: productSearchableField.map((field) => ({
@@ -3027,45 +2721,59 @@ export const findAllDashboardProductServices = async (
       })),
     });
   }
+  if (categoryId) {
+    andCondition.push({ category_id: categoryId });
+  }
+  if (brandId) {
+    andCondition.push({ brand_id: brandId });
+  }
+  if (stockFilter === "in_stock") {
+    andCondition.push({ product_quantity: { $gt: 0 } });
+  } else if (stockFilter === "low_stock") {
+    andCondition.push({ product_quantity: { $gt: 0, $lte: 10 } });
+  }
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
 
-  // Step 1: Find products with basic population
+  // Step 1: Fetch products — strip heavy fields not needed for list view.
+  // No populate here: some legacy docs store non-ObjectId strings in category_id/brand_id
+  // which causes Mongoose "Parameter obj to Document() must be an object" crash.
   const products = await ProductModel.find(whereCondition)
-    .populate([
-      { path: "product_supplier_id" },
-      { path: "category_id" },
-      { path: "brand_id" },
-      { path: "product_publisher_id" },
-      { path: "product_updated_by" },
-    ])
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
-    .select("-__v")
-    .lean(); // Return plain JavaScript objects for easier processing
+    .select(
+      "_id product_name product_slug product_sku main_image product_price " +
+      "product_sale_price product_quantity product_status is_variation",
+    )
+    .lean();
 
-  // Step 2: For each product, conditionally fetch variations if is_variation is true
-  const productsWithVariations = await Promise.all(
-    products.map(async (product) => {
-      // Only fetch variations if is_variation is true
-      if (product?.is_variation) {
-        const variations = await VariationModel.find({
-          product_id: product?._id,
-        })
-          .select("-__v")
-          .lean();
+  // Step 2: Single bulk query for all variations (avoids N+1)
+  const variationProductIds = products
+    .filter((p) => p.is_variation)
+    .map((p) => p._id);
 
-        // Add variations to the product object
-        return { ...product, variations };
-      } else {
-        // Return the product as is without variations
-        return { ...product, variations: [] };
-      }
-    }),
-  );
+  const allVariations = variationProductIds.length
+    ? await VariationModel.find({ product_id: { $in: variationProductIds } })
+        .select(
+          "_id product_id variation_name variation_price variation_sale_price " +
+          "variation_discount_price variation_quantity variation_image variation_images variation_sku",
+        )
+        .lean()
+    : [];
 
-  return productsWithVariations;
+  // Group variations by product_id
+  const variationsByProduct: Record<string, any[]> = {};
+  for (const v of allVariations) {
+    const key = String(v.product_id);
+    if (!variationsByProduct[key]) variationsByProduct[key] = [];
+    variationsByProduct[key].push(v);
+  }
+
+  return products.map((p) => ({
+    ...p,
+    variations: variationsByProduct[String(p._id)] || [],
+  }));
 };
 
 // Find a dashboard Product
@@ -3098,6 +2806,394 @@ export const findADashboardProductServices = async (
     return { ...findProduct, variations };
   }
   return { ...findProduct };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A2 (2026-06-04) — operational dashboard for the rewritten product list.
+//
+// `findAllDashboardProductRichServices` returns each row pre-annotated with
+// computed fields the list page needs (variation count, total stock, flag
+// indicators). Keeps the original `/dashboard` endpoint untouched so any other
+// consumer (e.g. existing reports) keep working.
+//
+// Stock authority rule (owner-locked): when a product has variations, the
+// variation sum IS the truth — product_quantity is ignored. Migration script
+// zeroes product_quantity for those products at deploy time.
+// ─────────────────────────────────────────────────────────────────────────────
+export const findAllDashboardProductRichServices = async (
+  limit: number,
+  skip: number,
+  searchTerm: any,
+  filters: {
+    status?: string;
+    stock?: string;
+    has_variation?: string;
+    category_id?: string;
+    brand_id?: string;
+    has_theme?: string;
+    product_type?: string;
+  },
+  sort: string,
+): Promise<any> => {
+  const andCondition: any[] = [];
+  if (searchTerm) {
+    andCondition.push({
+      $or: productSearchableField.map((field) => ({
+        [field]: { $regex: searchTerm, $options: "i" },
+      })),
+    });
+  }
+  if (filters.status === "active" || filters.status === "in-active") {
+    andCondition.push({ product_status: filters.status });
+  }
+  if (filters.has_variation === "yes") {
+    andCondition.push({ is_variation: true });
+  } else if (filters.has_variation === "no") {
+    andCondition.push({ is_variation: { $ne: true } });
+  }
+  if (filters.category_id) {
+    andCondition.push({ category_id: new Types.ObjectId(filters.category_id) });
+  }
+  if (filters.brand_id) {
+    andCondition.push({ brand_id: new Types.ObjectId(filters.brand_id) });
+  }
+  if (filters.has_theme === "yes") {
+    andCondition.push({ theme_id: { $exists: true, $ne: null } });
+  } else if (filters.has_theme === "no") {
+    andCondition.push({
+      $or: [{ theme_id: { $exists: false } }, { theme_id: null }],
+    });
+  }
+  if (filters.product_type) {
+    andCondition.push({ product_type: filters.product_type });
+  }
+  const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
+
+  // Sort map — owner-friendly keys → mongo sort.
+  const sortMap: Record<string, any> = {
+    updated_desc: { updatedAt: -1 },
+    updated_asc: { updatedAt: 1 },
+    name_asc: { product_name: 1 },
+    name_desc: { product_name: -1 },
+    price_desc: { product_price: -1 },
+    price_asc: { product_price: 1 },
+    sold_desc: { sold_count: -1 },
+    new: { _id: -1 },
+  };
+  const sortStage = sortMap[sort] || sortMap["new"];
+
+  const products: any[] = await ProductModel.find(whereCondition)
+    .populate([
+      { path: "category_id", select: "category_name category_slug" },
+      { path: "brand_id", select: "brand_name" },
+      { path: "product_publisher_id", select: "admin_name" },
+      { path: "product_updated_by", select: "admin_name" },
+    ])
+    .sort(sortStage)
+    .skip(skip)
+    .limit(limit)
+    .select("-__v -description")
+    .lean();
+
+  // Variation roll-up — one batched query for the page.
+  const variationProductIds = products
+    .filter((p) => p?.is_variation)
+    .map((p) => p._id);
+  const variationAgg = variationProductIds.length
+    ? await VariationModel.aggregate([
+        { $match: { product_id: { $in: variationProductIds } } },
+        {
+          $group: {
+            _id: "$product_id",
+            count: { $sum: 1 },
+            stock_total: { $sum: { $ifNull: ["$variation_quantity", 0] } },
+            active_count: {
+              $sum: { $cond: [{ $ne: ["$is_active", false] }, 1, 0] },
+            },
+          },
+        },
+      ])
+    : [];
+  const variationMap = new Map<string, any>();
+  variationAgg.forEach((row) => variationMap.set(String(row._id), row));
+
+  // Stock-filter is post-aggregate because variation sum drives it.
+  const annotated = products
+    .map((p) => {
+      const variationStats = variationMap.get(String(p._id));
+      const variation_count = variationStats?.count || 0;
+      const stock_total = p.is_variation
+        ? variationStats?.stock_total || 0
+        : p.product_quantity || 0;
+      const alert_qty = p.product_alert_quantity || 0;
+      const flags: string[] = [];
+      if (p.trending_product) flags.push("trending");
+      if (p.product_campaign_id) flags.push("campaign");
+      if (p.theme_id) flags.push("theme");
+      if ((p.faqs?.length || 0) > 0 || (p.benefits?.length || 0) > 0) {
+        flags.push("page_content");
+      }
+      if ((p.tier_prices?.length || 0) > 0) flags.push("tier_pricing");
+      if (p.product_weight_grams) flags.push("weight");
+      if (p.condition && p.condition !== "new") flags.push(p.condition);
+
+      return {
+        ...p,
+        _variation_count: variation_count,
+        _variation_active_count: variationStats?.active_count || 0,
+        _stock_total: stock_total,
+        _is_low_stock: alert_qty > 0 && stock_total <= alert_qty,
+        _is_out_of_stock: stock_total <= 0,
+        _flags: flags,
+        _has_theme: !!p.theme_id,
+        _has_page_content:
+          (p.faqs?.length || 0) > 0 ||
+          (p.benefits?.length || 0) > 0 ||
+          (p.short_features?.length || 0) > 0,
+      };
+    })
+    .filter((p) => {
+      if (filters.stock === "in") return p._stock_total > 0;
+      if (filters.stock === "out") return p._stock_total <= 0;
+      if (filters.stock === "low") return p._is_low_stock;
+      return true;
+    });
+
+  return annotated;
+};
+
+// A2 — countDocuments alongside the rich list. Stock filter cannot be pushed
+// to mongo cheaply (depends on variation aggregation), so the totalData here
+// reflects pre-stock-filter count; admin pagination still works correctly for
+// the other filters which is the common case.
+export const countDashboardProductRichServices = async (
+  searchTerm: any,
+  filters: {
+    status?: string;
+    has_variation?: string;
+    category_id?: string;
+    brand_id?: string;
+    has_theme?: string;
+    product_type?: string;
+  },
+): Promise<number> => {
+  const andCondition: any[] = [];
+  if (searchTerm) {
+    andCondition.push({
+      $or: productSearchableField.map((field) => ({
+        [field]: { $regex: searchTerm, $options: "i" },
+      })),
+    });
+  }
+  if (filters.status === "active" || filters.status === "in-active") {
+    andCondition.push({ product_status: filters.status });
+  }
+  if (filters.has_variation === "yes") {
+    andCondition.push({ is_variation: true });
+  } else if (filters.has_variation === "no") {
+    andCondition.push({ is_variation: { $ne: true } });
+  }
+  if (filters.category_id) {
+    andCondition.push({ category_id: new Types.ObjectId(filters.category_id) });
+  }
+  if (filters.brand_id) {
+    andCondition.push({ brand_id: new Types.ObjectId(filters.brand_id) });
+  }
+  if (filters.has_theme === "yes") {
+    andCondition.push({ theme_id: { $exists: true, $ne: null } });
+  } else if (filters.has_theme === "no") {
+    andCondition.push({
+      $or: [{ theme_id: { $exists: false } }, { theme_id: null }],
+    });
+  }
+  if (filters.product_type) {
+    andCondition.push({ product_type: filters.product_type });
+  }
+  const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
+  return ProductModel.countDocuments(whereCondition);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A2 — `patchProductQuickServices`: whitelisted partial-update endpoint.
+//
+// The existing `PATCH /product` route is a full-rebuild flow (memory note:
+// product-update-route-is-full-rebuild) — passing a partial body wipes
+// fields not in the payload. The list page's quick toggles (status,
+// trending) and the per-column edit modals (price, stock, video_link, tier
+// prices) MUST go through this safe path instead.
+//
+// Whitelist is locked here so the list page cannot accidentally clobber
+// schema fields it has no business touching.
+// ─────────────────────────────────────────────────────────────────────────────
+const PRODUCT_QUICK_WHITELIST = [
+  "product_status",
+  "trending_product",
+  "product_price",
+  "product_buying_price",
+  "product_discount_price",
+  "product_quantity",
+  "product_alert_quantity",
+  "tier_prices",
+  "unit",
+  "video_link",
+  "condition",
+  "delivery_mode",
+  "delivery_flat_amount",
+  "delivery_free_after_qty",
+];
+
+export const patchProductQuickServices = async (
+  _id: string,
+  body: Record<string, any>,
+  updatedBy: any,
+): Promise<any> => {
+  if (!_id) throw new ApiError(400, "product id required");
+  const existing = await ProductModel.findById(_id).lean();
+  if (!existing) throw new ApiError(404, "Product not found");
+
+  const update: Record<string, any> = {};
+  for (const key of PRODUCT_QUICK_WHITELIST) {
+    if (body[key] !== undefined) update[key] = body[key];
+  }
+  if (Object.keys(update).length === 0) {
+    throw new ApiError(400, "No valid fields to update");
+  }
+
+  // A2 owner rule: when product becomes a variation product, product_quantity
+  // is irrelevant. Block the front-door if caller tries to set it. This stays
+  // consistent with the migration script (sets to 0 for variation products).
+  if (existing.is_variation && "product_quantity" in update) {
+    delete update.product_quantity;
+  }
+
+  if (updatedBy) update.product_updated_by = updatedBy;
+
+  const result = await ProductModel.findByIdAndUpdate(
+    _id,
+    { $set: update },
+    { new: true, runValidators: true },
+  ).lean();
+  return result;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A2 — `patchProductImagesServices`: dedicated multipart image manager.
+//
+// Lets the Images Modal:
+//   1. Swap `main_image` (uploads new + cleans old S3 key)
+//   2. Add to `other_images[]`
+//   3. Replace the full `other_images[]` ordering (drag-reorder result)
+//   4. Remove specific other_images entries by S3 key
+//
+// Body fields:
+//   - mode: "swap_main" | "add_other" | "reorder" | "remove_other"
+//   - removed_keys: string[] (for remove_other)
+//   - ordered_keys: string[] (for reorder — must be subset of existing)
+//   - files: multer files (main_image[1], other_images[N])
+// ─────────────────────────────────────────────────────────────────────────────
+export const patchProductImagesServices = async (
+  _id: string,
+  mode: string,
+  files: any,
+  body: { removed_keys?: string[]; ordered_keys?: string[] },
+  updatedBy: any,
+): Promise<any> => {
+  if (!_id) throw new ApiError(400, "product id required");
+  const product = await ProductModel.findById(_id);
+  if (!product) throw new ApiError(404, "Product not found");
+
+  const mainFile = files?.main_image?.[0];
+  const otherFiles: any[] = files?.other_images || [];
+
+  if (mode === "swap_main") {
+    if (!mainFile) throw new ApiError(400, "main_image file required");
+    // Upload new first, swap, then delete old key (only if not still
+    // referenced elsewhere on the same product).
+    const uploaded = await FileUploadHelper.uploadToSpaces(mainFile);
+    const oldKey = product.main_image_key;
+    product.main_image = uploaded.Location;
+    product.main_image_key = uploaded.Key;
+    await product.save();
+    if (oldKey && oldKey !== uploaded.Key) {
+      const stillRef = await collectAllProductImageRefs(String(product._id));
+      if (!stillRef.keys.has(oldKey)) {
+        try {
+          await FileUploadHelper.deleteFromSpaces(oldKey);
+        } catch (err) {
+          // Swallow — orphaned S3 object is harmless, image swap succeeded.
+        }
+      }
+    }
+  } else if (mode === "add_other") {
+    if (!otherFiles.length) throw new ApiError(400, "other_images required");
+    const uploaded = await Promise.all(
+      otherFiles.map((f: any) => FileUploadHelper.uploadToSpaces(f)),
+    );
+    const newEntries = uploaded.map((u) => ({
+      other_image: u.Location,
+      other_image_key: u.Key,
+    }));
+    product.other_images = [
+      ...((product.other_images as any[]) || []),
+      ...newEntries,
+    ] as any;
+    await product.save();
+  } else if (mode === "remove_other") {
+    const removedKeys = body.removed_keys || [];
+    if (!removedKeys.length) {
+      throw new ApiError(400, "removed_keys required");
+    }
+    const before = (product.other_images as any[]) || [];
+    const after = before.filter(
+      (o: any) => !removedKeys.includes(o?.other_image_key),
+    );
+    product.other_images = after as any;
+    await product.save();
+    // Delete S3 objects only if not referenced elsewhere on the same product.
+    const stillRef = await collectAllProductImageRefs(String(product._id));
+    for (const key of removedKeys) {
+      if (!stillRef.keys.has(key)) {
+        try {
+          await FileUploadHelper.deleteFromSpaces(key);
+        } catch {
+          // Swallow — already-deleted or permission issue; not fatal.
+        }
+      }
+    }
+  } else if (mode === "reorder") {
+    const orderedKeys = body.ordered_keys || [];
+    if (!orderedKeys.length) {
+      throw new ApiError(400, "ordered_keys required");
+    }
+    const existing = (product.other_images as any[]) || [];
+    // Legacy uploads may have entries without `other_image_key`. They can't
+    // appear in `ordered_keys` (FE filters them out), so the keyed-equality
+    // check would falsely 400. Fix: only enforce length parity against the
+    // KEYED subset; keyless legacy entries are preserved appended to the end.
+    const keyed = existing.filter((o: any) => o?.other_image_key);
+    const keyless = existing.filter((o: any) => !o?.other_image_key);
+    const map = new Map<string, any>(
+      keyed.map((o: any) => [o.other_image_key, o]),
+    );
+    const reordered = orderedKeys.map((k) => map.get(k)).filter(Boolean);
+    if (reordered.length !== keyed.length) {
+      throw new ApiError(
+        400,
+        "ordered_keys must reference every keyed image exactly once",
+      );
+    }
+    product.other_images = [...reordered, ...keyless] as any;
+    await product.save();
+  } else {
+    throw new ApiError(400, `Unknown mode: ${mode}`);
+  }
+
+  if (updatedBy) {
+    product.product_updated_by = updatedBy;
+    await product.save();
+  }
+
+  return ProductModel.findById(_id).lean();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

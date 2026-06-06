@@ -26,6 +26,13 @@ export interface IVariationInterface {
   // Dynamic Product Page System
   variation_weight_grams?: number | null;
   variation_badge_text?: string | null;
+  /**
+   * A4 (2026-06-04) — curated IconPicker key (e.g. "lu:Crown") shown next to
+   * the badge text on the PDP variation swatch. Badge bg color = active theme
+   * primary always (no per-badge color override) so PDP stays visually
+   * cohesive. Stored as a string so any picker key shape works.
+   */
+  variation_badge_icon_key?: string | null;
 
   // ── Combination-stock engine (Phase 1, additive) ──
   // A variation is one COMBINATION of attribute values, e.g. RAM=8GB + Color=Black.

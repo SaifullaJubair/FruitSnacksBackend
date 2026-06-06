@@ -372,101 +372,112 @@ export const logoutAdmin: RequestHandler = (req, res, next) => {
   }
 };
 
-// ── Admin forgot password — send OTP (Phase D, D4) ────────────────────────────
-// Same OTP shape as the user flow: 6-digit, bcrypt-hashed at rest, 60s
-// resend cooldown, 5-attempt cap. Reuses utils/auth.otp + existing SMS infra.
-// Fixes the "locked-out admin needs another admin to reset" gap.
+// ── Admin forgot password — send OTP (H-B: phone OR email channel) ────────────
+// channel = "phone" (default) → SMS via SendPhoneOTP
+// channel = "email" → SMTP via SendEmailOTP
+// Both channels share the same OTP fields in the admin doc.
 export const forgotPasswordAdmin: RequestHandler = async (req, res, next) => {
   try {
     const { generateOtp, buildOtpFields, isWithinSendCooldown, secondsUntilCooldownEnds } =
       require("../../utils/auth.otp");
     const { SendPhoneOTP } = require("../../middlewares/send.otp.phone");
+    const { SendEmailOTP } = require("../../middlewares/send.otp.email");
 
-    const { admin_phone } = req.body;
-    if (!admin_phone) throw new ApiError(400, "Phone required!");
+    const { admin_phone, admin_email, channel = "phone" } = req.body;
 
-    const admin: any = await AdminModel.findOne({ admin_phone });
-    if (!admin) throw new ApiError(404, "Admin not found!");
+    let admin: any;
+    if (channel === "email") {
+      if (!admin_email) throw new ApiError(400, "Email required!");
+      admin = await AdminModel.findOne({ admin_email });
+      if (!admin) throw new ApiError(404, "No admin account found with this email.");
+    } else {
+      if (!admin_phone) throw new ApiError(400, "Phone required!");
+      admin = await AdminModel.findOne({ admin_phone });
+      if (!admin) throw new ApiError(404, "Admin not found!");
+    }
+
     if (admin.admin_status !== "active") {
       throw new ApiError(403, "Admin is inactive.");
     }
 
     if (isWithinSendCooldown(admin.otp_sent_at)) {
       const wait = secondsUntilCooldownEnds(admin.otp_sent_at);
-      throw new ApiError(
-        429,
-        `Please wait ${wait}s before requesting another OTP.`,
-      );
+      throw new ApiError(429, `Please wait ${wait}s before requesting another OTP.`);
     }
 
     const otp = generateOtp();
     const otpFields = await buildOtpFields(otp);
 
-    await SendPhoneOTP(otp, admin_phone, admin?.admin_name);
-    await AdminModel.updateOne({ admin_phone }, otpFields, {
-      runValidators: true,
-    });
+    const lookupKey = channel === "email" ? { admin_email } : { admin_phone: admin.admin_phone };
+    const otpSave = await AdminModel.updateOne(lookupKey, otpFields, { runValidators: true });
+    if (otpSave?.modifiedCount === 0) {
+      throw new ApiError(500, "Could not save OTP. Please try again.");
+    }
 
-    return sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      message: "OTP sent to your phone.",
-    });
+    if (channel === "email") {
+      const sent = await SendEmailOTP(otp, admin_email, admin?.admin_name);
+      if (!sent) throw new ApiError(503, "Email could not be sent. Check email settings or use phone OTP.");
+      return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "OTP sent to your email." });
+    } else {
+      await SendPhoneOTP(otp, admin.admin_phone, admin?.admin_name);
+      return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "OTP sent to your phone." });
+    }
   } catch (error) {
     next(error);
   }
 };
 
-// ── Admin reset password — verify OTP + set new password (Phase D, D4) ───────
+// ── Admin reset password — verify OTP + set new password (H-B: phone OR email) ─
 export const resetPasswordAdmin: RequestHandler = async (req, res, next) => {
   try {
-    const { verifyOtp, otpClearFields, OTP_MAX_ATTEMPTS } = require(
-      "../../utils/auth.otp",
-    );
+    const { verifyOtp, otpClearFields, OTP_MAX_ATTEMPTS } = require("../../utils/auth.otp");
 
-    const { admin_phone, admin_otp, admin_password } = req.body;
-    if (!admin_phone || !admin_otp || !admin_password) {
-      throw new ApiError(400, "Phone, OTP and new password required!");
+    const { admin_phone, admin_email, admin_otp, admin_password, channel = "phone" } = req.body;
+    if (!admin_otp || !admin_password) {
+      throw new ApiError(400, "OTP and new password required!");
     }
 
-    const admin: any = await AdminModel.findOne({ admin_phone });
+    let admin: any;
+    let lookupKey: Record<string, string>;
+    if (channel === "email") {
+      if (!admin_email) throw new ApiError(400, "Email required!");
+      admin = await AdminModel.findOne({ admin_email });
+      lookupKey = { admin_email };
+    } else {
+      if (!admin_phone) throw new ApiError(400, "Phone required!");
+      admin = await AdminModel.findOne({ admin_phone });
+      lookupKey = { admin_phone };
+    }
     if (!admin) throw new ApiError(404, "Admin not found!");
 
-    if (
-      admin?.otp_expires_at &&
-      new Date() > new Date(admin.otp_expires_at)
-    ) {
+    if (admin?.otp_expires_at && new Date() > new Date(admin.otp_expires_at)) {
       throw new ApiError(400, "OTP has expired. Please request a new one.");
     }
 
     if ((admin.otp_attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
-      throw new ApiError(
-        429,
-        "Too many wrong attempts. Please request a new OTP.",
-      );
+      throw new ApiError(429, "Too many wrong attempts. Please request a new OTP.");
     }
 
     const ok = await verifyOtp(admin_otp, admin.forgot_otp);
     if (!ok) {
-      await AdminModel.updateOne(
-        { admin_phone },
-        { $inc: { otp_attempts: 1 } },
-      );
+      const incOk = await AdminModel.updateOne(lookupKey, { $inc: { otp_attempts: 1 } });
+      if (incOk?.modifiedCount === 0) {
+        throw new ApiError(500, "OTP attempt counter failed. Try again.");
+      }
       throw new ApiError(400, "OTP does not match!");
     }
 
     const hash = await bcrypt.hash(admin_password, saltRounds);
-    await AdminModel.updateOne(
-      { admin_phone },
+    const setOk = await AdminModel.updateOne(
+      lookupKey,
       { admin_password: hash, ...otpClearFields() },
       { runValidators: true },
     );
+    if (setOk?.modifiedCount === 0) {
+      throw new ApiError(500, "Password reset failed. Please try again.");
+    }
 
-    return sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      message: "Password reset successfully.",
-    });
+    return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Password reset successfully." });
   } catch (error) {
     next(error);
   }

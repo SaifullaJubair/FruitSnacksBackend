@@ -1,35 +1,22 @@
 // src/middlewares/send.otp.phone.ts
 import axios from "axios";
-import SettingModel from "../app/setting/setting.model";
+import { getSmsConfig } from "../app/setting/setting.services";
 require("dotenv").config();
 
 export const SendPhoneOTP = async (
   otp: number,
   number: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   user_name: string,
 ): Promise<boolean> => {
   try {
-    // Phase G5 — prefer settings (admin-editable, no redeploy needed); fall
-    // back to .env for legacy deployments. Settings also carries an enabled
-    // toggle so admin can switch SMS off without unsetting credentials.
-    const setting: any = await SettingModel.findOne({})
-      .select("sms_enabled sms_api_key sms_sender_id")
-      .lean()
-      .catch(() => null);
-
-    if (setting && setting.sms_enabled === false) {
-      return false;
-    }
-
-    const apiKey =
-      (setting && setting.sms_api_key) || process.env.BULKSMS_API_KEY;
-    const senderId =
-      (setting && setting.sms_sender_id) || process.env.BULKSMS_SENDER_ID;
-
-    if (!apiKey || !senderId) {
-      console.warn(
-        "BulkSMS: api key / sender id missing (settings + .env both empty)",
-      );
+    // C12: single source of truth — settings DB first, .env fallback,
+    // `sms_enabled === false` short-circuits to a silent no-op.
+    const cfg = await getSmsConfig();
+    if (!cfg) {
+      // Either disabled by admin OR truly unconfigured. Log only the
+      // unconfigured case so the disabled toggle stays quiet.
+      console.warn("SendPhoneOTP: sms disabled or unconfigured — skipping");
       return false;
     }
 
@@ -42,12 +29,14 @@ export const SendPhoneOTP = async (
         ? number
         : `88${number}`;
 
-    const response = await axios.get(`http://bulksmsbd.net/api/smsapi`, {
+    // C12 HIGH 4: https:// — matches order.sms.ts. Plain http leaks the
+    // api_key + OTP code on the wire.
+    const response = await axios.get(`https://bulksmsbd.net/api/smsapi`, {
       params: {
-        api_key: apiKey,
+        api_key: cfg.apiKey,
         type: "text",
         number: formattedNumber,
-        senderid: senderId,
+        senderid: cfg.senderId,
         message: message,
       },
     });

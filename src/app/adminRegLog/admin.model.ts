@@ -55,6 +55,8 @@ const adminSchema = new Schema<IAdminInterface>(
     otp_expires_at: { type: Date },
     otp_sent_at: { type: Date },
     otp_attempts: { type: Number, default: 0 },
+    // H-B — email channel for password reset
+    admin_email: { type: String },
   },
   {
     timestamps: true,

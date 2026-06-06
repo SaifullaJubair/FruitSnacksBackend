@@ -110,9 +110,18 @@ Two parallel auth systems:
 - Mongoose sessions used for multi-document transactions (product creation, order checkout)
 - ObjectId reference pattern — almost every entity tracks `_publisher_id` (admin who created) and `_updated_by` (admin who last edited)
 
-### 3-Level Category Hierarchy
+### Nested Category Tree (infinite depth)
 
-Products reference `category_id → sub_category_id → child_category_id`. Always validate all three levels are `status: "active"` before returning product details (see `product.services.ts`).
+The legacy 3-level hierarchy (`category → sub_category → child_category`) has been replaced by a single self-referencing `categories` collection. Each node has:
+
+- `parent_id` — null for root, ObjectId for nested
+- `category_path` — ordered ancestor ids (root → … → immediate parent), enabling subtree filter `{ category_path: nodeId }` to match the node and every descendant in one indexed query
+- `depth` — path length (0 = root)
+- `default_variant_attributes` / `default_filter_attributes` — attribute suggestions inherited by descendants via `resolveCategoryDefaults()` (parent-chain merge, dead-ref self-heal, cycle guard)
+
+Products carry `category_id` (a single leaf, OPTIONAL since Phase L) + `category_path` (snapshot of the category's ancestors, refreshed on re-parent cascade). Storefront filter / breadcrumbs read `category_path`.
+
+`updateCategoryServices` handles re-parent with cycle prevention + transactional descendant + product cascade. `getReparentImpactServices` returns descendant + product counts for the admin's confirm dialog. `deleteCategoryServices` enforces leaf-only delete + `$pull`s the deleted id from any stale product `category_path` entries.
 
 ### Dynamic Product Page System
 

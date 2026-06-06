@@ -14,6 +14,7 @@ import {
   getCategoryBreadcrumbServices,
   getCategoryChildrenServices,
   getCategoryTreeServices,
+  getReparentImpactServices,
   getSixFeaturedCategoryServices,
   postCategoryServices,
   resolveCategoryDefaults,
@@ -126,6 +127,25 @@ export const getCategoryBreadcrumb: RequestHandler = async (
   }
 };
 
+// M24 — re-parent impact preview (descendant + product counts) for confirm dialog.
+export const getReparentImpact: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await getReparentImpactServices(req.params.id);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Re-parent impact computed",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
 // Get six featured category
 export const getSixFeaturedCategory: RequestHandler = async (
   req: Request,
@@ -174,6 +194,7 @@ export const postCategory: RequestHandler = async (
       const findCategorySerialExit: boolean | null | undefined | any =
         await CategoryModel.exists({
           category_serial: requestData?.category_serial,
+          parent_id: requestData?.parent_id || null,
         });
       if (findCategorySerialExit) {
         if (req.files.category_logo[0]) {
@@ -188,7 +209,10 @@ export const postCategory: RequestHandler = async (
         requestData?.feature_category_show == "true"
       ) {
         const findFeatureCategoryIsMoreThanSix =
-          await CategoryModel.countDocuments({ feature_category_show: true });
+          await CategoryModel.countDocuments({
+            feature_category_show: true,
+            category_status: "active",
+          });
         if (findFeatureCategoryIsMoreThanSix >= 6) {
           if (req.files.category_logo[0]) {
             fs.unlinkSync(req.files.category_logo[0].path);
@@ -203,7 +227,10 @@ export const postCategory: RequestHandler = async (
         requestData?.explore_category_show == "true"
       ) {
         const findExploreCategoryIsMoreThanSix =
-          await CategoryModel.countDocuments({ explore_category_show: true });
+          await CategoryModel.countDocuments({
+            explore_category_show: true,
+            category_status: "active",
+          });
         if (findExploreCategoryIsMoreThanSix >= 3) {
           if (req.files.category_logo[0]) {
             fs.unlinkSync(req.files.category_logo[0].path);
@@ -268,6 +295,7 @@ export const postCategory: RequestHandler = async (
       }
       const findCategorySerialExit = await CategoryModel.exists({
         category_serial: requestData?.category_serial,
+        parent_id: requestData?.parent_id || null,
       });
       if (findCategorySerialExit) {
         throw new ApiError(400, "Serial Number Previously Added !");
@@ -278,6 +306,7 @@ export const postCategory: RequestHandler = async (
       ) {
         const featureCount = await CategoryModel.countDocuments({
           feature_category_show: true,
+          category_status: "active",
         });
         if (featureCount >= 6) {
           throw new ApiError(400, "Already 6 Feature Selected !");
@@ -289,6 +318,7 @@ export const postCategory: RequestHandler = async (
       ) {
         const exploreCount = await CategoryModel.countDocuments({
           explore_category_show: true,
+          category_status: "active",
         });
         if (exploreCount >= 3) {
           throw new ApiError(400, "Already 3 Explore Selected !");
@@ -399,25 +429,46 @@ export const updateCategory: RequestHandler = async (
         }
         throw new ApiError(400, "Already Added !");
       }
-      const findCategorySerialExit: boolean | null | undefined | any =
-        await CategoryModel.exists({
-          category_serial: requestData?.category_serial,
-        });
-      if (
-        findCategorySerialExit &&
-        requestData?._id !== findCategorySerialExit?._id.toString()
-      ) {
-        if (req.files.category_logo[0]) {
-          fs.unlinkSync(req.files.category_logo[0].path);
-        } else {
-          fs.unlinkSync(req.files.category_video[0].path);
+      // Sibling-scoped serial check. Re-parent path resolves new sibling list
+      // inside updateCategoryServices (auto-resolves any collision), so SKIP
+      // the pre-check entirely when caller is changing parent_id — otherwise
+      // admin gets a confusing "serial already added" error when re-parenting.
+      const existingDoc: any = requestData?._id
+        ? await CategoryModel.findById(requestData._id)
+            .select("parent_id")
+            .lean()
+        : null;
+      const isReparentRequest =
+        Object.prototype.hasOwnProperty.call(requestData || {}, "parent_id") &&
+        String(requestData?.parent_id ?? "") !==
+          String(existingDoc?.parent_id ?? "");
+      if (!isReparentRequest) {
+        const findCategorySerialExit: boolean | null | undefined | any =
+          await CategoryModel.exists({
+            category_serial: requestData?.category_serial,
+            parent_id: existingDoc?.parent_id || null,
+            _id: { $ne: requestData?._id },
+          });
+        if (findCategorySerialExit) {
+          if (req.files.category_logo[0]) {
+            fs.unlinkSync(req.files.category_logo[0].path);
+          } else {
+            fs.unlinkSync(req.files.category_video[0].path);
+          }
+          throw new ApiError(400, "Serial Number Previously Added !");
         }
-        throw new ApiError(400, "Serial Number Previously Added !");
       }
 
-      if (requestData?.feature_category_show == true) {
+      // Multipart bodies coerce booleans to strings, so check both forms.
+      // Without `== "true"` the cap check is silently skipped in this branch
+      // and admin can exceed the featured/explore limits via image-upload PATCH.
+      if (
+        requestData?.feature_category_show == true ||
+        requestData?.feature_category_show == "true"
+      ) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           feature_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 6) {
@@ -429,9 +480,13 @@ export const updateCategory: RequestHandler = async (
           throw new ApiError(400, "Already 6 Selected !");
         }
       }
-      if (requestData?.explore_category_show == true) {
+      if (
+        requestData?.explore_category_show == true ||
+        requestData?.explore_category_show == "true"
+      ) {
         const findExploreCategoryIsMoreThanThree = await CategoryModel.find({
           explore_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findExploreCategoryIsMoreThanThree?.length >= 3) {
@@ -506,19 +561,35 @@ export const updateCategory: RequestHandler = async (
       ) {
         throw new ApiError(400, "Already Added !");
       }
-      const findCategorySerialExit: boolean | null | undefined | any =
-        await CategoryModel.exists({
-          category_serial: requestData?.category_serial,
-        });
-      if (
-        findCategorySerialExit &&
-        requestData?._id !== findCategorySerialExit?._id.toString()
-      ) {
-        throw new ApiError(400, "Serial Number Previously Added !");
+      // Sibling-scoped serial check (no-file branch). Re-parent path resolves
+      // new sibling list inside updateCategoryServices (auto-resolves any
+      // collision), so SKIP the pre-check entirely when caller is changing
+      // parent_id — otherwise admin gets a confusing "serial already added"
+      // error when re-parenting.
+      const existingDocNoFile: any = requestData?._id
+        ? await CategoryModel.findById(requestData._id)
+            .select("parent_id")
+            .lean()
+        : null;
+      const isReparentRequestNoFile =
+        Object.prototype.hasOwnProperty.call(requestData || {}, "parent_id") &&
+        String(requestData?.parent_id ?? "") !==
+          String(existingDocNoFile?.parent_id ?? "");
+      if (!isReparentRequestNoFile) {
+        const findCategorySerialExit: boolean | null | undefined | any =
+          await CategoryModel.exists({
+            category_serial: requestData?.category_serial,
+            parent_id: existingDocNoFile?.parent_id || null,
+            _id: { $ne: requestData?._id },
+          });
+        if (findCategorySerialExit) {
+          throw new ApiError(400, "Serial Number Previously Added !");
+        }
       }
       if (requestData?.feature_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           feature_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 6) {
@@ -528,6 +599,7 @@ export const updateCategory: RequestHandler = async (
       if (requestData?.explore_category_show == true) {
         const findFeatureCategoryIsMoreThanSix = await CategoryModel.find({
           explore_category_show: true,
+          category_status: "active",
           _id: { $ne: requestData?._id },
         }).select("_id");
         if (findFeatureCategoryIsMoreThanSix?.length >= 3) {

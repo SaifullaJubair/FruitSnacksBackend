@@ -87,6 +87,12 @@ const variationSchema = new Schema<IVariationInterface>(
       type: String,
       default: null,
     },
+    // A4 (2026-06-04) — curated IconPicker key for the variation badge.
+    // Rendered with theme primary as the bg color in PDP.
+    variation_badge_icon_key: {
+      type: String,
+      default: null,
+    },
 
     // ── Combination-stock engine (Phase 1, additive) ──
     // Sorted array of attribute_values._id (D2). Indexed so a chosen-combination

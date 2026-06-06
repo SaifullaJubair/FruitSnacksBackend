@@ -3,6 +3,30 @@ import {
   IAttributeInterface,
 } from "./attribute.interface";
 import AttributeModel from "./attribute.model";
+import ProductModel from "../product/product.model";
+
+// B2 (2026-06-04) — shared usage-count helper. Used by both the admin
+// "this change will affect N products" warning (getAttributeUsageCount) AND
+// the delete guard so the two never drift on what counts as "in use".
+// Returns up to 10 sample product ids the admin can deep-link to.
+export const countProductsUsingAttribute = async (
+  attribute_id: string,
+): Promise<{ count: number; sample_ids: string[] }> => {
+  const count = await ProductModel.countDocuments({
+    "product_attributes.attribute_id": attribute_id,
+  });
+  if (count === 0) return { count: 0, sample_ids: [] };
+  const sample = await ProductModel.find({
+    "product_attributes.attribute_id": attribute_id,
+  })
+    .select("_id")
+    .limit(10)
+    .lean();
+  return {
+    count,
+    sample_ids: sample.map((p: any) => String(p._id)),
+  };
+};
 
 // Create A Attribute
 export const postAttributeServices = async (

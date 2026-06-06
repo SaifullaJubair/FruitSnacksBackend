@@ -1,23 +1,31 @@
 /**
- * resolveProductPrice — single source of truth for a product's price.
+ * resolveProductPrice — UNIT price ONLY (pure, sync, no DB).
  *
- * Phase 3 of the variation-attribute-filter feature (PLAN D4). Every place that
- * needs a price — PDP, product filter (price-range + sort), cart, order
- * validation — should call THIS, never recompute price math itself. That keeps
- * the storefront and the backend from ever disagreeing on a price.
+ * Layered pricing split (locked 2026-06-05):
  *
- * Wired NOW (D4): final = base + variation delta, where
+ *   Resolver (this file)         | Recompute (order.recompute.ts)
+ *   -----------------------------+--------------------------------------------
+ *   base product price           | campaign override
+ *   variation delta / legacy abs | tier-price (qty)
+ *   flash sale (fixed / percent) | customer-group (wholesale / vip)
+ *                                | coupon (fixed / percent, caps, BOGO TBD)
+ *                                | loyalty redeem
+ *                                | VAT (per-line override / settings)
+ *                                | shipping (per-line-additive, zone-aware)
+ *
+ * Why the split: order-context layers need DB lookups + a customer/order
+ * scope. The resolver stays pure so PDP / product listing / search ranking
+ * can call it without async overhead. Recompute owns everything that depends
+ * on cart shape, coupon code, or customer identity.
+ *
+ * Wired NOW: final = base + variation delta, then flash-sale on top, where
  *   base  = product_discount_price (if a valid discount) else product_price
  *   delta = the chosen variation's price adjustment
  *
- * The variation supports BOTH models during the additive migration:
+ * Variation supports BOTH models during the additive migration:
  *   - NEW combination row: `variation_price_delta` (added to base).
  *   - LEGACY variation: absolute `variation_discount_price ?? variation_price`
  *     (overrides base entirely — matches the current order.validate.ts logic).
- *
- * Extension points left as stubs for the LATER layers (added INTO this same
- * function in Phase B so the call sites never change): campaign, coupon, offer,
- * flash sale, combo pack. They are accepted in `opts` and currently ignored.
  */
 
 import { IProductInterface } from "./product.interface";
@@ -25,12 +33,7 @@ import { IVariationInterface } from "../variation/variation.interface";
 
 export interface ResolvePriceOptions {
   variation?: Partial<IVariationInterface> | null;
-  // ── Later layers (Phase B). Accepted now so call sites are stable; unused. ──
-  campaign?: any;
-  coupon?: any;
-  offer?: any;
   flashSale?: any;
-  comboPack?: any;
 }
 
 export interface ResolvedPrice {
@@ -97,11 +100,10 @@ export const resolveProductPrice = (
       : productRegular;
   }
 
-  // ── Phase E: flash sale layer (active flash sale beats campaign + base) ──
-  // FE/`flashsale.services` does the lookup; we just apply the math here so
-  // the resolver stays pure + sync. `flash_price_type: "fixed"` = absolute
-  // price; `"percent"` = % off the current final_price.
-  const fs: any = (opts as any)?.flashSale;
+  // Flash sale (when active). `flashSale` is fetched by the caller; we just
+  // apply the math. `flash_price_type: "fixed"` = absolute price; `"percent"`
+  // = % off the current final_price.
+  const fs = opts?.flashSale;
   if (fs && typeof fs.flash_price === "number") {
     if (fs.flash_price_type === "percent") {
       final_price = Math.round(final_price - (final_price * fs.flash_price) / 100);
@@ -110,9 +112,6 @@ export const resolveProductPrice = (
       final_price = fs.flash_price;
     }
   }
-
-  // Later layers (campaign/offer/coupon/comboPack) intentionally still inline
-  // in the recompute step — they require DB lookups + per-order context.
 
   const has_discount = final_price < regular_price;
 

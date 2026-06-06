@@ -81,12 +81,15 @@ export const updateforgotPasswordUsersChangeNewPasswordService = async (
 };
 
 // Find all dashboard User
+// B1 (2026-06-04) — accepts optional `user_type` filter ("guest" | "registered")
+// for the admin customer list Type-column filter chip.
 export const findAllDashboardUserServices = async (
   limit: number,
   skip: number,
-  searchTerm: any
+  searchTerm: any,
+  userType?: string,
 ): Promise<IUserInterface[] | []> => {
-  const andCondition = [];
+  const andCondition: any[] = [];
   if (searchTerm) {
     andCondition.push({
       $or: userSearchableField.map((field) => ({
@@ -97,13 +100,37 @@ export const findAllDashboardUserServices = async (
       })),
     });
   }
+  if (userType === "guest" || userType === "registered") {
+    andCondition.push({ user_type: userType });
+  }
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
   const findUser: IUserInterface[] | [] = await UserModel.find(whereCondition)
-    .sort({ _id: 1 })
+    .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
     .select("-__v");
   return findUser;
+};
+
+// B1 — matching countDocuments helper so the controller can reuse the same
+// where-condition for pagination total.
+export const countDashboardUserServices = async (
+  searchTerm: any,
+  userType?: string,
+): Promise<number> => {
+  const andCondition: any[] = [];
+  if (searchTerm) {
+    andCondition.push({
+      $or: userSearchableField.map((field) => ({
+        [field]: { $regex: searchTerm, $options: "i" },
+      })),
+    });
+  }
+  if (userType === "guest" || userType === "registered") {
+    andCondition.push({ user_type: userType });
+  }
+  const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
+  return UserModel.countDocuments(whereCondition);
 };
 
 // Update a User

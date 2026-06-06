@@ -1,8 +1,10 @@
 // src/utils/send.order.sms.ts
 import axios from "axios";
-import SettingModel from "../app/setting/setting.model";
+import {
+  getSmsConfig,
+  getStorefrontBaseUrl,
+} from "../app/setting/setting.services";
 
-const SITE_URL = process.env.SITE_URL || "https://fruitsnacksbd.com";
 const SITE_TITLE = process.env.SITE_TITLE || "FruitSnacks";
 
 // +8801799607660 → 8801799607660
@@ -23,26 +25,16 @@ const phoneForURL = (phone: string): string => {
 
 const sendSMS = async (phone: string, message: string): Promise<void> => {
   try {
-    // Phase G5 — settings DB first (admin-editable), .env as fallback.
-    // sms_enabled=false in settings short-circuits send.
-    const setting: any = await SettingModel.findOne({})
-      .select("sms_enabled sms_api_key sms_sender_id")
-      .lean()
-      .catch(() => null);
-    if (setting && setting.sms_enabled === false) return;
-    const apiKey =
-      (setting && setting.sms_api_key) || process.env.BULKSMS_API_KEY;
-    const senderId =
-      (setting && setting.sms_sender_id) || process.env.BULKSMS_SENDER_ID;
-    if (!apiKey || !senderId) {
-      console.warn("SMS: api key / sender id missing — skipping send");
-      return;
-    }
+    // C12: single source of truth — getSmsConfig() returns null when admin
+    // toggled SMS off OR when api_key / sender_id missing in DB + .env both.
+    const cfg = await getSmsConfig();
+    if (!cfg) return;
+
     await axios.post(
       "https://bulksmsbd.net/api/smsapi",
       {
-        api_key: apiKey,
-        senderid: senderId,
+        api_key: cfg.apiKey,
+        senderid: cfg.senderId,
         number: formatPhone(phone),
         message,
       },
@@ -58,12 +50,13 @@ export const sendOrderSMS_GuestUnverified = async (
   phone: string,
   invoice_id: string,
 ): Promise<void> => {
+  const baseUrl = await getStorefrontBaseUrl();
   const message =
     `${SITE_TITLE}: Thanks for your order!\n` +
     `Invoice: ${invoice_id}\n` +
     // `Your account is ready.\n` +
     `Set a password to view your orders:\n` +
-    `${SITE_URL}/set-password?phone=${phoneForURL(phone)}`;
+    `${baseUrl}/set-password?phone=${phoneForURL(phone)}`;
   await sendSMS(phone, message);
 };
 
@@ -73,11 +66,12 @@ export const sendOrderSMS_VerifiedGuest = async (
   invoice_id: string,
   tracking_id: string,
 ): Promise<void> => {
+  const baseUrl = await getStorefrontBaseUrl();
   const message =
     `${SITE_TITLE}: Thanks for your order!\n` +
     `Invoice: ${invoice_id}\n` +
     `Track your order:\n` +
-    `${SITE_URL}/orders/order-tracking/${tracking_id}`;
+    `${baseUrl}/orders/order-tracking/${tracking_id}`;
   await sendSMS(phone, message);
 };
 
@@ -86,10 +80,11 @@ export const sendOrderSMS_LoggedIn = async (
   phone: string,
   invoice_id: string,
 ): Promise<void> => {
+  const baseUrl = await getStorefrontBaseUrl();
   const message =
     `${SITE_TITLE}: Thanks for your order!\n` +
     `Invoice: ${invoice_id}\n` +
     `Check order history:\n` +
-    `${SITE_URL}/user-profile?tab=purchase-history`;
+    `${baseUrl}/user-profile?tab=purchase-history`;
   await sendSMS(phone, message);
 };

@@ -89,6 +89,14 @@ const orderSchema = new Schema<IOrderInterface>(
       required: true,
       type: String,
     },
+    // S4+S5 Phase 1C — optional. Post-order prompt writes here for
+    // guest orders; on later user registration with matching phone,
+    // auth controller backfills user.user_email.
+    customer_email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
     order_updated_by: {
       type: Schema.Types.ObjectId,
       ref: "admins",
@@ -96,22 +104,11 @@ const orderSchema = new Schema<IOrderInterface>(
     tracking_code: {
       type: String,
     },
-    pathao_city_id: {
-      required: true,
-      type: Number,
-    },
-    pathao_city_name: {
-      required: true,
-      type: String,
-    },
-    pathao_zone_id: {
-      required: true,
-      type: Number,
-    },
-    pathao_zone_name: {
-      required: true,
-      type: String,
-    },
+    // D18 BLOCKER 3 — POS walk-in/pickup has no Pathao zone; all optional
+    pathao_city_id: { type: Number },
+    pathao_city_name: { type: String },
+    pathao_zone_id: { type: Number },
+    pathao_zone_name: { type: String },
     // Pathao status
     pathao_status: {
       type: String,
@@ -199,11 +196,34 @@ const orderSchema = new Schema<IOrderInterface>(
     // Phase G3 (F1b) cart-side loyalty redeem.
     loyalty_redeem_points: { type: Number, default: 0 },
     loyalty_redeem_amount: { type: Number, default: 0 },
+
+    // S4+S5 Phase 1B — server-side Purchase event dedup. CAPI services
+    // skip re-fire when these flags are true (set after first success).
+    meta_purchase_sent: { type: Boolean, default: false },
+    tiktok_purchase_sent: { type: Boolean, default: false },
+
+    // D18 POS fields
+    order_source: {
+      type: String,
+      enum: ["storefront", "admin"],
+      default: "storefront",
+    },
+    admin_manual_discount: { type: Number, default: 0 },
+    admin_created_by: { type: Schema.Types.ObjectId, ref: "admins" },
+    manual_discount_reason: { type: String },
+    // D18-B — POS payment method label (cash/bkash/nagad/card/bank). Separate
+    // from payment_method enum which stays "cod" for POS orders (no gateway).
+    payment_method_note: { type: String },
   },
   {
     timestamps: true,
   },
 );
+
+// E20 BLOCKER 2 — dashboard period + status aggregations need this to avoid
+// full collection scans. Also added to deploy-day checklist: run
+// db.orders.createIndex({ createdAt: -1, order_status: 1 }) on PROD.
+orderSchema.index({ createdAt: -1, order_status: 1 });
 
 const OrderModel = model<IOrderInterface>("orders", orderSchema);
 

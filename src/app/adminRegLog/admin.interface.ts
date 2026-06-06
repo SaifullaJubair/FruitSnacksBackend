@@ -21,6 +21,8 @@ export interface IAdminInterface {
   otp_expires_at?: Date;
   otp_sent_at?: Date;
   otp_attempts?: number;
+  // H-B — email channel for password reset
+  admin_email?: string;
 }
 
 export const adminSearchableField = [

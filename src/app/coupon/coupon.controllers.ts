@@ -56,8 +56,12 @@ export const findACoupon: RequestHandler = async (
 ): Promise<ICouponInterface | any> => {
   try {
     const { coupon_code, customer_id, panel_owner_id } = req.body;
-    if (!coupon_code || !customer_id) {
-      throw new ApiError(400, "Coupon code or customer id is required");
+    // 11β HIGH 6 (D6 anon BOGO) — coupon_code is the only hard requirement.
+    // customer_id is OPTIONAL: BOGO coupons must work for anonymous FB-ad
+    // traffic, and even percent/fixed lookups should fail with a clearer
+    // message than "code or customer required".
+    if (!coupon_code) {
+      throw new ApiError(400, "Coupon code is required");
     }
     const result: ICouponInterface[] | any = await findACouponServices(
       coupon_code
@@ -71,7 +75,27 @@ export const findACoupon: RequestHandler = async (
     ) {
       throw new ApiError(400, "Coupon is expired");
     }
-    if (result?.coupon_customer_type === "specific") {
+    // M18: date-range validation. Mirrors order.recompute.ts logic so the cart
+    // UI claim and the order placement recompute agree on the same valid
+    // window. end_date uses end-of-day grace (+ 86400000ms) so a coupon dated
+    // "ends 2026-06-04" stays valid through that whole day.
+    const now = new Date();
+    const start = result?.coupon_start_date
+      ? new Date(result.coupon_start_date)
+      : null;
+    const end = result?.coupon_end_date
+      ? new Date(result.coupon_end_date)
+      : null;
+    if (start && now < start) {
+      throw new ApiError(400, "Coupon is not yet active");
+    }
+    if (end && now > new Date(end.getTime() + 86400000)) {
+      throw new ApiError(400, "Coupon has expired");
+    }
+    // Customer-specific allowlist only enforceable when caller is logged in.
+    // Anonymous BOGO (D6) skips it; for non-BOGO + anon, the recompute path at
+    // checkout still re-validates so this isn't a security hole.
+    if (result?.coupon_customer_type === "specific" && customer_id) {
       if (result?.coupon_specific_customer?.length > 0) {
         const isCustomerAllowed = result?.coupon_specific_customer?.some(
           (customer: any) =>
@@ -83,13 +107,16 @@ export const findACoupon: RequestHandler = async (
         }
       }
     }
-    const getCouponUserIsUsedThisCoupon: ICouponUsedInterface | any =
-      await getCouponUserByIdServices(result?.coupon_id, customer_id);
-    if (getCouponUserIsUsedThisCoupon) {
-      if (
-        result?.coupon_use_per_person <= getCouponUserIsUsedThisCoupon?.used
-      ) {
-        throw new ApiError(400, "Already use this coupon");
+    // Per-user usage cap only checkable when we know who the user is.
+    if (customer_id) {
+      const getCouponUserIsUsedThisCoupon: ICouponUsedInterface | any =
+        await getCouponUserByIdServices(result?.coupon_id, customer_id);
+      if (getCouponUserIsUsedThisCoupon) {
+        if (
+          result?.coupon_use_per_person <= getCouponUserIsUsedThisCoupon?.used
+        ) {
+          throw new ApiError(400, "Already use this coupon");
+        }
       }
     }
     return sendResponse<ICouponInterface>(res, {

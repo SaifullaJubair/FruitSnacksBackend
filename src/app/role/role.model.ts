@@ -32,38 +32,6 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
-    sub_category_post: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_delete: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_update: {
-      type: Boolean,
-      default: false,
-    },
-    sub_category_show: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_post: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_delete: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_update: {
-      type: Boolean,
-      default: false,
-    },
-    child_category_show: {
-      type: Boolean,
-      default: false,
-    },
     brand_post: {
       type: Boolean,
       default: false,
@@ -260,6 +228,11 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    // S4+S5 Phase 1A — owner/superadmin only by default.
+    setting_secrets_update: {
+      type: Boolean,
+      default: false,
+    },
     page_seo_show: {
       type: Boolean,
       default: false,
@@ -342,6 +315,28 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+
+    // ===== E20: Dashboard =====
+    dashboard_show: { type: Boolean, default: false },
+
+    // ===== D18: POS admin order create =====
+    order_create_admin: { type: Boolean, default: false },
+
+    // ===== M2: Supplier =====
+    supplier_show: { type: Boolean, default: false },
+    supplier_create: { type: Boolean, default: false },
+    supplier_update: { type: Boolean, default: false },
+    supplier_delete: { type: Boolean, default: false },
+
+    // ===== M3: Payment withdraw + payment method =====
+    payment_withdraw_show: { type: Boolean, default: false },
+    payment_withdraw_create: { type: Boolean, default: false },
+    payment_withdraw_update: { type: Boolean, default: false },
+    payment_withdraw_delete: { type: Boolean, default: false },
+    payment_method_show: { type: Boolean, default: false },
+    payment_method_create: { type: Boolean, default: false },
+    payment_method_update: { type: Boolean, default: false },
+    payment_method_delete: { type: Boolean, default: false },
   },
   {
     timestamps: true,

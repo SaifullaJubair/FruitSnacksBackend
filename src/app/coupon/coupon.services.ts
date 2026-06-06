@@ -169,50 +169,8 @@ export const findProductToAddCouponServices = async (
     },
     { $unwind: "$category_info" },
     {
-      $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "subcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$subcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "childcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$childcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
       $match: {
         "category_info.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "subcategory_info.sub_category_status": "active" },
-              { subcategory_info: { $exists: false } },
-            ],
-          },
-          {
-            $or: [
-              { "childcategory_info.child_category_status": "active" },
-              { childcategory_info: { $exists: false } },
-            ],
-          },
-        ],
       },
     },
     // Join with VariationModel if is_variation is true
@@ -252,10 +210,14 @@ export const findProductToAddCouponServices = async (
 };
 
 // Update a Coupon
+// 11β HIGH 4 — previously only `coupon_status` was written, so every other
+// edit silently no-op'd (admin form save did nothing). Now writes any editable
+// field present in the patch, stripping `_id` + audit timestamps. Also lets
+// BOGO coupons round-trip their bogo_* fields on edit.
 export const updateCouponServices = async (
-  data: ICouponInterface,
+  data: ICouponInterface | any,
   _id: string,
-  coupon_status: any
+  _coupon_status_unused: any,
 ): Promise<ICouponInterface | any> => {
   const updateCouponInfo: ICouponInterface | null = await CouponModel.findOne({
     _id: _id,
@@ -263,9 +225,38 @@ export const updateCouponServices = async (
   if (!updateCouponInfo) {
     throw new ApiError(400, "Coupon not found");
   }
-  const Coupon = await CouponModel.updateOne({ _id: _id }, {coupon_status: coupon_status}, {
-    runValidators: true,
-  });
+
+  const ALLOWED: string[] = [
+    "coupon_code",
+    "coupon_start_date",
+    "coupon_end_date",
+    "coupon_type",
+    "coupon_amount",
+    "coupon_max_amount",
+    "coupon_use_per_person",
+    "coupon_use_total_person",
+    "coupon_available",
+    "coupon_status",
+    "coupon_customer_type",
+    "coupon_specific_customer",
+    "coupon_product_type",
+    "coupon_specific_product",
+    "coupon_updated_by",
+    "bogo_buy_qty",
+    "bogo_get_qty",
+    "bogo_get_discount_pct",
+  ];
+
+  const patch: Record<string, any> = {};
+  for (const key of ALLOWED) {
+    if (data?.[key] !== undefined) patch[key] = data[key];
+  }
+
+  const Coupon = await CouponModel.updateOne(
+    { _id: _id },
+    { $set: patch },
+    { runValidators: true },
+  );
   return Coupon;
 };
 

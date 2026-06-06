@@ -1,5 +1,7 @@
 import express from "express";
 import { verifyToken } from "../../middlewares/verify.token";
+// F002: per-IP rate limit on public order placement (burst spam control).
+import { orderLimiter } from "../../middlewares/rate.limit";
 import {
   getACustomerAllOrder,
   getAOrderWithOrderProducts,
@@ -9,9 +11,12 @@ import {
   getOrderTrackingInfo,
   postOrder,
   postSingleOrder,
+  postAdminOrder,
   updateOrder,
   cancelSteadfastOrder,
-  updateOrderDeliveryInfo, // ✅ নতুন import
+  updateOrderDeliveryInfo,
+  // S4+S5 Phase 1C — post-order opt-in email for guest checkout.
+  setOrderEmail,
 } from "./order.controller";
 
 const router = express.Router();
@@ -19,12 +24,15 @@ const router = express.Router();
 // Customer order create & get
 router
   .route("/")
-  .post(postOrder)
+  .post(orderLimiter, postOrder)
   .get(getACustomerAllOrder)
   .patch(verifyToken("order_update"), updateOrder);
 
 // Single order (guest checkout)
-router.route("/single_order").post(postSingleOrder);
+router.route("/single_order").post(orderLimiter, postSingleOrder);
+
+// D18 — Admin POS order create (no rate limit — internal admin tool)
+router.route("/create-admin").post(verifyToken("order_create_admin"), postAdminOrder);
 
 // Dashboard orders
 router.route("/dashboard").get(verifyToken("order_show"), getDashboardOrder);
@@ -46,6 +54,16 @@ router.route("/order_tracking").post(getOrderTrackingInfo);
 router
   .route("/delivery-info/:order_id")
   .patch(verifyToken("order_update"), updateOrderDeliveryInfo);
+
+// S4+S5 Phase 1C — opt-in email collection for guest orders, called
+// from the post-order success-page prompt. Public (no auth) by
+// design — the order_id in the URL is the bearer; security model is
+// the same as the existing /:order_id GET. Single-use semantics:
+// once customer_email is set we reject overwrites to prevent
+// spoofing by anyone who guesses an order_id.
+//
+// ⚠️ MUST be before /:order_id route below to avoid CastError.
+router.route("/:order_id/email").patch(setOrderEmail);
 
 // Order details with products
 // ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard

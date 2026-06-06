@@ -1,7 +1,11 @@
 export interface ISettingInterface {
   _id?: any;
+  // Currency tri-field (M28). Symbol for prefix display ("৳500"), code for
+  // payment-gateway calls + ISO data ("BDT"), name for spelled-out display
+  // ("500 টাকা"). Defaults are Bangladesh; any clone overrides via Admin.
   currency_symbol?: string;
   currency_code?: string;
+  currency_name?: string;
   inside_dhaka_shipping_charge?: number;
   outside_dhaka_shipping_charge?: number;
   inside_dhaka_shipping_days?: number;
@@ -47,16 +51,32 @@ export interface ISettingInterface {
   free_delivery_type?: "always" | "min_order";
   free_delivery_min_amount?: number;
 
-  // ✅ Analytics Pixels
+  // ✅ Analytics Pixels — S4+S5 Phase 1A (2026-06-05).
+  // 3-tier model:
+  //   Tier 1 (PUBLIC ID): visible in /setting GET — browser already shows
+  //   these in pixel scripts, no extra leak vs current architecture.
+  //   Tier 2 (SECRET): stripped from public /setting via .select(-...) and
+  //   only readable via /setting/secrets (admin-only, setting_secrets_update
+  //   permission flag required). Never reach the browser.
   meta_pixel_enabled?: boolean;
   meta_capi_enabled?: boolean;
+  meta_pixel_id?: string; // Tier 1 public
+  meta_capi_access_token?: string; // Tier 2 secret
+  meta_test_event_code?: string; // Tier 2 secret (debug-only test events)
 
   tiktok_pixel_enabled?: boolean;
   tiktok_capi_enabled?: boolean;
-  
+  tiktok_pixel_id?: string; // Tier 1 public
+  tiktok_capi_access_token?: string; // Tier 2 secret
+  tiktok_test_event_code?: string; // Tier 2 secret
+
   gtm_enabled?: boolean;
+  gtm_id?: string; // Tier 1 public
   ga4_enabled?: boolean;
+  ga4_id?: string; // Tier 1 public
   clarity_enabled?: boolean;
+  clarity_id?: string; // Tier 1 public
+  google_verification_meta?: string; // Tier 1 public (Search Console verify)
 
   // ✅ SMS Provider
   sms_provider_name?: string;
@@ -152,6 +172,32 @@ export interface ISettingInterface {
   barcode_auto_generate?: boolean;
   barcode_default_format?: "CODE128" | "EAN13" | "UPC" | "ITF14";
   qr_storefront_base_url?: string;
+
+  // C12 (Sprint 2): storefront base URL used in SMS body links + share copy.
+  // DB-first / .env-fallback / hardcoded last-ditch — buyer can change
+  // domain from Admin without a redeploy. Mirrors qr_storefront_base_url.
+  storefront_base_url?: string;
+
+  // C13 (Sprint 2): Storefront behaviour toggles (Tier A + Tier B).
+  // Defaults preserve existing behaviour so fresh-clone + existing shops
+  // are unaffected without any admin action.
+
+  // Tier A — Storefront essentials (7 fields)
+  maintain_stock?: boolean;          // false → skip guard AND decrement (pre-order/MTO mode)
+  show_sold_count?: boolean;         // false → hide "X জন কিনেছে" badge on PDP
+  show_email_field_checkout?: boolean; // false → remove email input from checkout
+  enable_promo_at_checkout?: boolean;  // false → remove coupon input from checkout
+  verify_phone_on_order?: boolean;   // true → OTP step before order submit (default OFF = anon checkout preserved)
+  allow_image_download?: boolean;    // false → onContextMenu preventDefault on images
+  min_order_amount?: number;         // > 0 → reject orders below this amount (server-enforced)
+
+  // Tier B — High-value additions (6 fields, 5 toggles + 1 string)
+  show_stock_count_on_pdp?: boolean; // true → "শুধু ৩টা বাকি" urgency badge on PDP
+  hide_out_of_stock_products?: boolean; // true → exclude OOS from listings (server-side)
+  enable_whatsapp_chat?: boolean;    // true → show floating WhatsApp icon on storefront
+  whatsapp_number?: string;          // the merchant WhatsApp number (paired with toggle above)
+  enable_reviews?: boolean;          // false → hide review section + form on PDP
+  auto_approve_reviews?: boolean;    // true → review goes live immediately; false → pending queue
 }
 
 export interface IManualMfsMethod {

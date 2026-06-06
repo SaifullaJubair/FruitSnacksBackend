@@ -274,34 +274,6 @@ export const findProductToAddCampaignServices = async (
     { $unwind: "$category_info" },
     {
       $lookup: {
-        from: "subcategories",
-        localField: "sub_category_id",
-        foreignField: "_id",
-        as: "subcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$subcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: "childcategories",
-        localField: "child_category_id",
-        foreignField: "_id",
-        as: "childcategory_info",
-      },
-    },
-    {
-      $unwind: {
-        path: "$childcategory_info",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: "brands",
         localField: "brand_id",
         foreignField: "_id",
@@ -317,25 +289,9 @@ export const findProductToAddCampaignServices = async (
     {
       $match: {
         "category_info.category_status": "active",
-        $and: [
-          {
-            $or: [
-              { "subcategory_info.sub_category_status": "active" },
-              { subcategory_info: { $exists: false } },
-            ],
-          },
-          {
-            $or: [
-              { "childcategory_info.child_category_status": "active" },
-              { childcategory_info: { $exists: false } },
-            ],
-          },
-          {
-            $or: [
-              { "brand_info.brand_status": "active" },
-              { brand_info: { $exists: false } },
-            ],
-          },
+        $or: [
+          { "brand_info.brand_status": "active" },
+          { brand_info: { $exists: false } },
         ],
       },
     },

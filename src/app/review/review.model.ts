@@ -21,7 +21,7 @@ const reviewSchema = new Schema<IReviewInterface>(
     review_status: {
       required: true,
       type: String,
-      enum: ["active", "in-active"],
+      enum: ["active", "in-active", "pending"],
       default: "active",
     },
     review_user_id: {

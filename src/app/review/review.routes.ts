@@ -10,6 +10,8 @@ import {
 } from "./review.controllers";
 import { verifyToken } from "../../middlewares/verify.token";
 import { FileUploadHelper } from "../../helpers/image.upload";
+// F002: per-IP rate limit on public review submission (spam control).
+import { reviewLimiter } from "../../middlewares/rate.limit";
 const router = express.Router();
 
 // Create, Get Review
@@ -17,6 +19,7 @@ router
   .route("/")
   .get(findUserReview)
   .post(
+    reviewLimiter,
     FileUploadHelper.ImageUpload.fields([
       { name: "review_image", maxCount: 1 },
     ]),

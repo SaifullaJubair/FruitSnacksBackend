@@ -3,8 +3,10 @@ import { ISettingInterface } from "./setting.interface";
 
 const settingSchema = new Schema<ISettingInterface>(
   {
+    // M28 currency tri-field — see setting.interface.ts for rationale.
     currency_symbol: { type: String },
     currency_code: { type: String },
+    currency_name: { type: String },
     inside_dhaka_shipping_charge: { type: Number },
     outside_dhaka_shipping_charge: { type: Number },
     inside_dhaka_shipping_days: { type: Number },
@@ -54,16 +56,27 @@ const settingSchema = new Schema<ISettingInterface>(
     },
     free_delivery_min_amount: { type: Number, default: 0 },
 
-    // ✅ Analytics — শুধু enabled toggles, ID/token নেই (সেগুলো .env এ)
+    // ✅ Analytics — S4+S5 Phase 1A: IDs + secrets now in DB.
+    // Secrets stripped from public /setting via .select(-...) in services.
     meta_pixel_enabled: { type: Boolean, default: false },
     meta_capi_enabled: { type: Boolean, default: false },
+    meta_pixel_id: { type: String },
+    meta_capi_access_token: { type: String }, // SECRET
+    meta_test_event_code: { type: String }, // SECRET
 
     tiktok_pixel_enabled: { type: Boolean, default: false },
     tiktok_capi_enabled: { type: Boolean, default: false },
+    tiktok_pixel_id: { type: String },
+    tiktok_capi_access_token: { type: String }, // SECRET
+    tiktok_test_event_code: { type: String }, // SECRET
 
     gtm_enabled: { type: Boolean, default: false },
+    gtm_id: { type: String },
     ga4_enabled: { type: Boolean, default: false },
+    ga4_id: { type: String },
     clarity_enabled: { type: Boolean, default: false },
+    clarity_id: { type: String },
+    google_verification_meta: { type: String },
 
     // ✅ SMS Provider
     sms_provider_name: { type: String },
@@ -178,6 +191,31 @@ const settingSchema = new Schema<ISettingInterface>(
     // per-deploy override (e.g. staging vs production storefront hostname)
     // without redeploying the backend.
     qr_storefront_base_url: { type: String },
+
+    // C12 — storefront base URL for SMS body links + share copy. Empty
+    // falls back to env.SITE_URL, then a final hardcoded default. Same
+    // override pattern as qr_storefront_base_url above.
+    storefront_base_url: { type: String },
+
+    // C13 — Storefront behaviour toggles (Tier A + Tier B).
+    // Defaults mirror existing behaviour so no admin action needed on upgrade.
+
+    // Tier A — Storefront essentials
+    maintain_stock: { type: Boolean, default: true },
+    show_sold_count: { type: Boolean, default: true },
+    show_email_field_checkout: { type: Boolean, default: true },
+    enable_promo_at_checkout: { type: Boolean, default: true },
+    verify_phone_on_order: { type: Boolean, default: false }, // OFF = anon checkout preserved
+    allow_image_download: { type: Boolean, default: false },
+    min_order_amount: { type: Number, default: 0 },
+
+    // Tier B — High-value additions
+    show_stock_count_on_pdp: { type: Boolean, default: false },
+    hide_out_of_stock_products: { type: Boolean, default: false },
+    enable_whatsapp_chat: { type: Boolean, default: false },
+    whatsapp_number: { type: String, default: "" },
+    enable_reviews: { type: Boolean, default: true },
+    auto_approve_reviews: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
