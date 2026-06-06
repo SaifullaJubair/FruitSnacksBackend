@@ -1,4 +1,4 @@
-import { NextFunction, Request, RequestHandler, Response } from "express";
+﻿import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import ApiError from "../../errors/ApiError";
 import { IOrderInterface, orderSearchableField } from "./order.interface";
@@ -35,6 +35,7 @@ import {
   bumpSoldCounts,
 } from "./order.stock";
 import { getCurrencyCode } from "../setting/setting.services";
+import { getCachedSetting } from "../../helpers/settingCache";
 import {
   initiatePayment,
   initiateAdvancePayment,
@@ -216,6 +217,28 @@ export const postOrder: any = async (
   session.startTransaction();
   try {
     const requestData = req.body;
+
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
+    // Client-side hint is UX only; this is the real gate. DevTools bypass blocked.
+    const orderSetting = await getCachedSetting().catch(() => null);
+    const minOrderAmount = orderSetting?.min_order_amount ?? 0;
+    if (minOrderAmount > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < minOrderAmount) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${minOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    // C13 M9 — verify_phone_on_order: if ON, FE must send otp_verified:true.
+    // Default OFF preserves anonymous checkout (owner-locked rule).
+    const verifyPhoneOnOrder = orderSetting?.verify_phone_on_order ?? false;
+    if (verifyPhoneOnOrder && !requestData?.otp_verified) {
+      throw new ApiError(400, "Phone verification required before placing an order.");
+    }
+
     await findOrCreateUser(requestData, session);
 
     // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
@@ -272,8 +295,12 @@ export const postOrder: any = async (
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
 
-    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
-    await decrementStockForLines(recomputed.order_products, session);
+    // Decrement stock atomically at placement (guarded - never goes negative).
+    // C13 D8 - maintain_stock: false = pre-order / MTO mode. Skip BOTH guard and decrement.
+    const maintainStock = orderSetting?.maintain_stock ?? true;
+    if (maintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
     // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
@@ -456,6 +483,26 @@ export const postSingleOrder: any = async (
   session.startTransaction();
   try {
     const requestData = req.body;
+
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
+    const singleOrderSetting = await getCachedSetting().catch(() => null);
+    const singleMinOrderAmount = singleOrderSetting?.min_order_amount ?? 0;
+    if (singleMinOrderAmount > 0) {
+      const clientSubTotal = Number(requestData?.sub_total_amount) || 0;
+      if (clientSubTotal < singleMinOrderAmount) {
+        throw new ApiError(
+          400,
+          `Minimum order amount is ৳${singleMinOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
+        );
+      }
+    }
+
+    // C13 M9 — verify_phone_on_order gate.
+    const singleVerifyPhone = singleOrderSetting?.verify_phone_on_order ?? false;
+    if (singleVerifyPhone && !requestData?.otp_verified) {
+      throw new ApiError(400, "Phone verification required before placing an order.");
+    }
+
     await findOrCreateUser(requestData, session);
 
     // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
@@ -503,8 +550,12 @@ export const postSingleOrder: any = async (
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
 
-    // 🔒 Decrement stock atomically at placement (guarded — never goes negative).
-    await decrementStockForLines(recomputed.order_products, session);
+    // Decrement stock atomically at placement (guarded - never goes negative).
+    // C13 D8 - maintain_stock: false = pre-order / MTO mode. Skip BOTH guard and decrement.
+    const singleMaintainStock = singleOrderSetting?.maintain_stock ?? true;
+    if (singleMaintainStock) {
+      await decrementStockForLines(recomputed.order_products, session);
+    }
     // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
     // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).

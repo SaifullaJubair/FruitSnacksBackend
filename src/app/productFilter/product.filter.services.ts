@@ -26,6 +26,7 @@ import {
   productSearchableField,
 } from "../product/product.interface";
 import ProductModel from "../product/product.model";
+import { getCachedSetting } from "../../helpers/settingCache";
 
 // Resolve a category slug → the set of category ids that make up its subtree
 // match. With product.category_path = full root→leaf chain, a single id is
@@ -256,6 +257,23 @@ export const findAllActiveFilteredProductServices = async (
   // Category subtree + active.
   const categoryId = await resolveCategoryId(conditions?.categoryType);
   const matchConditions: any = buildSubtreeMatch(categoryId);
+
+  // C13 HIGH 4 — hide_out_of_stock_products server-side enforcement.
+  // Client query param `availability` is a UX hint only; this toggle overrides
+  // it unconditionally so DevTools manipulation cannot bypass it.
+  // We inject into matchConditions (pre-pipeline) so the DB scan itself excludes
+  // OOS products — it is NOT the same as the post-pipeline availability filter
+  // which evaluates effective_stock computed from variation aggregation.
+  // For variation products we cannot compute effective_stock in a simple $match,
+  // so we piggy-back on product_quantity (set to 0 by zero-stock-when-variation
+  // migration script) AND the client availability param override below.
+  const filterSetting = await getCachedSetting().catch(() => null);
+  if (filterSetting?.hide_out_of_stock_products) {
+    // Force availability to in-stock only — overrides whatever client sent.
+    // The post-pipeline $match on effective_stock handles variation products.
+    (availability as any[]).length = 0;
+    (availability as any[]).push(1); // 1 = in-stock only
+  }
 
   // Attribute match (product-level): within one attribute = OR over its values,
   // across attributes = AND. Matches against product_attributes (same field the

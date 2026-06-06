@@ -16,6 +16,7 @@ import {
 import ReviewModel from "./review.model";
 import { FileUploadHelper } from "../../helpers/image.upload";
 import * as fs from "fs";
+import { getCachedSetting } from "../../helpers/settingCache";
 
 // Add A Review
 export const postReview: RequestHandler = async (
@@ -25,6 +26,15 @@ export const postReview: RequestHandler = async (
 ): Promise<IReviewInterface | any> => {
   try {
     const requestData = req.body;
+
+    // C13 BLOCKER 3 — FE hardcodes review_status:"active" (ToBeReviewedTab.jsx:41).
+    // Strip it and override server-side based on the auto_approve_reviews toggle.
+    // Default to "active" when setting is absent (fresh DB / undefined).
+    delete requestData.review_status;
+    const setting = await getCachedSetting().catch(() => null);
+    const autoApprove = setting?.auto_approve_reviews ?? true;
+    requestData.review_status = autoApprove ? "active" : "pending";
+
     if (req.files && "review_image" in req.files) {
       const findReviewIsExist: IReviewInterface | null =
         await findAReviewSerialServices(
@@ -197,13 +207,16 @@ export const findAllDashboardReview: RequestHandler = async (
   next: NextFunction
 ): Promise<IReviewInterface | any> => {
   try {
-    const { page, limit, searchTerm } = req.query;
+    const { page, limit, searchTerm, status } = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
     const result: IReviewInterface[] | any =
-      await findAllDashboardReviewServices(limitNumber, skip, searchTerm);
-    const andCondition = [];
+      await findAllDashboardReviewServices(limitNumber, skip, searchTerm, status as string | undefined);
+    const andCondition: any[] = [];
+    if (status) {
+      andCondition.push({ review_status: status });
+    }
     if (searchTerm) {
       andCondition.push({
         $or: reviewSearchableField.map((field) => ({

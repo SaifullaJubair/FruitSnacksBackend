@@ -94,12 +94,18 @@ export const findUserReviewServices = async (
 };
 
 // Find all dashboard Review
+// C13 HIGH 7 — optional `status` param for Pending Reviews moderation queue.
+// Pass status="pending" to get only pending reviews; omit for all reviews.
 export const findAllDashboardReviewServices = async (
   limit: number,
   skip: number,
-  searchTerm: any
+  searchTerm: any,
+  status?: string
 ): Promise<IReviewInterface[] | []> => {
-  const andCondition = [];
+  const andCondition: any[] = [];
+  if (status) {
+    andCondition.push({ review_status: status });
+  }
   if (searchTerm) {
     andCondition.push({
       $or: reviewSearchableField.map((field) => ({

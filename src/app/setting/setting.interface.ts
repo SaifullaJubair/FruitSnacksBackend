@@ -177,6 +177,27 @@ export interface ISettingInterface {
   // DB-first / .env-fallback / hardcoded last-ditch — buyer can change
   // domain from Admin without a redeploy. Mirrors qr_storefront_base_url.
   storefront_base_url?: string;
+
+  // C13 (Sprint 2): Storefront behaviour toggles (Tier A + Tier B).
+  // Defaults preserve existing behaviour so fresh-clone + existing shops
+  // are unaffected without any admin action.
+
+  // Tier A — Storefront essentials (7 fields)
+  maintain_stock?: boolean;          // false → skip guard AND decrement (pre-order/MTO mode)
+  show_sold_count?: boolean;         // false → hide "X জন কিনেছে" badge on PDP
+  show_email_field_checkout?: boolean; // false → remove email input from checkout
+  enable_promo_at_checkout?: boolean;  // false → remove coupon input from checkout
+  verify_phone_on_order?: boolean;   // true → OTP step before order submit (default OFF = anon checkout preserved)
+  allow_image_download?: boolean;    // false → onContextMenu preventDefault on images
+  min_order_amount?: number;         // > 0 → reject orders below this amount (server-enforced)
+
+  // Tier B — High-value additions (6 fields, 5 toggles + 1 string)
+  show_stock_count_on_pdp?: boolean; // true → "শুধু ৩টা বাকি" urgency badge on PDP
+  hide_out_of_stock_products?: boolean; // true → exclude OOS from listings (server-side)
+  enable_whatsapp_chat?: boolean;    // true → show floating WhatsApp icon on storefront
+  whatsapp_number?: string;          // the merchant WhatsApp number (paired with toggle above)
+  enable_reviews?: boolean;          // false → hide review section + form on PDP
+  auto_approve_reviews?: boolean;    // true → review goes live immediately; false → pending queue
 }
 
 export interface IManualMfsMethod {

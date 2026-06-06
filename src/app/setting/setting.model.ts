@@ -196,6 +196,26 @@ const settingSchema = new Schema<ISettingInterface>(
     // falls back to env.SITE_URL, then a final hardcoded default. Same
     // override pattern as qr_storefront_base_url above.
     storefront_base_url: { type: String },
+
+    // C13 — Storefront behaviour toggles (Tier A + Tier B).
+    // Defaults mirror existing behaviour so no admin action needed on upgrade.
+
+    // Tier A — Storefront essentials
+    maintain_stock: { type: Boolean, default: true },
+    show_sold_count: { type: Boolean, default: true },
+    show_email_field_checkout: { type: Boolean, default: true },
+    enable_promo_at_checkout: { type: Boolean, default: true },
+    verify_phone_on_order: { type: Boolean, default: false }, // OFF = anon checkout preserved
+    allow_image_download: { type: Boolean, default: false },
+    min_order_amount: { type: Number, default: 0 },
+
+    // Tier B — High-value additions
+    show_stock_count_on_pdp: { type: Boolean, default: false },
+    hide_out_of_stock_products: { type: Boolean, default: false },
+    enable_whatsapp_chat: { type: Boolean, default: false },
+    whatsapp_number: { type: String, default: "" },
+    enable_reviews: { type: Boolean, default: true },
+    auto_approve_reviews: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

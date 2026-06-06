@@ -9,7 +9,7 @@ export interface IReviewInterface {
   review_answer?: string;
   review_image?: string;
   review_ratting: number;
-  review_status: "active" | "in-active";
+  review_status: "active" | "in-active" | "pending";
   review_product_id: Types.ObjectId | IProductInterface;
   review_user_id: Types.ObjectId | IUserInterface;
   review_updated_by?: Types.ObjectId | IAdminInterface;
