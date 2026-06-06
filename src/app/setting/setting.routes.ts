@@ -6,6 +6,7 @@ import {
   getZoneData,
   postSetting,
   updateSettingSecrets,
+  sendTestEmail,
 } from "./setting.controllers";
 const router = express.Router();
 
@@ -23,6 +24,9 @@ router
   .route("/secrets")
   .get(verifyToken("setting_secrets_update"), getSettingSecrets)
   .patch(verifyToken("setting_secrets_update"), updateSettingSecrets);
+
+// H-B — test email (admin verifies SMTP before going live)
+router.route("/test-email").post(verifyToken("setting_secrets_update"), sendTestEmail);
 
 // get city wise zone data
 router.route("/zone").get(getZoneData);

@@ -104,6 +104,32 @@ export const updateSettingSecrets: RequestHandler = async (
   }
 };
 
+// H-B — send a test email so admin can verify SMTP config before going live
+export const sendTestEmail: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const { to } = req.body;
+    if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      throw new ApiError(400, "Valid recipient email required!");
+    }
+    const { SendEmailOTP } = require("../../middlewares/send.otp.email");
+    const sent = await SendEmailOTP(123456, to, "Admin");
+    if (!sent) {
+      throw new ApiError(503, "Email could not be sent. Check your SMTP settings (host, port, username, password).");
+    }
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Test email sent successfully! Check your inbox.",
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
 // get A ZoneData
 export const getZoneData: RequestHandler = async (
   req: Request,
