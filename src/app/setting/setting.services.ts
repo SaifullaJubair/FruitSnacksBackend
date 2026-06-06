@@ -263,6 +263,38 @@ export const getSmsConfig = async (): Promise<ISmsConfig | null> => {
   };
 };
 
+// H-B: Email config helper — mirrors getSmsConfig pattern.
+// Returns null when email_provider_enabled=false or creds missing.
+export interface IEmailConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  fromAddress: string;
+  fromName: string;
+}
+
+export const getEmailConfig = async (): Promise<IEmailConfig | null> => {
+  const setting = await getCachedSetting().catch(() => null);
+
+  if (setting && setting.email_provider_enabled === false) {
+    return null;
+  }
+
+  const host = (setting && setting.email_host) || process.env.SMTP_HOST || "";
+  const port = (setting && setting.email_port) || Number(process.env.SMTP_PORT) || 587;
+  const username = (setting && setting.email_username) || process.env.SMTP_USER || "";
+  const password = (setting && setting.email_password) || process.env.SMTP_PASS || "";
+  const fromAddress = (setting && setting.email_from_address) || process.env.SMTP_FROM_ADDRESS || "";
+  const fromName = (setting && setting.email_from_name) || process.env.SMTP_FROM_NAME || "FruitSnacks";
+
+  if (!host || !username || !password || !fromAddress) {
+    return null;
+  }
+
+  return { host, port, username, password, fromAddress, fromName };
+};
+
 // C12: storefront base URL for SMS links / share URLs. DB-first, .env
 // fallback, hardcoded last-ditch default. Mirrors qr_storefront_base_url
 // pattern so buyers can swap domain without redeploy.
