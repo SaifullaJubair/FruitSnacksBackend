@@ -324,7 +324,7 @@ export const HOME_SECTION_DEFAULTS = [
   { id: "trending_products",   enabled: true,  order: 9  },
   { id: "just_for_you",        enabled: false, order: 10 },
   { id: "ecommerce_choice",    enabled: false, order: 11 },
-  { id: "category_wise_strip", enabled: false, order: 12 },
+  { id: "category_wise_strip", enabled: true,  order: 12 },
   { id: "promo_banner",        enabled: false, order: 13 },
   { id: "site_faq",            enabled: true,  order: 14 },
   { id: "newsletter",          enabled: true,  order: 15 },

@@ -258,6 +258,29 @@ export const findAllActiveFilteredProductServices = async (
   const categoryId = await resolveCategoryId(conditions?.categoryType);
   const matchConditions: any = buildSubtreeMatch(categoryId);
 
+  // trending_only=true → restrict to admin-flagged trending products.
+  if (conditions?.trending_only === true) {
+    matchConditions.trending_product = true;
+  }
+
+  // searchTerm → regex match across product fields + category name.
+  if (conditions?.searchTerm) {
+    const regex = { $regex: conditions.searchTerm, $options: "i" };
+    // Find category ids whose name matches the search term
+    const matchingCategories = await CategoryModel.find(
+      { category_name: regex },
+    ).select("_id").lean();
+    const categoryIds = matchingCategories.map((c: any) => c._id);
+
+    const fieldClauses = productSearchableField.map((field: string) => ({
+      [field]: regex,
+    }));
+    if (categoryIds.length > 0) {
+      fieldClauses.push({ category_path: { $in: categoryIds } } as any);
+    }
+    matchConditions.$or = fieldClauses;
+  }
+
   // C13 HIGH 4 — hide_out_of_stock_products server-side enforcement.
   // Client query param `availability` is a UX hint only; this toggle overrides
   // it unconditionally so DevTools manipulation cannot bypass it.
@@ -540,11 +563,19 @@ export const findAllSearchTermProductServices = async (
 ): Promise<any> => {
   const andCondition: any[] = [];
   if (searchTerm) {
-    andCondition.push({
-      $or: productSearchableField.map((field) => ({
-        [field]: { $regex: searchTerm, $options: "i" },
-      })),
-    });
+    const regex = { $regex: searchTerm, $options: "i" };
+    const matchingCategories = await CategoryModel.find(
+      { category_name: regex },
+    ).select("_id").lean();
+    const categoryIds = matchingCategories.map((c: any) => c._id);
+
+    const fieldClauses: any[] = productSearchableField.map((field) => ({
+      [field]: regex,
+    }));
+    if (categoryIds.length > 0) {
+      fieldClauses.push({ category_path: { $in: categoryIds } });
+    }
+    andCondition.push({ $or: fieldClauses });
   }
   andCondition.push({ product_status: "active" });
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
@@ -559,7 +590,7 @@ export const findAllSearchTermProductServices = async (
         as: "category",
       },
     },
-    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
     {
       $lookup: {
         from: "brands",
@@ -571,8 +602,14 @@ export const findAllSearchTermProductServices = async (
     { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
     {
       $match: {
-        "category.category_status": "active",
-        $or: [{ "brand.brand_status": "active" }, { brand: null }],
+        $or: [
+          { "category.category_status": "active" },
+          { category: null },
+          { category: { $exists: false } },
+        ],
+        $and: [
+          { $or: [{ "brand.brand_status": "active" }, { brand: null }] },
+        ],
       },
     },
   ];
@@ -649,6 +686,7 @@ export const findAllSearchTermProductServices = async (
         createdAt: 1,
         updatedAt: 1,
         brand: { _id: 1, brand_name: 1 },
+        product_category: { _id: "$category._id", category_name: "$category.category_name" },
         is_variation: 1,
         variations: {
           $cond: {
