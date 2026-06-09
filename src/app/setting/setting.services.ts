@@ -315,7 +315,7 @@ export const getEmailConfig = async (
 export const HOME_SECTION_DEFAULTS = [
   { id: "trust_strip",         enabled: true,  order: 1  },
   { id: "feature_categories",  enabled: true,  order: 2  },
-  { id: "flash_sale",          enabled: true,  order: 3  },
+  { id: "flash_sale",          enabled: false, order: 3  },
   { id: "bestsellers",         enabled: true,  order: 4  },
   { id: "offers_block",        enabled: true,  order: 5  },
   { id: "new_arrivals",        enabled: true,  order: 6  },
