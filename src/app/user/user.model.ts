@@ -18,6 +18,8 @@ const userSchema = new Schema<IUserInterface>(
     },
     user_image: { type: String },
     user_image_key: { type: String },
+    user_additional_phone: { type: String },
+    user_gender: { type: String, enum: ["male", "female", "other"] },
     user_country: { type: String, default: "Bangladesh" },
     user_district: { type: String },
     user_division: { type: String },
