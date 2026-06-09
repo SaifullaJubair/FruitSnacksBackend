@@ -2027,7 +2027,7 @@ export const findCartProduct: RequestHandler = async (
   next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
-    const products = req?.query?.products;
+    const products = req?.body?.products;
     const result: IProductInterface[] | any =
       await findCartProductServices(products);
     return sendResponse<IProductInterface>(res, {

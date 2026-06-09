@@ -21,11 +21,12 @@ export const getCart: RequestHandler = async (
 
     const cart = await getCartByUserIdService(user_id);
 
+    // cart_products এখন product_slug সহ আসে (slug-enriched by service)
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "Cart found successfully",
-      data: cart?.cart_products || [],
+      data: (cart as any)?.cart_products || [],
     });
   } catch (error) {
     next(error);

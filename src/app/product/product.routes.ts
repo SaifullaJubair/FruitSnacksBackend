@@ -121,8 +121,8 @@ router
 // get a dashboard product
 router.route("/dashboard/:_id").get(findADashboardProduct);
 
-// get cart product details
-router.route("/cart_product").get(findCartProduct);
+// get cart product details (POST — body avoids URL length limits on large carts)
+router.route("/cart_product").post(findCartProduct);
 
 // get compare product details
 router.route("/compare_product").get(findCompareProduct);
