@@ -23,11 +23,7 @@ import { postSingleOrderUserServices } from "../user/user.services";
 import UserModel from "../user/user.model";
 import mongoose from "mongoose";
 import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
-import {
-  sendOrderSMS_GuestUnverified,
-  sendOrderSMS_LoggedIn,
-  sendOrderSMS_VerifiedGuest,
-} from "../../utils/send.order.sms";
+import { sendOrderSMS_GuestUnverified, sendOrderSMS_LoggedIn, sendOrderSMS_VerifiedGuest } from "../../utils/send.order.sms";
 import { recomputeOrderTotals } from "./order.recompute";
 import {
   decrementStockForLines,
@@ -399,27 +395,18 @@ export const postOrder: any = async (
       });
     } catch (_) {}
 
-    // ── SMS (silent fail) ─────────────────────────────────────────────────────
-    try {
-      const phone = requestData?.customer_phone;
-      const invoice_id = requestData?.invoice_id;
-      const user_verified = requestData?.user_verified ?? false;
-      // need_user_create=false মানে logged in user
-      const is_logged_in = !requestData?.need_user_create;
-
-      if (phone && invoice_id) {
-        if (!user_verified) {
-          // Case 1: Fresh guest OR returning unverified guest
-          await sendOrderSMS_GuestUnverified(phone, invoice_id);
-        } else if (user_verified && !is_logged_in) {
-          // Case 2: Verified but placed order without logging in
-          await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
-        } else {
-          // Case 3: Logged-in verified user
-          await sendOrderSMS_LoggedIn(phone, invoice_id);
-        }
-      }
-    } catch (_) {}
+    // ── SMS on order-place DISABLED — SMS fires on admin order-confirm instead ──
+    // try {
+    //   const phone = requestData?.customer_phone;
+    //   const invoice_id = requestData?.invoice_id;
+    //   const user_verified = requestData?.user_verified ?? false;
+    //   const is_logged_in = !requestData?.need_user_create;
+    //   if (phone && invoice_id) {
+    //     if (!user_verified) { await sendOrderSMS_GuestUnverified(phone, invoice_id); }
+    //     else if (user_verified && !is_logged_in) { await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id); }
+    //     else { await sendOrderSMS_LoggedIn(phone, invoice_id); }
+    //   }
+    // } catch (_) {}
 
     // ── Phase G2: mark any open abandoned-cart for this phone as recovered
     // (silent fail — recovery tracking is best-effort).
@@ -638,27 +625,18 @@ export const postSingleOrder: any = async (
       });
     } catch (_) {}
 
-    // ── SMS (silent fail) ─────────────────────────────────────────────────────
-    try {
-      const phone = requestData?.customer_phone;
-      const invoice_id = requestData?.invoice_id;
-      const user_verified = requestData?.user_verified ?? false;
-      // need_user_create=false মানে logged in user
-      const is_logged_in = !requestData?.need_user_create;
-
-      if (phone && invoice_id) {
-        if (!user_verified) {
-          // Case 1: Fresh guest OR returning unverified guest
-          await sendOrderSMS_GuestUnverified(phone, invoice_id);
-        } else if (user_verified && !is_logged_in) {
-          // Case 2: Verified but placed order without logging in
-          await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
-        } else {
-          // Case 3: Logged-in verified user
-          await sendOrderSMS_LoggedIn(phone, invoice_id);
-        }
-      }
-    } catch (_) {}
+    // ── SMS on order-place DISABLED — SMS fires on admin order-confirm instead ──
+    // try {
+    //   const phone = requestData?.customer_phone;
+    //   const invoice_id = requestData?.invoice_id;
+    //   const user_verified = requestData?.user_verified ?? false;
+    //   const is_logged_in = !requestData?.need_user_create;
+    //   if (phone && invoice_id) {
+    //     if (!user_verified) { await sendOrderSMS_GuestUnverified(phone, invoice_id); }
+    //     else if (user_verified && !is_logged_in) { await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id); }
+    //     else { await sendOrderSMS_LoggedIn(phone, invoice_id); }
+    //   }
+    // } catch (_) {}
 
     // ── Phase G2: mark any open abandoned-cart for this phone as recovered
     // (silent fail — recovery tracking is best-effort).
@@ -1060,16 +1038,30 @@ export const updateOrder: RequestHandler = async (
       " " +
       new Date().toLocaleTimeString();
 
+    if (requestData?.order_status === "on_hold")
+      requestData.on_hold_time = timeNow;
+    if (requestData?.order_status === "confirmed")
+      requestData.confirmed_time = timeNow;
     if (requestData?.order_status === "processing")
       requestData.processing_time = timeNow;
     if (requestData?.order_status === "shipped")
       requestData.shipped_time = timeNow;
     if (requestData?.order_status === "delivered")
       requestData.delivered_time = timeNow;
+    if (requestData?.order_status === "completed")
+      requestData.completed_time = timeNow;
     if (requestData?.order_status === "cancel")
       requestData.cancel_time = timeNow;
     if (requestData?.order_status === "return")
       requestData.return_time = timeNow;
+
+    // Fetch order before update so we have phone + invoice for SMS
+    let orderBeforeUpdate: any = null;
+    if (requestData?.order_status === "confirmed") {
+      orderBeforeUpdate = await OrderModel.findById(requestData?._id)
+        .populate("customer_id", "user_phone user_verified is_guest")
+        .lean();
+    }
 
     const result: any = await updateOrderServices(
       requestData,
@@ -1090,6 +1082,28 @@ export const updateOrder: RequestHandler = async (
 
     await session.commitTransaction();
     session.endSession();
+
+    // ── SMS on order-confirm ──────────────────────────────────────────────────
+    // Fires AFTER commit so a failed SMS never rolls back the status change.
+    if (requestData?.order_status === "confirmed" && orderBeforeUpdate) {
+      try {
+        const phone = orderBeforeUpdate?.customer_phone;
+        const invoice_id = orderBeforeUpdate?.invoice_id;
+        const customer: any = orderBeforeUpdate?.customer_id;
+        const is_logged_in = customer && !customer?.is_guest;
+        const user_verified = customer?.user_verified;
+        if (phone && invoice_id) {
+          if (!user_verified) {
+            await sendOrderSMS_GuestUnverified(phone, invoice_id);
+          } else if (user_verified && !is_logged_in) {
+            await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
+          } else {
+            await sendOrderSMS_LoggedIn(phone, invoice_id);
+          }
+        }
+      } catch (_) {}
+    }
+
     return sendResponse<IOrderInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,

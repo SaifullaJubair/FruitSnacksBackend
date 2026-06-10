@@ -13,32 +13,26 @@ const orderSchema = new Schema<IOrderInterface>(
       type: String,
       enum: [
         "pending",
+        "on_hold",
+        "confirmed",
         "processing",
         "shipped",
         "delivered",
+        "completed",
         "cancel",
         "return",
       ],
       default: "pending",
     },
-    pending_time: {
-      type: String,
-    },
-    processing_time: {
-      type: String,
-    },
-    shipped_time: {
-      type: String,
-    },
-    delivered_time: {
-      type: String,
-    },
-    cancel_time: {
-      type: String,
-    },
-    return_time: {
-      type: String,
-    },
+    pending_time: { type: String },
+    on_hold_time: { type: String },
+    confirmed_time: { type: String },
+    processing_time: { type: String },
+    shipped_time: { type: String },
+    delivered_time: { type: String },
+    completed_time: { type: String },
+    cancel_time: { type: String },
+    return_time: { type: String },
     sub_total_amount: {
       required: true,
       type: Number,

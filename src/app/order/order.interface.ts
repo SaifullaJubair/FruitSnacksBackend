@@ -7,15 +7,21 @@ export interface IOrderInterface {
   invoice_id: string;
   order_status:
     | "pending"
+    | "on_hold"
+    | "confirmed"
     | "processing"
     | "shipped"
     | "delivered"
+    | "completed"
     | "cancel"
     | "return";
   pending_time?: string;
+  on_hold_time?: string;
+  confirmed_time?: string;
   processing_time?: string;
   shipped_time?: string;
   delivered_time?: string;
+  completed_time?: string;
   cancel_time?: string;
   return_time?: string;
   billing_country: string;
