@@ -23,6 +23,9 @@ import {
   findCartProductServices,
   findCompareProductServices,
   findECommerceChoiceProductServices,
+  findTopSellingProductServices,
+  findNewArrivalProductServices,
+  findMostViewedProductServices,
   findJustForYouProductServices,
   findPopularProductServices,
   findRelatedProductServices,
@@ -411,6 +414,78 @@ export const findECommerceChoiceProduct: RequestHandler = async (
       success: true,
       message: "Ecommerce Choice Product Found Successfully !",
       data: findECommerceChoiceProduct,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// top selling — সবচেয়ে বেশি বিক্রি (sort by sold_count desc)
+export const findTopSellingProduct: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { page = 1, limit = 20, category_id } = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+    const result = await findTopSellingProductServices(limitNumber, skip, category_id);
+    return sendResponse<IProductInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Top Selling Products Found Successfully!",
+      data: result.data,
+      totalData: result.totalCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// new arrival — নতুন পণ্য (sort by createdAt desc)
+export const findNewArrivalProduct: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+    const result = await findNewArrivalProductServices(limitNumber, skip);
+    return sendResponse<IProductInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "New Arrival Products Found Successfully!",
+      data: result.data,
+      totalData: result.totalCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// most viewed — সর্বাধিক দেখা (sort by view_count desc)
+export const findMostViewedProduct: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+    const result = await findMostViewedProductServices(limitNumber, skip);
+    return sendResponse<IProductInterface>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Most Viewed Products Found Successfully!",
+      data: result.data,
+      totalData: result.totalCount,
     });
   } catch (error) {
     next(error);
@@ -1952,7 +2027,7 @@ export const findCartProduct: RequestHandler = async (
   next: NextFunction,
 ): Promise<IProductInterface | any> => {
   try {
-    const products = req?.query?.products;
+    const products = req?.body?.products;
     const result: IProductInterface[] | any =
       await findCartProductServices(products);
     return sendResponse<IProductInterface>(res, {

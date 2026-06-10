@@ -24,18 +24,21 @@ export const postReviewServices = async (
   return createReview;
 };
 
-// Find Review
+// Find Review — respects enable_seeded_reviews toggle from settings
 export const findAllReviewServices = async (
   review_product_id: string,
   limit: number,
   skip: number,
+  showSeeded = true,
 ): Promise<IReviewInterface[] | []> => {
-  const findReview: IReviewInterface[] | [] = await ReviewModel.find({
-    $and: [
-      { review_status: "active" },
-      { review_product_id: review_product_id },
-    ],
-  })
+  const filter: any = {
+    review_status: "active",
+    review_product_id: review_product_id,
+  };
+  if (!showSeeded) {
+    filter.is_seeded = { $ne: true };
+  }
+  const findReview: IReviewInterface[] | [] = await ReviewModel.find(filter)
     .populate("review_user_id")
     .sort({ _id: -1 })
     .skip(skip)
@@ -265,6 +268,142 @@ export const findUnReviewedProductServices = async (
   ]);
 
   return unreviewedProducts;
+};
+
+// ─── Seed Review — Bulk Upload ────────────────────────────────────────────────
+// rows: array of review objects from CSV/JSON parse.
+// dry_run: if true, validate + count but don't write to DB.
+// Returns { inserted, skipped, failed } counts + per-row failure reasons.
+export const seedReviewBulkServices = async (
+  rows: any[],
+  dry_run = false,
+): Promise<{ inserted: number; skipped: number; failed: { row: number; reason: string }[] }> => {
+  if (!rows || rows.length === 0) {
+    return { inserted: 0, skipped: 0, failed: [] };
+  }
+  if (rows.length > 500) {
+    throw new ApiError(400, "Bulk seed limit is 500 rows per upload.");
+  }
+
+  let inserted = 0;
+  let skipped = 0;
+  const failed: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 1;
+    try {
+      const { review_product_id, review_ratting, review_description, reviewer_name, reviewer_verified, review_image } = row;
+
+      if (!review_product_id) { failed.push({ row: rowNum, reason: "review_product_id required" }); continue; }
+      if (!review_description || String(review_description).trim() === "") { failed.push({ row: rowNum, reason: "review_description required" }); continue; }
+      const rating = Number(review_ratting);
+      if (isNaN(rating) || rating < 1 || rating > 5) { failed.push({ row: rowNum, reason: "review_ratting must be 1–5" }); continue; }
+
+      // Dedup check: same product + reviewer_name + description = duplicate
+      const existing = await ReviewModel.findOne({
+        review_product_id,
+        reviewer_name: String(reviewer_name || "").trim(),
+        review_description: String(review_description).trim(),
+        is_seeded: true,
+      }).lean();
+      if (existing) { skipped++; continue; }
+
+      if (!dry_run) {
+        await ReviewModel.create({
+          review_product_id,
+          review_ratting: rating,
+          review_description: String(review_description).trim(),
+          review_status: "active",
+          is_seeded: true,
+          source: "csv_bulk",
+          reviewer_name: String(reviewer_name || "").trim(),
+          reviewer_verified: Boolean(reviewer_verified),
+          review_image: review_image || undefined,
+        });
+      }
+      inserted++;
+    } catch (err: any) {
+      failed.push({ row: rowNum, reason: err?.message || "Unknown error" });
+    }
+  }
+
+  return { inserted, skipped, failed };
+};
+
+// ─── Seed Review — Manual Admin Add ──────────────────────────────────────────
+export const seedReviewManualServices = async (
+  data: any,
+): Promise<IReviewInterface> => {
+  const { review_product_id, review_ratting, review_description, reviewer_name, reviewer_verified, review_image, review_status } = data;
+  if (!review_product_id) throw new ApiError(400, "review_product_id required");
+  if (!review_description || String(review_description).trim() === "") throw new ApiError(400, "review_description required");
+  const rating = Number(review_ratting);
+  if (isNaN(rating) || rating < 1 || rating > 5) throw new ApiError(400, "review_ratting must be 1–5");
+
+  const created = await ReviewModel.create({
+    review_product_id,
+    review_ratting: rating,
+    review_description: String(review_description).trim(),
+    review_status: review_status || "active",
+    is_seeded: true,
+    source: "manual_admin",
+    reviewer_name: String(reviewer_name || "").trim(),
+    reviewer_verified: Boolean(reviewer_verified),
+    review_image: review_image || undefined,
+  });
+  return created;
+};
+
+// ─── Seed Review — List (admin view of seeded reviews) ───────────────────────
+export const findAllSeededReviewServices = async (
+  limit: number,
+  skip: number,
+  searchTerm?: string,
+  product_id?: string,
+): Promise<{ reviews: IReviewInterface[]; totalCount: number }> => {
+  const filter: any = { is_seeded: true };
+  if (product_id) filter.review_product_id = product_id;
+  if (searchTerm) {
+    filter.$or = [
+      { reviewer_name: { $regex: searchTerm, $options: "i" } },
+      { review_description: { $regex: searchTerm, $options: "i" } },
+    ];
+  }
+
+  const [reviews, totalCount] = await Promise.all([
+    ReviewModel.find(filter)
+      .populate("review_product_id", "product_name product_slug main_image")
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select("-__v"),
+    ReviewModel.countDocuments(filter),
+  ]);
+  return { reviews, totalCount };
+};
+
+// Track D — Reviews carousel manual-pick: fetch specific reviews by IDs.
+// Filters deleted/inactive reviews so stale IDs in settings don't crash FE.
+export const findReviewsByIdsServices = async (
+  ids: string[],
+): Promise<IReviewInterface[]> => {
+  if (!ids || ids.length === 0) return [];
+  const objectIds = ids
+    .map((id) => {
+      try { return new mongoose.Types.ObjectId(id); }
+      catch { return null; }
+    })
+    .filter(Boolean);
+
+  return ReviewModel.find({
+    _id: { $in: objectIds },
+    review_status: "active",
+  })
+    .populate("review_user_id", "user_name")
+    .sort({ _id: -1 })
+    .select("-__v")
+    .lean();
 };
 
 // // Project the desired fields (Inclusion-based approach)

@@ -254,14 +254,6 @@ export interface IProductInterface {
 export const productSearchableField = [
   "product_name",
   "product_slug",
-  "product_status",
   "product_sku",
   "barcode",
-  "description",
-  "short_description",
-  "badge_text",
-  "unit",
-  "meta_title",
-  "meta_description",
-  "meta_keywords.keyword",
 ];

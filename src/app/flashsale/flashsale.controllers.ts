@@ -8,6 +8,7 @@ import {
   findAFlashSaleServices,
   updateFlashSaleServices,
   deleteFlashSaleServices,
+  findActiveFlashSaleStorefrontService,
 } from "./flashsale.services";
 
 export const postFlashSale: RequestHandler = async (req, res, next): Promise<any> => {
@@ -44,5 +45,12 @@ export const deleteFlashSale: RequestHandler = async (req, res, next): Promise<a
   try {
     const r = await deleteFlashSaleServices(req.params._id);
     return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Flash sale deleted.", data: r });
+  } catch (e) { next(e); }
+};
+
+export const findActiveFlashSaleStorefront: RequestHandler = async (req, res, next): Promise<any> => {
+  try {
+    const r = await findActiveFlashSaleStorefrontService();
+    return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Active flash sale.", data: r });
   } catch (e) { next(e); }
 };

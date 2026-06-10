@@ -75,3 +75,12 @@ export const reviewLimiter = rateLimit({
   legacyHeaders: false,
   message: json429("Too many reviews submitted. Try again later."),
 });
+
+// Newsletter subscribe — public endpoint, bot/spam control.
+export const newsletterLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: json429("Too many subscription attempts. Try again later."),
+});

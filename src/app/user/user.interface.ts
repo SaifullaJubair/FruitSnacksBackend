@@ -11,6 +11,8 @@ export interface IUserInterface {
   user_email?: string;
   user_image?: string;
   user_image_key?: string;
+  user_additional_phone?: string;
+  user_gender?: "male" | "female" | "other";
   user_country?: string;
   user_division?: string;
   user_district?: string;

@@ -72,6 +72,8 @@ export const findAllFilteredProduct: RequestHandler = async (
       filterData,
       page = 1,
       limit = 20,
+      trending_only,
+      searchTerm,
     } = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
@@ -85,6 +87,14 @@ export const findAllFilteredProduct: RequestHandler = async (
 
     if (sub_categoryType) {
       conditions.sub_categoryType = sub_categoryType;
+    }
+
+    if (trending_only === "true") {
+      conditions.trending_only = true;
+    }
+
+    if (searchTerm) {
+      conditions.searchTerm = searchTerm;
     }
 
     // if (child_categoryType) {

@@ -3,6 +3,7 @@ import ApiError from "../../errors/ApiError";
 import VariationModel from "../variation/variation.model";
 import { IProductInterface, productSearchableField } from "./product.interface";
 import ProductModel from "./product.model";
+import ProductCountHistoryModel from "./productCountHistory.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import ReviewModel from "../review/review.model";
 import CategoryModel from "../category/category.model";
@@ -10,7 +11,9 @@ import BrandModel from "../brand/brand.model";
 import {
   findActiveFlashForProduct,
   findActiveFlashWithMetaForProduct,
+  findActiveFlashMapForProducts,
 } from "../flashsale/flashsale.services";
+import CampaignModel from "../campaign/campaign.model";
 import { FileUploadHelper } from "../../helpers/image.upload";
 
 // Create A Product
@@ -82,34 +85,39 @@ export const findAProductDetailsServices = async (
 
   const targetProductId = findProduct?._id;
 
-  // Step 3: Extract specific campaign product details
-  // const campaignId = findProduct?.product_campaign_id;
+  // Step 3: Campaign lookup — PDP needs campaign_details same shape as strips.
+  // product_campaign_id is a raw ObjectId ref (not populated above), so we
+  // query CampaignModel directly. Best-effort: never block PDP on it.
+  try {
+    if (findProduct?.product_campaign_id) {
+      const campaign: any = await CampaignModel.findOne({
+        _id: findProduct.product_campaign_id,
+        campaign_status: "active",
+      })
+        .select("_id campaign_title campaign_start_date campaign_end_date campaign_status campaign_products")
+        .lean();
 
-  // if (campaignId && "campaign_products" in campaignId) {
-  //   if (campaignId?.campaign_status === "active") {
-  //     const campaignProduct = campaignId?.campaign_products?.find(
-  //       (product: any) =>
-  //         product?.campaign_product_id?.equals(targetProductId) &&
-  //         product?.campaign_product_status === "active"
-  //     );
-
-  //     if (campaignProduct) {
-  //       findProduct.campaign_details = {
-  //         _id: campaignId?._id,
-  //         campaign_start_date: campaignId?.campaign_start_date,
-  //         campaign_end_date: campaignId?.campaign_end_date,
-  //         campaign_status: campaignId?.campaign_status,
-  //         campaign_title: campaignId?.campaign_title,
-  //         campaign_product: campaignProduct,
-  //       };
-  //       delete findProduct?.product_campaign_id;
-  //     } else {
-  //       delete findProduct?.product_campaign_id;
-  //     }
-  //   } else {
-  //     delete findProduct?.product_campaign_id;
-  //   }
-  // }
+      if (campaign) {
+        const campaignProduct = campaign.campaign_products?.find(
+          (p: any) =>
+            String(p?.campaign_product_id) === String(targetProductId) &&
+            p?.campaign_product_status === "active",
+        );
+        if (campaignProduct) {
+          findProduct.campaign_details = {
+            _id: campaign._id,
+            campaign_title: campaign.campaign_title,
+            campaign_start_date: campaign.campaign_start_date,
+            campaign_end_date: campaign.campaign_end_date,
+            campaign_status: campaign.campaign_status,
+            campaign_product: campaignProduct,
+          };
+        }
+      }
+    }
+  } catch (_) {
+    // Campaign lookup best-effort — never block PDP.
+  }
 
   // Step 3: Check if the product has variations
   if (findProduct?.is_variation) {
@@ -175,10 +183,20 @@ export const findAProductDetailsServices = async (
   // Phase E (F2) — attach the active flash sale row for this product so the
   // PDP can render the countdown + flash price without a second round-trip.
   // Returns null if nothing's active right now; FE renders normal price.
+  // Dual-write: active_flash (new PdpPriceMeta shape) + flash_sale_details
+  // (legacy FE shape used by helper.js, SingleProduct, ProductHighlightSection).
   try {
     const flashMeta = await findActiveFlashWithMetaForProduct(targetProductId);
     if (flashMeta) {
       findProduct.active_flash = flashMeta;
+      findProduct.flash_sale_details = {
+        flash_sale_product: {
+          flash_sale_product_price: flashMeta.product_entry.flash_price,
+          flash_price_type: flashMeta.product_entry.flash_price_type,
+          flash_sale_title: flashMeta.title,
+          flash_sale_end_time: flashMeta.end_at,
+        },
+      };
     }
   } catch (_) {
     // Flash lookup is best-effort; never block PDP load on it.
@@ -490,10 +508,11 @@ export const findRelatedProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -722,10 +741,11 @@ export const findTrendingProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1022,9 +1042,15 @@ export const findTrendingProductServices = async (
     },
   ]);
 
+  const flashMap = await findActiveFlashMapForProducts(findTrendingProduct.map((p: any) => p._id));
+  const enrichedTrending = findTrendingProduct.map((p: any) => {
+    const flash = flashMap.get(String(p._id));
+    return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+  });
+
   // Return both the data and total count
   return {
-    data: findTrendingProduct,
+    data: enrichedTrending,
     totalData: totalCount,
   };
 };
@@ -1126,10 +1152,11 @@ export const findBrandMatchProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1809,10 +1836,11 @@ export const findPopularProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -1951,6 +1979,199 @@ export const findPopularProductServices = async (
   return sendData;
 };
 
+// ─── Top Selling (সবচেয়ে বেশি বিক্রি) ──────────────────────────────────────
+// Sorts by sold_count desc — admin seeds a baseline; real orders accumulate.
+// category_id: optional filter for category-wise popular products strip.
+export const findTopSellingProductServices = async (
+  limit: number,
+  skip: number,
+  category_id?: any,
+): Promise<any> => {
+  const baseMatch: any = { product_status: "active" };
+  if (category_id) baseMatch.category_id = new Types.ObjectId(category_id);
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, sold_count: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, attributes_details: 1, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { sold_count: -1, _id: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  const flashMap = await findActiveFlashMapForProducts(products.map((p: any) => p._id));
+  const enriched = products.map((p: any) => {
+    const flash = flashMap.get(String(p._id));
+    return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+  });
+
+  return { data: enriched, totalCount };
+};
+
+// ─── New Arrival (নতুন পণ্য) ──────────────────────────────────────────────────
+// Sorts by createdAt desc — LatestProducts strip, always fresh inventory first.
+export const findNewArrivalProductServices = async (
+  limit: number,
+  skip: number,
+): Promise<any> => {
+  const baseMatch = { product_status: "active" };
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, attributes_details: 1, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { createdAt: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  const flashMap = await findActiveFlashMapForProducts(products.map((p: any) => p._id));
+  const enriched = products.map((p: any) => {
+    const flash = flashMap.get(String(p._id));
+    return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+  });
+
+  return { data: enriched, totalCount };
+};
+
+// ─── Most Viewed (সর্বাধিক দেখা) ─────────────────────────────────────────────
+// Sorts by view_count desc — bumpProductViewCount increments on every PDP fetch.
+// Phase 1: lifetime total only; windowed tracking deferred.
+export const findMostViewedProductServices = async (
+  limit: number,
+  skip: number,
+): Promise<any> => {
+  const baseMatch = { product_status: "active" };
+  const categoryBrandFilters = [
+    { $lookup: { from: "categories", localField: "category_id", foreignField: "_id", as: "category" } },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+    { $lookup: { from: "brands", localField: "brand_id", foreignField: "_id", as: "brand" } },
+    { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+    { $match: { "category.category_status": "active", $or: [{ "brand.brand_status": "active" }, { brand: null }] } },
+  ];
+
+  const totalData = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $count: "total" },
+  ]);
+  const totalCount = totalData.length > 0 ? totalData[0].total : 0;
+
+  const products = await ProductModel.aggregate([
+    { $match: baseMatch },
+    ...categoryBrandFilters,
+    { $lookup: { from: "variations", localField: "_id", foreignField: "product_id", as: "variations" } },
+    {
+      $addFields: {
+        variations: {
+          $map: {
+            input: "$variations", as: "v",
+            in: { _id: "$$v._id", variation_name: "$$v.variation_name", product_id: "$$v.product_id", variation_price: "$$v.variation_price", variation_discount_price: "$$v.variation_discount_price", variation_quantity: "$$v.variation_quantity", variation_image: "$$v.variation_image", variation_video: "$$v.variation_video" },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "reviews", localField: "_id", foreignField: "review_product_id", as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
+      },
+    },
+    {
+      $addFields: {
+        average_review_rating: { $cond: { if: { $gt: [{ $size: "$reviews" }, 0] }, then: { $divide: [{ $sum: "$reviews.review_ratting" }, { $size: "$reviews" }] }, else: 0 } },
+        total_reviews: { $size: "$reviews" },
+      },
+    },
+    { $project: { _id: 1, product_name: 1, product_slug: 1, main_image: 1, other_images: { $cond: { if: { $eq: ["$is_variation", false] }, then: { $arrayElemAt: ["$other_images", 0] }, else: "$$REMOVE" } }, main_video: 1, product_price: 1, product_discount_price: 1, view_count: 1, createdAt: 1, updatedAt: 1, category: { _id: 1, category_name: 1, category_slug: 1 }, brand: { _id: 1, brand_name: 1 }, is_variation: 1, variations: { $cond: { if: { $eq: ["$is_variation", true] }, then: { $arrayElemAt: ["$variations", 0] }, else: {} } }, attributes_details: 1, average_review_rating: 1, total_reviews: 1 } },
+    { $sort: { view_count: -1, _id: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ]);
+
+  const flashMap = await findActiveFlashMapForProducts(products.map((p: any) => p._id));
+  const enriched = products.map((p: any) => {
+    const flash = flashMap.get(String(p._id));
+    return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+  });
+
+  return { data: enriched, totalCount };
+};
+
 // Find ECommerceChoiceProduct
 export const findECommerceChoiceProductServices = async (
   limit: number,
@@ -2071,10 +2292,11 @@ export const findECommerceChoiceProductServices = async (
     },
     {
       $lookup: {
-        from: "reviews", // Join with reviews collection
+        from: "reviews",
         localField: "_id",
         foreignField: "review_product_id",
         as: "reviews",
+        pipeline: [{ $match: { review_status: "active" } }],
       },
     },
     {
@@ -2221,6 +2443,7 @@ export const findECommerceChoiceProductServices = async (
             else: null,
           },
         },
+        attributes_details: 1,
         average_review_rating: 1, // Include average rating
         total_reviews: 1, // Include total reviews coun
       },
@@ -2238,9 +2461,15 @@ export const findECommerceChoiceProductServices = async (
     },
   ]);
 
+  const flashMapEC = await findActiveFlashMapForProducts(findECommerceChoiceProduct.map((p: any) => p._id));
+  const enrichedEC = findECommerceChoiceProduct.map((p: any) => {
+    const flash = flashMapEC.get(String(p._id));
+    return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+  });
+
   // Return both the data and total count
   return {
-    data: findECommerceChoiceProduct,
+    data: enrichedEC,
     totalData: totalCount,
   };
 };
@@ -2308,10 +2537,11 @@ export const findJustForYouProductServices = async (): Promise<
         },
         {
           $lookup: {
-            from: "reviews", // Join with reviews collection
+            from: "reviews",
             localField: "_id",
             foreignField: "review_product_id",
             as: "reviews",
+            pipeline: [{ $match: { review_status: "active" } }],
           },
         },
         {
@@ -2540,7 +2770,12 @@ export const findJustForYouProductServices = async (): Promise<
       ]);
       // ✅ Exclude if no products
       if (findJustForYouProduct.length > 0) {
-        return { categoryDetails: category, products: findJustForYouProduct };
+        const flashMapJFY = await findActiveFlashMapForProducts(findJustForYouProduct.map((p: any) => p._id));
+        const enrichedJFY = findJustForYouProduct.map((p: any) => {
+          const flash = flashMapJFY.get(String(p._id));
+          return flash ? { ...p, flash_sale_details: { flash_sale_product: flash } } : p;
+        });
+        return { categoryDetails: category, products: enrichedJFY };
       }
       return null;
     }),
@@ -3040,6 +3275,9 @@ const PRODUCT_QUICK_WHITELIST = [
   "delivery_mode",
   "delivery_flat_amount",
   "delivery_free_after_qty",
+  // Analytics seed — admin-seeded baseline counts; real orders/views accumulate on top
+  "sold_count",
+  "view_count",
 ];
 
 export const patchProductQuickServices = async (
@@ -3073,6 +3311,21 @@ export const patchProductQuickServices = async (
     { $set: update },
     { new: true, runValidators: true },
   ).lean();
+
+  // Audit trail — log seed count changes (sold_count / view_count) to history collection.
+  const countFields = ["sold_count", "view_count"];
+  const countChanges: Record<string, any> = {};
+  for (const field of countFields) {
+    if (update[field] !== undefined) countChanges[field] = update[field];
+  }
+  if (Object.keys(countChanges).length > 0) {
+    ProductCountHistoryModel.create({
+      product_id: _id,
+      changed_by: updatedBy,
+      changes: countChanges,
+    }).catch(() => {}); // fire-and-forget, never block the response
+  }
+
   return result;
 };
 

@@ -3,6 +3,8 @@ import { verifyToken } from "../../middlewares/verify.token";
 import {
   getSetting,
   getSettingSecrets,
+  getHomeLayout,
+  updateHomeLayout,
   getZoneData,
   postSetting,
   updateSettingSecrets,
@@ -27,6 +29,13 @@ router
 
 // H-B — test email (admin verifies SMTP before going live)
 router.route("/test-email").post(verifyToken("setting_secrets_update"), sendTestEmail);
+
+// Track D — Home Layout: dedicated endpoint so Admin Home Layout tab
+// saves only home-relevant fields without touching other settings tabs.
+router
+  .route("/home_layout")
+  .get(verifyToken("site_setting_update"), getHomeLayout)
+  .patch(verifyToken("site_setting_update"), updateHomeLayout);
 
 // get city wise zone data
 router.route("/zone").get(getZoneData);

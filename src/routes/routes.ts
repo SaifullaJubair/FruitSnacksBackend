@@ -44,6 +44,8 @@ import { WishlistRoutes } from "../app/wishlist/wishlist.routes";
 import { AbandonedCartRoutes } from "../app/abandonedCart/abandonedCart.routes";
 import { LoyaltyRoutes } from "../app/loyalty/loyalty.routes";
 import { ProductFeedRoutes } from "../app/productFeed/productFeed.routes";
+import { SiteFaqRoutes } from "../app/siteFaq/siteFaq.routes";
+import { NewsletterSubscriberRoutes } from "../app/newsletterSubscriber/newsletterSubscriber.routes";
 
 const router = express.Router();
 
@@ -188,6 +190,8 @@ const moduleRoutes = [
   { path: "/abandoned-cart", route: AbandonedCartRoutes },
   { path: "/loyalty", route: LoyaltyRoutes },
   { path: "/product-feed", route: ProductFeedRoutes },
+  { path: "/site-faq", route: SiteFaqRoutes },
+  { path: "/newsletter-subscriber", route: NewsletterSubscriberRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

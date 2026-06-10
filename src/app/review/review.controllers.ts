@@ -8,9 +8,13 @@ import {
   findAReviewSerialServices,
   findAllDashboardReviewServices,
   findAllReviewServices,
+  findAllSeededReviewServices,
+  findReviewsByIdsServices,
   findUnReviewedProductServices,
   findUserReviewServices,
   postReviewServices,
+  seedReviewBulkServices,
+  seedReviewManualServices,
   updateReviewServices,
 } from "./review.services";
 import ReviewModel from "./review.model";
@@ -92,7 +96,7 @@ export const postReview: RequestHandler = async (
   }
 };
 
-// Find All Review
+// Find All Review — respects enable_seeded_reviews setting
 export const findAllReview: RequestHandler = async (
   req: Request,
   res: Response,
@@ -104,17 +108,19 @@ export const findAllReview: RequestHandler = async (
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
+
+    const setting = await getCachedSetting().catch(() => null);
+    const showSeeded = setting?.enable_seeded_reviews ?? true;
+
     const result: IReviewInterface[] | any = await findAllReviewServices(
       review_product_id,
       limitNumber,
-      skip
+      skip,
+      showSeeded,
     );
-    const totalData = await ReviewModel.countDocuments({
-      $and: [
-        { review_status: "active" },
-        { review_product_id: review_product_id },
-      ],
-    });
+    const countFilter: any = { review_status: "active", review_product_id };
+    if (!showSeeded) countFilter.is_seeded = { $ne: true };
+    const totalData = await ReviewModel.countDocuments(countFilter);
     return sendResponse<IReviewInterface>(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -264,6 +270,117 @@ export const updateReview: RequestHandler = async (
       throw new ApiError(400, "Review Update Failed !");
     }
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// ─── Seed Review — Bulk Upload ────────────────────────────────────────────────
+// POST /api/v1/review/seed/bulk?dry_run=true|false
+// Body: JSON array via req.body.rows  OR  CSV file parsed upstream (multer → csvParse)
+export const seedReviewBulk: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const dry_run = req.query.dry_run === "true";
+    let rows: any[] = [];
+
+    // Accept JSON body array
+    if (Array.isArray(req.body)) {
+      rows = req.body;
+    } else if (Array.isArray(req.body?.rows)) {
+      rows = req.body.rows;
+    } else {
+      throw new ApiError(400, "Body must be a JSON array or { rows: [...] }");
+    }
+
+    const result = await seedReviewBulkServices(rows, dry_run);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: dry_run
+        ? `Dry run: would insert ${result.inserted}, skip ${result.skipped}, fail ${result.failed.length}`
+        : `Seeded ${result.inserted} reviews. Skipped ${result.skipped} duplicates.`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Seed Review — Manual Admin Add ──────────────────────────────────────────
+// POST /api/v1/review/seed/manual
+export const seedReviewManual: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    let review_image: string | undefined;
+    if (req.files && "review_image" in req.files) {
+      const imgFile = (req.files as any)["review_image"][0];
+      const uploaded = await FileUploadHelper.uploadToSpaces(imgFile);
+      review_image = uploaded?.Location;
+    }
+    const result = await seedReviewManualServices({ ...req.body, review_image });
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Seed review added successfully!",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Seed Review — List (admin) ───────────────────────────────────────────────
+// GET /api/v1/review/seed/list
+export const findAllSeededReview: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { page = 1, limit = 20, searchTerm, product_id } = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+    const { reviews, totalCount } = await findAllSeededReviewServices(limitNumber, skip, searchTerm as string, product_id as string);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Seeded reviews found!",
+      data: reviews,
+      totalData: totalCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Track D — Reviews carousel manual-pick: fetch specific reviews by IDs
+// GET /api/v1/review/by-ids?ids=id1,id2,id3 (public, for storefront carousel)
+export const findReviewsByIds: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const idsParam = req.query.ids as string;
+    if (!idsParam) {
+      return sendResponse(res, { statusCode: httpStatus.OK, success: true, message: "Reviews fetched", data: [] });
+    }
+    const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
+    const result = await findReviewsByIdsServices(ids);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Reviews fetched",
+      data: result,
+    });
+  } catch (error) {
     next(error);
   }
 };

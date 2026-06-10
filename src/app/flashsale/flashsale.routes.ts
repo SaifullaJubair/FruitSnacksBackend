@@ -6,6 +6,7 @@ import {
   findAFlashSale,
   updateFlashSale,
   deleteFlashSale,
+  findActiveFlashSaleStorefront,
 } from "./flashsale.controllers";
 
 const router = express.Router();
@@ -14,6 +15,9 @@ router
   .route("/")
   .post(verifyToken("offer_create"), postFlashSale)
   .get(findAllFlashSale);
+
+// Public storefront endpoint — must be BEFORE /:_id to avoid ID match
+router.route("/active").get(findActiveFlashSaleStorefront);
 
 router
   .route("/:_id")
