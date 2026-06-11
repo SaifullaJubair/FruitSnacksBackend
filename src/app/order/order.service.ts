@@ -23,13 +23,15 @@ export const getOrderTrackingInfoService = async (
 ): Promise<IOrderInterface | any> => {
   const order_info = await OrderModel.findOne({
     invoice_id: order_id,
-  }).populate([
-    {
-      path: "customer_id",
-      model: "users",
-      select: "user_name user_phone user_image",
-    },
-  ]);
+  })
+    .select("-internal_note") // Phase A — admin-only field, never on public tracking
+    .populate([
+      {
+        path: "customer_id",
+        model: "users",
+        select: "user_name user_phone user_image",
+      },
+    ]);
 
   const order_products = await OrderProductModel.find({
     order_id: order_info?._id?.toString(),
@@ -70,6 +72,7 @@ export const getACustomerAllOrderServices = async (
       andCondition.length > 0 ? { $and: andCondition } : {};
 
     const getAllOrder = await OrderModel.find(whereCondition)
+      .select("-internal_note") // Phase A — admin-only field, never on customer history
       .populate("customer_id")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -90,6 +93,7 @@ export const getDashboardOrderServices = async (
   order_status: any,
   courier_type?: any,
   order_source?: any,
+  order_type?: any,
 ): Promise<any> => {
   const andCondition: any[] = [];
 
@@ -113,6 +117,11 @@ export const getDashboardOrderServices = async (
   // D18 M3 — POS Orders tab: filter by order_source
   if (order_source && order_source !== "undefined" && order_source !== "null") {
     andCondition.push({ order_source });
+  }
+
+  // Order Unification Phase A — order_type filter (offer/regular/... chips)
+  if (order_type && order_type !== "undefined" && order_type !== "null") {
+    andCondition.push({ order_type });
   }
 
   const whereCondition = andCondition.length > 0 ? { $and: andCondition } : {};
@@ -304,7 +313,14 @@ export const getAOrderWithOrderProductsServices = async (
     return product;
   });
 
-  return { order, order_products: filteredOrderProducts };
+  // Order Unification Phase A — this GET is public (`/:order_id`, used by the
+  // invoice + success page with no auth). Strip the admin-only internal_note so
+  // it never reaches a storefront customer. The admin order-detail page reads
+  // internal_note from the dashboard list endpoint instead (admin-gated).
+  const safeOrder: any = order ? (order as any).toObject?.() ?? order : order;
+  if (safeOrder) delete safeOrder.internal_note;
+
+  return { order: safeOrder, order_products: filteredOrderProducts };
 };
 
 // Update A Order

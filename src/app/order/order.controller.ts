@@ -250,6 +250,10 @@ export const postOrder: any = async (
     // vs loyalty without spelunking the ledger.
     requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
     requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
+    // Order Unification Phase A — server-trusted order-level metadata.
+    requestData.pre_discount_total = recomputed.pre_discount_total;
+    requestData.order_type = requestData.order_type || "regular";
+    requestData.currency = orderSetting?.currency_code || "BDT";
 
     // Phase C3: when client requested a valid advance, force the order to
     // record itself as "cod" + advance_amount; the advance leg is charged
@@ -284,6 +288,16 @@ export const postOrder: any = async (
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
+            product_name_snapshot: line?.product_name_snapshot,
+            product_image_snapshot: line?.product_image_snapshot,
+            discount_source: line?.discount_source || "none",
+            vat_rate: line?.vat_pct || 0,
+            vat_amount: line?.vat_pct
+              ? Math.round(
+                  (line.product_grand_total_price * line.vat_pct) / 100,
+                )
+              : 0,
           },
         ],
         { session },
@@ -499,6 +513,10 @@ export const postSingleOrder: any = async (
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
+    // Order Unification Phase A — server-trusted order-level metadata.
+    requestData.pre_discount_total = recomputed.pre_discount_total;
+    requestData.order_type = requestData.order_type || "regular";
+    requestData.currency = singleOrderSetting?.currency_code || "BDT";
     // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
     // admin can see them in PaymentInfoCard + so reports can split discount
     // vs loyalty without spelunking the ledger.
@@ -530,6 +548,16 @@ export const postSingleOrder: any = async (
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
+            product_name_snapshot: line?.product_name_snapshot,
+            product_image_snapshot: line?.product_image_snapshot,
+            discount_source: line?.discount_source || "none",
+            vat_rate: line?.vat_pct || 0,
+            vat_amount: line?.vat_pct
+              ? Math.round(
+                  (line.product_grand_total_price * line.vat_pct) / 100,
+                )
+              : 0,
           },
         ],
         { session },
@@ -764,7 +792,8 @@ export const getDashboardOrder: RequestHandler = async (
   next: NextFunction,
 ): Promise<any> => {
   try {
-    const { page, limit, searchTerm, order_status, order_source }: any = req.query;
+    const { page, limit, searchTerm, order_status, order_source, order_type }: any =
+      req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
@@ -776,6 +805,7 @@ export const getDashboardOrder: RequestHandler = async (
       order_status,
       undefined,
       order_source,
+      order_type,
     );
 
     const andCondition: any[] = [];
@@ -799,6 +829,13 @@ export const getDashboardOrder: RequestHandler = async (
       order_source !== "null"
     ) {
       andCondition.push({ order_source });
+    }
+    if (
+      order_type &&
+      order_type !== "undefined" &&
+      order_type !== "null"
+    ) {
+      andCondition.push({ order_type });
     }
     const whereCondition =
       andCondition.length > 0 ? { $and: andCondition } : {};
@@ -1033,6 +1070,11 @@ export const updateOrder: RequestHandler = async (
   session.startTransaction();
   try {
     const requestData = req.body;
+    // Order Unification Phase A — cancel_reason / return_reason / internal_note
+    // arrive in req.body and pass straight through to updateOrderServices.
+    // This route is admin-gated (verifyToken("order_update")), so these admin-
+    // only fields can never be set by a storefront user. internal_note is never
+    // exposed on any public/user GET response.
     const timeNow =
       new Date().toISOString().split("T")[0] +
       " " +
@@ -1237,6 +1279,10 @@ export const postAdminOrder: any = async (
     );
     requestData.loyalty_redeem_points = 0;
     requestData.loyalty_redeem_amount = 0;
+    // Order Unification Phase A — server-trusted order-level metadata.
+    requestData.pre_discount_total = recomputed.pre_discount_total;
+    requestData.order_type = requestData.order_type || "regular";
+    requestData.currency = adminOrderSetting?.currency_code || "BDT";
 
     requestData.invoice_id = await generateInvoiceId();
     const result: any = await postOrderServices(requestData, session);
@@ -1262,6 +1308,16 @@ export const postAdminOrder: any = async (
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
+            product_name_snapshot: line?.product_name_snapshot,
+            product_image_snapshot: line?.product_image_snapshot,
+            discount_source: line?.discount_source || "none",
+            vat_rate: line?.vat_pct || 0,
+            vat_amount: line?.vat_pct
+              ? Math.round(
+                  (line.product_grand_total_price * line.vat_pct) / 100,
+                )
+              : 0,
           },
         ],
         { session },

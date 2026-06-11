@@ -208,6 +208,57 @@ const orderSchema = new Schema<IOrderInterface>(
     // D18-B — POS payment method label (cash/bkash/nagad/card/bank). Separate
     // from payment_method enum which stays "cod" for POS orders (no gateway).
     payment_method_note: { type: String },
+
+    // ── Order Unification Phase A (2026-06-11) ───────────────────────────────
+    // Future-ready slots — most have NO wiring yet (see interface comments).
+    order_type: {
+      type: String,
+      enum: [
+        "regular",
+        "offer",
+        "pre_order",
+        "subscription",
+        "wholesale",
+        "gift",
+        "custom",
+      ],
+      default: "regular",
+    },
+    offer_id: { type: Schema.Types.ObjectId, ref: "offers" },
+    subscription_id: { type: Schema.Types.ObjectId, ref: "subscriptions" },
+    currency: { type: String, default: "BDT" },
+    exchange_rate: { type: Number, default: 1 },
+    pre_discount_total: { type: Number, default: 0 },
+    // Gift (slot only)
+    is_gift: { type: Boolean, default: false },
+    gift_message: { type: String },
+    gift_wrap_charge: { type: Number, default: 0 },
+    gift_recipient_name: { type: String },
+    // Pre-order (slot only)
+    is_pre_order: { type: Boolean, default: false },
+    expected_delivery_date: { type: String },
+    pre_order_deposit: { type: Number, default: 0 },
+    // Subscription (slot only)
+    subscription_interval: {
+      type: String,
+      enum: ["weekly", "monthly", "quarterly"],
+    },
+    subscription_cycle: { type: Number },
+    next_renewal_date: { type: String },
+    // Wholesale / B2B (slot only)
+    is_wholesale: { type: Boolean, default: false },
+    company_name: { type: String },
+    company_address: { type: String },
+    wholesale_note: { type: String },
+    // Audit / ops (wired via admin updateOrder PATCH)
+    cancel_reason: { type: String },
+    return_reason: { type: String },
+    internal_note: { type: String },
+    fraud_status: {
+      type: String,
+      enum: ["low", "medium", "high", "blocked"],
+    },
+    fraud_checked: { type: Boolean, default: false },
   },
   {
     timestamps: true,
@@ -218,6 +269,9 @@ const orderSchema = new Schema<IOrderInterface>(
 // full collection scans. Also added to deploy-day checklist: run
 // db.orders.createIndex({ createdAt: -1, order_status: 1 }) on PROD.
 orderSchema.index({ createdAt: -1, order_status: 1 });
+// Order Unification Phase A — admin order_type filter chip. Deploy-day:
+// db.orders.createIndex({ createdAt: -1, order_type: 1 }) on PROD.
+orderSchema.index({ createdAt: -1, order_type: 1 });
 
 const OrderModel = model<IOrderInterface>("orders", orderSchema);
 

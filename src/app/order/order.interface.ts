@@ -123,6 +123,73 @@ export interface IOrderInterface {
   admin_created_by?: Types.ObjectId | IAdminInterface;
   manual_discount_reason?: string;
   payment_method_note?: string;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Order Unification Phase A (2026-06-11) ─────────────────────────────────
+  // Future-ready slots so the SAME orders collection can hold every order kind
+  // (regular / offer / pre-order / subscription / wholesale / gift / custom).
+  // MOST of these are pure slots with NO wiring yet — the matching feature is
+  // built in a later phase. The 5 WIRED-NOW fields are marked [WIRED].
+  // Campaign + flash sale are already unified at the order_products line level
+  // (campaign_id on each line, flash resolved in recompute) — NOT order_type.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // [WIRED] Primary nature of the whole order. Default "regular". Mixed carts
+  // (one campaign product + one regular) stay "regular" — campaign/flash live
+  // line-level, so they are intentionally NOT order_type values.
+  order_type?:
+    | "regular"
+    | "offer"
+    | "pre_order"
+    | "subscription"
+    | "wholesale"
+    | "gift"
+    | "custom";
+
+  // Promotion reference (Phase B offer-merge uses offer_id; coupon_id already
+  // exists above). flash_sale_id intentionally omitted — flash is line-level.
+  offer_id?: Types.ObjectId;
+  subscription_id?: Types.ObjectId;
+
+  // [WIRED] Currency code stored for future multi-currency / multi-client
+  // resale. Default "BDT". Display still uses settings.currency_symbol on FE —
+  // this is metadata only, NOT wired into any price math yet.
+  currency?: string;
+  exchange_rate?: number; // base-currency multiplier; default 1
+
+  // pre_discount_total — sum of original (pre-discount) line prices. Lets an
+  // offer/bundle invoice show "Original ৳500 → You paid ৳400". [WIRED at
+  // placement so it's populated for every order, used heavily in Phase B.]
+  pre_discount_total?: number;
+
+  // ── Gift (slot only — Phase C wires the checkout UI) ──────────────────────
+  is_gift?: boolean;
+  gift_message?: string;
+  gift_wrap_charge?: number;
+  gift_recipient_name?: string;
+
+  // ── Pre-order (slot only) ─────────────────────────────────────────────────
+  is_pre_order?: boolean;
+  expected_delivery_date?: string;
+  pre_order_deposit?: number;
+
+  // ── Subscription (slot only) ──────────────────────────────────────────────
+  subscription_interval?: "weekly" | "monthly" | "quarterly";
+  subscription_cycle?: number;
+  next_renewal_date?: string;
+
+  // ── Wholesale / B2B (slot only — tier/group price already in recompute) ───
+  is_wholesale?: boolean;
+  company_name?: string;
+  company_address?: string;
+  wholesale_note?: string;
+
+  // ── Audit / ops (WIRED via admin updateOrder PATCH only) ──────────────────
+  cancel_reason?: string; // [WIRED] why cancelled (admin-entered)
+  return_reason?: string; // [WIRED] why returned
+  internal_note?: string; // [WIRED] admin-only note; customer never sees it
+  fraud_status?: "low" | "medium" | "high" | "blocked"; // slot only
+  fraud_checked?: boolean; // slot only
 }
 
 export const orderSearchableField = [
@@ -130,4 +197,5 @@ export const orderSearchableField = [
   "order_status",
   "customer_phone",
   "order_source",
+  "order_type",
 ];

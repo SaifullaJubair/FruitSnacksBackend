@@ -62,6 +62,17 @@ export interface RecomputedLine {
   variation_sku_snapshot?: string;
   product_barcode_snapshot?: string;
   variation_barcode_snapshot?: string;
+  /** Order Unification Phase A — display snapshot + discount provenance,
+   *  written into the OrderProduct doc at placement. */
+  product_name_snapshot?: string;
+  product_image_snapshot?: string;
+  discount_source?:
+    | "offer"
+    | "campaign"
+    | "flash_sale"
+    | "coupon"
+    | "manual"
+    | "none";
   /** M20 — per-product delivery rule (captured for recomputeShippingCost). */
   delivery_mode?: "inherit" | "free" | "flat" | "qty_threshold";
   delivery_flat_amount?: number;
@@ -71,6 +82,9 @@ export interface RecomputedLine {
 export interface RecomputedOrder {
   order_products: RecomputedLine[];
   sub_total_amount: number; // Σ final × qty (pre coupon)
+  /** Order Unification Phase A — Σ regular (pre-discount) × qty. Lets an
+   *  offer/bundle invoice show "Original ৳500 → You paid ৳400". */
+  pre_discount_total: number;
   discount_amount: number; // coupon discount
   shipping_cost: number; // passed through from client (B1 scope)
   /**
@@ -227,6 +241,7 @@ export const recomputeOrderTotals = async (
 
   const lines: RecomputedLine[] = [];
   let sub_total_amount = 0;
+  let pre_discount_total = 0; // Σ regular × qty (Order Unification Phase A)
 
   for (const line of clientLines) {
     const product_id = line?.product_id;
@@ -259,6 +274,13 @@ export const recomputeOrderTotals = async (
     const resolved = resolveProductPrice(product, { variation, flashSale });
     let unit_regular = resolved.regular_price;
     let unit_final = resolved.final_price;
+
+    // Order Unification Phase A — which promotion layer is producing the price.
+    // flash beats campaign beats none (campaign branch below may override).
+    let discount_source: RecomputedLine["discount_source"] =
+      flashSale && typeof flashSale.flash_price === "number"
+        ? "flash_sale"
+        : "none";
 
     // Phase E: tier pricing — if buying qty meets a tier and the tier price
     // is lower than current final, apply it (best-price-wins for the buyer).
@@ -302,6 +324,7 @@ export const recomputeOrderTotals = async (
           cp.campaign_product_price,
           cp.campaign_price_type,
         );
+        discount_source = "campaign";
       }
     }
 
@@ -309,6 +332,7 @@ export const recomputeOrderTotals = async (
 
     const grand = unit_final * quantity;
     sub_total_amount += grand;
+    pre_discount_total += unit_regular * quantity;
 
     // Phase H — effective per-line VAT pct (override beats settings when > 0).
     const productVatOverride = Number(product?.vat_percentage_override);
@@ -331,6 +355,14 @@ export const recomputeOrderTotals = async (
       variation_sku_snapshot: variation?.variation_sku || undefined,
       product_barcode_snapshot: product?.barcode || undefined,
       variation_barcode_snapshot: variation?.variation_barcode || undefined,
+      // Order Unification Phase A — display snapshot + discount provenance.
+      product_name_snapshot: product?.product_name || undefined,
+      product_image_snapshot:
+        variation?.variation_images?.[0] ||
+        variation?.variation_image ||
+        product?.main_image ||
+        undefined,
+      discount_source,
       // M20 — capture per-product delivery rule so recomputeShippingCost can
       // apply the per-line-additive formula without re-fetching products.
       delivery_mode: product?.delivery_mode || "inherit",
@@ -547,6 +579,7 @@ export const recomputeOrderTotals = async (
   return {
     order_products: lines,
     sub_total_amount,
+    pre_discount_total,
     discount_amount,
     shipping_cost,
     vat_amount,
