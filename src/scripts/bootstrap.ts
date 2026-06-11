@@ -19,13 +19,15 @@
  *   schema change) is set to true. Run this after deploying a build that added
  *   new permission flags, so the owner's super-admin keeps full access.
  *
- * Required .env:
- *   MONGO_URI
- *   SUPER_ADMIN_PHONE      e.g. 01700000000  (the login id)
- *   SUPER_ADMIN_PASSWORD   the initial password (owner changes it after login)
- * Optional .env:
- *   SUPER_ADMIN_NAME       defaults to "Super Admin"
- *   SUPER_ADMIN_EMAIL
+ * .env:
+ *   MONGO_URI              (required)
+ *   SUPER_ADMIN_PHONE      the login id. Defaults to 01700000000 for demo.
+ *   SUPER_ADMIN_PASSWORD   the initial password. Defaults to 123456 for demo.
+ *   SUPER_ADMIN_NAME       optional, defaults to "Super Admin"
+ *   SUPER_ADMIN_EMAIL      optional
+ *
+ *   ⚠️ The 01700000000 / 123456 demo fallback is for local testing only —
+ *   set real values for a client and change the password after first login.
  *
  * Usage:
  *   cd FruitSnacksBackend
@@ -75,15 +77,25 @@ const ensureSuperAdminRole = async (): Promise<any> => {
   return role;
 };
 
+// Demo fallback so the script just works for local testing / a quick demo when
+// .env isn't filled in. NEVER ship these to a real client — change the password
+// immediately after first login.
+const DEMO_PHONE = "01700000000";
+const DEMO_PASSWORD = "123456";
+
 const ensureSuperAdminUser = async (roleId: any): Promise<void> => {
-  const phone = process.env.SUPER_ADMIN_PHONE;
-  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const phone = process.env.SUPER_ADMIN_PHONE || DEMO_PHONE;
+  const password = process.env.SUPER_ADMIN_PASSWORD || DEMO_PASSWORD;
   const name = process.env.SUPER_ADMIN_NAME || "Super Admin";
   const email = process.env.SUPER_ADMIN_EMAIL;
 
-  if (!phone || !password) {
-    throw new Error(
-      "SUPER_ADMIN_PHONE and SUPER_ADMIN_PASSWORD must be set in .env",
+  const usingDemo =
+    !process.env.SUPER_ADMIN_PHONE || !process.env.SUPER_ADMIN_PASSWORD;
+  if (usingDemo) {
+    console.warn(
+      `⚠️  Using DEMO credentials (phone ${DEMO_PHONE} / password ${DEMO_PASSWORD}). ` +
+        "Set SUPER_ADMIN_PHONE + SUPER_ADMIN_PASSWORD in .env for a real client, " +
+        "and change the password right after first login.",
     );
   }
 
@@ -178,8 +190,10 @@ const run = async () => {
       await ensureSettingsDoc();
       await ensureAuthDoc();
       await seedPages();
+      const loginPhone = process.env.SUPER_ADMIN_PHONE || DEMO_PHONE;
+      const loginPass = process.env.SUPER_ADMIN_PASSWORD || DEMO_PASSWORD;
       console.log(
-        "\n✅ Bootstrap complete. Log in with SUPER_ADMIN_PHONE / SUPER_ADMIN_PASSWORD, then change the password and configure the shop from Admin → Settings.",
+        `\n✅ Bootstrap complete.\n   Log in →  phone: ${loginPhone}  |  password: ${loginPass}\n   Then change the password and configure the shop from Admin → Settings.`,
       );
     }
   } catch (err: any) {
