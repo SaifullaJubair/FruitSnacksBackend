@@ -17,7 +17,6 @@ import UserModel from "./user.model";
 import { SendPhoneOTP } from "../../middlewares/send.otp.phone";
 import OrderModel from "../order/order.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
-import OfferOrderModel from "../offerOrder/offerOrder.model";
 import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
 import {
   signUserAccess,
@@ -573,8 +572,7 @@ export const deleteAUser: RequestHandler = async (req, res, next) => {
     if (inOrder) throw new ApiError(400, "Already Have an order!");
     const inOrderProduct = await OrderProductModel.exists({ customer_id: _id });
     if (inOrderProduct) throw new ApiError(400, "Already Have an order!");
-    const inOfferOrder = await OfferOrderModel.exists({ customer_id: _id });
-    if (inOfferOrder) throw new ApiError(400, "Already Have an order!");
+    // Phase B — offer orders are in the orders collection now; inOrder covers them.
 
     const result = await deleteUserServices(_id);
     if (result?.deletedCount > 0) {

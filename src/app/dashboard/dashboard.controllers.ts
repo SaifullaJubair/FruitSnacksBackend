@@ -2,7 +2,6 @@ import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import OrderModel from "../order/order.model";
-import OfferOrderModel from "../offerOrder/offerOrder.model";
 import ReviewModel from "../review/review.model";
 import UserModel from "../user/user.model";
 import ProductModel from "../product/product.model";

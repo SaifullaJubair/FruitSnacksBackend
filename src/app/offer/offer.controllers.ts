@@ -17,7 +17,7 @@ import {
 import OfferModel from "./offer.model";
 import ProductModel from "../product/product.model";
 import mongoose, { Types } from "mongoose";
-import OfferOrderModel from "../offerOrder/offerOrder.model";
+import OrderModel from "../order/order.model";
 
 // Add A Offer
 export const postOffer: RequestHandler = async (
@@ -303,11 +303,12 @@ export const deleteAOfferInfo = async (
 ) => {
   try {
     const _id = req.body._id;
-    const findOfferInOfferOrderExist: boolean | null | undefined | any =
-      await OfferOrderModel.exists({
+    // Phase B — offer orders live in the orders collection (order_type:"offer").
+    const findOfferInOrderExist: boolean | null | undefined | any =
+      await OrderModel.exists({
         offer_id: _id,
       });
-    if (findOfferInOfferOrderExist) {
+    if (findOfferInOrderExist) {
       throw new ApiError(400, "Already Added In Order !");
     }
     const result = await deleteOfferServices(_id);

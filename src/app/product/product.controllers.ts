@@ -65,7 +65,6 @@ import {
   resolveVariationAxisValues,
 } from "./product.codes";
 import OrderProductModel from "../orderProducts/orderProduct.model";
-import OfferOrderModel from "../offerOrder/offerOrder.model";
 import OfferModel from "../offer/offer.model";
 
 /**
@@ -2077,13 +2076,8 @@ export const deleteAProductInfo = async (
     if (findProductInOrderExist) {
       throw new ApiError(400, "Already Added In Order !");
     }
-    const findProductInOfferOrderExist: boolean | null | undefined | any =
-      await OfferOrderModel.exists({
-        "offer_products.offer_product_id": _id,
-      });
-    if (findProductInOfferOrderExist) {
-      throw new ApiError(400, "Already Added In Offer Order !");
-    }
+    // Phase B — offer orders now live in orderproducts too, so the order guard
+    // above already covers them (the separate offerOrder guard was removed).
     const findProductInOfferExist: boolean | null | undefined | any =
       await OfferModel.exists({
         "offer_products.offer_product_id": _id,

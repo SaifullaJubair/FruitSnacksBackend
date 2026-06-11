@@ -22,6 +22,7 @@
 import ProductModel from "../product/product.model";
 import VariationModel from "../variation/variation.model";
 import CampaignModel from "../campaign/campaign.model";
+import OfferModel from "../offer/offer.model";
 import CouponModel from "../coupon/coupon.model";
 import CouponUsedModel from "../coupon/coupon_used/coupon.used.model";
 import SettingModel from "../setting/setting.model";
@@ -239,6 +240,38 @@ export const recomputeOrderTotals = async (
     }
   }
 
+  // ── Order Unification Phase B — offer/bundle order ─────────────────────────
+  // When the order carries an offer_id, fetch + validate the offer ONCE here.
+  // Each line then looks up its own offer discount from offer.offer_products[]
+  // (server-trusted — the client cannot fabricate an offer price). An expired
+  // or inactive offer is rejected outright so a replayed offer_id can't get the
+  // discount. The discount is applied on the resolved base/variation price,
+  // same shape the storefront showed (originalPrice - offer_discount).
+  let activeOffer: any = null;
+  let offerProductMap: Map<string, any> | null = null;
+  if (requestData?.offer_id) {
+    const offer: any = await q(OfferModel.findById(requestData.offer_id));
+    if (!offer) throw new ApiError(400, "Offer not found.");
+    const now = new Date();
+    const start = offer?.offer_start_date
+      ? new Date(offer.offer_start_date)
+      : null;
+    const end = offer?.offer_end_date ? new Date(offer.offer_end_date) : null;
+    const inWindow =
+      (!start || now >= start) &&
+      (!end || now <= new Date(end.getTime() + 86400000));
+    if (offer?.offer_status !== "active" || !inWindow) {
+      throw new ApiError(400, "This offer is no longer active.");
+    }
+    activeOffer = offer;
+    offerProductMap = new Map(
+      (offer?.offer_products || []).map((op: any) => [
+        String(op?.offer_product_id),
+        op,
+      ]),
+    );
+  }
+
   const lines: RecomputedLine[] = [];
   let sub_total_amount = 0;
   let pre_discount_total = 0; // Σ regular × qty (Order Unification Phase A)
@@ -325,6 +358,25 @@ export const recomputeOrderTotals = async (
           cp.campaign_price_type,
         );
         discount_source = "campaign";
+      }
+    }
+
+    // Offer/bundle layer (Phase B). Only when the order is an offer order AND
+    // this product is actually listed in that offer. The discount is applied on
+    // the resolved price (base/variation, after any product/flash discount),
+    // mirroring the storefront math: fixed = flat ৳ off per unit; percent = %
+    // off the current price. Server-trusted — client offer price is ignored.
+    if (offerProductMap) {
+      const op = offerProductMap.get(String(product_id));
+      if (op && typeof op?.offer_discount_price === "number") {
+        if (op.offer_discount_type === "percent") {
+          unit_final = Math.round(
+            unit_final - (unit_final * op.offer_discount_price) / 100,
+          );
+        } else {
+          unit_final = unit_final - op.offer_discount_price;
+        }
+        discount_source = "offer";
       }
     }
 

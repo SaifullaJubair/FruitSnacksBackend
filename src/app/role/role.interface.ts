@@ -69,8 +69,6 @@ export interface IRoleInterface {
   page_seo_update?: true | false;
   order_show?: true | false;
   order_update?: true | false;
-  offer_order_update?: true | false;
-  offer_order_show?: true | false;
   customer_create?: true | false;
   customer_update?: true | false;
   customer_delete?: true | false;

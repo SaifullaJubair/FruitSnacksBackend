@@ -4,7 +4,6 @@ import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import { findUserInfoServices } from "./getme.services";
 import OrderModel from "../order/order.model";
-import OfferOrderModel from "../offerOrder/offerOrder.model";
 import ReviewModel from "../review/review.model";
 import { findTrendingProductServices } from "../product/product.services";
 import UserModel from "../user/user.model";
@@ -57,11 +56,14 @@ export const findUserProfileDashboardDataServices: RequestHandler = async (
     if (!user_id) {
       throw new ApiError(400, "User Id Required");
     }
+    // Phase B — offer orders now live in the orders collection (order_type:"offer").
+    // totalOrder counts ALL orders (incl. offer); totalOfferOrder is the offer subset.
     const totalOrder: any = await OrderModel.countDocuments({
       customer_id: user_id,
     });
-    const totalOfferOrder: any = await OfferOrderModel.countDocuments({
+    const totalOfferOrder: any = await OrderModel.countDocuments({
       customer_id: user_id,
+      order_type: "offer",
     });
     const totalReview: any = await ReviewModel.countDocuments({
       review_user_id: user_id,

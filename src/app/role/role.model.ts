@@ -257,14 +257,6 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
-    offer_order_update: {
-      type: Boolean,
-      default: false,
-    },
-    offer_order_show: {
-      type: Boolean,
-      default: false,
-    },
     customer_create: {
       type: Boolean,
       default: false,

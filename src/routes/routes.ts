@@ -23,7 +23,6 @@ import { PaymentWithdrawListRoutes } from "../app/paymentWithdrawList/paymentWit
 import { OrderRoutes } from "../app/order/order.routes";
 import { QuestionRoutes } from "../app/question/question.routes";
 import { OfferRoutes } from "../app/offer/offer.routes";
-import { OfferOrderRoutes } from "../app/offerOrder/offerOrder.routes";
 import { DashboardRoutes } from "../app/dashboard/dashboard.routes";
 import { CourierRoutes } from "../app/order/courier/courier.routes";
 import { WebhookRoutes } from "../app/order/webhook/webhook.routes";
@@ -166,10 +165,6 @@ const moduleRoutes = [
   {
     path: "/offer",
     route: OfferRoutes,
-  },
-  {
-    path: "/offer_order",
-    route: OfferOrderRoutes,
   },
   {
     path: "/dashboard",
