@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node dist/index.js",
     "build": "tsc",
-    "seed:theme": "ts-node-dev --transpile-only src/seeds/seed.theme.ts"
+    "seed:theme": "ts-node-dev --transpile-only src/seeds/seed.theme.ts",
+    "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts"
   },
   "author": "",
   "license": "ISC",
