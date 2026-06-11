@@ -77,17 +77,18 @@ export const pathaoWebhookController = async (req: Request, res: Response) => {
     const signature = req.headers["x-pathao-signature"] as string;
     const rawBody = JSON.stringify(req.body);
 
-    // ── Signature verify (production এ enable করো) ────────────
-    if (PATHAO_WEBHOOK_SECRET && signature) {
-      const isValid = verifyPathaoSignature(
-        rawBody,
-        signature,
-        PATHAO_WEBHOOK_SECRET,
-      );
+    // ── Signature verify (F008 — fail CLOSED) ─────────────────
+    // When a secret is configured, every webhook MUST carry a valid signature.
+    // Previously an invalid/missing signature was logged but still processed,
+    // letting anyone spoof a delivery status / cancel an order. Now we reject.
+    // Secret unset (local dev) = check skipped so dev isn't blocked.
+    if (PATHAO_WEBHOOK_SECRET) {
+      const isValid =
+        !!signature &&
+        verifyPathaoSignature(rawBody, signature, PATHAO_WEBHOOK_SECRET);
       if (!isValid) {
-        console.warn("Pathao webhook: invalid signature — continuing anyway");
-        // signature invalid হলেও process করো, block করো না
-        // return respond();
+        console.warn("Pathao webhook: rejected — invalid/missing signature");
+        return respond(); // 202 (Pathao requirement) but DO NOT process
       }
     }
 

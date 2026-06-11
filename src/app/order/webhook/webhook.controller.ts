@@ -19,11 +19,31 @@ export const steadfastStatusMap: Record<string, string> = {
   cancelled: "cancel",
   unknown: "processing",
 };
+// F008 — shared-secret guard. Steadfast does not sign its webhooks, so the
+// defense is a secret token the owner appends when registering the webhook URL
+// in the Steadfast dashboard (as `?token=…` or an `x-steadfast-webhook-secret`
+// header). When STEADFAST_WEBHOOK_SECRET is set and the request doesn't match,
+// we reject — otherwise anyone could POST a fake "cancelled" status and cancel
+// + restock any order. When the secret is unset (local dev) the check is
+// skipped so development isn't blocked.
+const STEADFAST_WEBHOOK_SECRET = process.env.STEADFAST_WEBHOOK_SECRET || "";
+
 export const steadfastWebhookController = async (
   req: Request,
   res: Response,
 ) => {
   try {
+    if (STEADFAST_WEBHOOK_SECRET) {
+      const provided =
+        (req.query?.token as string) ||
+        (req.headers["x-steadfast-webhook-secret"] as string) ||
+        "";
+      if (provided !== STEADFAST_WEBHOOK_SECRET) {
+        console.warn("Steadfast webhook: rejected — bad/missing secret");
+        return res.status(401).json({ status: "error", message: "Unauthorized" });
+      }
+    }
+
     const payload = req.body;
     console.log("Steadfast Webhook received:", JSON.stringify(payload));
 

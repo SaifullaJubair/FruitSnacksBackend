@@ -1,5 +1,7 @@
 import express from "express";
 import { verifyToken } from "../../middlewares/verify.token";
+// F012 — user-scoped order history must be authenticated (no IDOR).
+import { verifyUserToken } from "../../middlewares/verify.user.token";
 // F002: per-IP rate limit on public order placement (burst spam control).
 import { orderLimiter } from "../../middlewares/rate.limit";
 import {
@@ -22,10 +24,13 @@ import {
 const router = express.Router();
 
 // Customer order create & get
+// F012 — GET is the logged-in customer's OWN order history; it must be
+// authenticated and scoped to req.user.id (previously took customer_id from
+// the query → any user could read anyone's orders).
 router
   .route("/")
   .post(orderLimiter, postOrder)
-  .get(getACustomerAllOrder)
+  .get(verifyUserToken, getACustomerAllOrder)
   .patch(verifyToken("order_update"), updateOrder);
 
 // Single order (guest checkout)

@@ -748,8 +748,12 @@ export const getACustomerAllOrder: RequestHandler = async (
   next: NextFunction,
 ): Promise<any> => {
   try {
-    const { page, limit, searchTerm, customer_id }: any = req.query;
-    if (!customer_id) throw new ApiError(400, "Customer id is required");
+    const { page, limit, searchTerm }: any = req.query;
+    // F012 — derive the customer from the auth token, NOT the query string.
+    // verifyUserToken populates req.user.id; any client-sent customer_id is
+    // ignored so a user can only ever read their own orders.
+    const customer_id = (req as any).user?.id;
+    if (!customer_id) throw new ApiError(401, "Login required!");
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
