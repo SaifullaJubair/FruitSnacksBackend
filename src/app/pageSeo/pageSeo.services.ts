@@ -34,13 +34,26 @@ const DEFAULT_PAGES: IPageSeo[] = [
       "বাংলাদেশে ১০০% খাঁটি চামড়ার মানিব্যাগ, স্টাইলিশ লেডিস ব্যাগ ও মজবুত বেল্টের বিশাল কালেকশন। প্রিমিয়াম কোয়ালিটি ও ফাস্ট ক্যাশ অন ডেলিভারি সুবিধা।",
     noIndex: false,
   },
+  // Main product-listing page (the storefront's /shop). buildPageMeta("shop")
+  // reads this; previously missing from the seed so it fell back to static.
+  {
+    page_key: "shop",
+    path: "shop",
+    title: "Shop All Products | FruitSnacks",
+    description:
+      "Browse our full product collection. Quality items at the best price with fast cash on delivery across Bangladesh.",
+    noIndex: false,
+  },
+  // ── Legacy listing routes — these now 301-redirect to /shop (see
+  // next.config.mjs). Kept here only so they resolve to noIndex:true and the
+  // owner can see they're retired; they must NOT be indexed (duplicate of /shop).
   {
     page_key: "allProducts",
     path: "all-products",
     title: "All Products | Shop All Genuine Leather Products",
     description:
       "আমাদের সব এক্সক্লুসিভ লেদার কালেকশন। প্রিমিয়াম মানিব্যাগ, ফ্যাশনেবল লেডিস ব্যাগ ও টেকসই লেদার বেল্ট কিনুন সেরা দামে।",
-    noIndex: false,
+    noIndex: true,
   },
   {
     page_key: "allTrending",
@@ -48,7 +61,7 @@ const DEFAULT_PAGES: IPageSeo[] = [
     title: "Trending Products | Best Selling Wallets & Bags",
     description:
       "বর্তমানে সবচেয়ে জনপ্রিয় ও ট্রেন্ডিং লেদার প্রোডাক্টগুলো দেখে নিন।",
-    noIndex: false,
+    noIndex: true,
   },
   {
     page_key: "newArrival",
@@ -56,21 +69,21 @@ const DEFAULT_PAGES: IPageSeo[] = [
     title: "New Arrival Leather Collection | Latest Wallets & Belts",
     description:
       "আমাদের স্টকে আসা একদম নতুন ডিজাইনের লেদার মানিব্যাগ, লেডিস ব্যাগ এবং বেল্ট।",
-    noIndex: false,
+    noIndex: true,
   },
   {
     page_key: "topProduct",
     path: "top-product",
     title: "Top Rated Leather Products | Premium Quality Selection",
     description: "সবচেয়ে বেশি বিক্রিত এবং টপ রেটেড লেদার আইটেম।",
-    noIndex: false,
+    noIndex: true,
   },
   {
     page_key: "latestProduct",
     path: "latest-product",
     title: "Latest Leather Goods | Just Launched Collection",
     description: "নতুন এবং এক্সক্লুসিভ সব লেদার এক্সেসরিজ।",
-    noIndex: false,
+    noIndex: true,
   },
   {
     page_key: "aboutUs",
@@ -179,8 +192,9 @@ const DEFAULT_PAGES: IPageSeo[] = [
     page_key: "offer",
     path: "offer",
     title: "Special Offers & Discounts",
-    description: "",
-    noIndex: true,
+    description:
+      "Grab the latest deals, bundles and discounts. Limited-time offers with cash on delivery.",
+    noIndex: false, // public offers page — should be indexed
   },
   {
     page_key: "orders",
