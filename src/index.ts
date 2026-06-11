@@ -45,25 +45,23 @@ app.use(express.json({ limit: "200kb" }));
 app.use(express.urlencoded({ extended: true, limit: "200kb" }));
 
 // CORS configuration
+// F007 — origins are env-driven so each resale client only edits CORS_ORIGINS
+// (comma-separated, https) at deploy time instead of editing this file. The
+// hardcoded fruitsnacksbd.com list (incl. insecure http:// admin domains) was
+// removed. Local dev origins are always allowed so `npm run dev` just works.
+const DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:4173",
+];
+
+const envOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const corsOptions = {
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:4173",
-    "http://localhost:3001",
-    "http://admin.fruitsnacksbd.com",
-    "http://www.admin.fruitsnacksbd.com",
-    "http://dev-admin.fruitsnacksbd.com",
-    "http://www.dev-admin.fruitsnacksbd.com",
-    "https://fruitsnacksbd.com",
-    "https://www.fruitsnacksbd.com",
-    "https://dev.fruitsnacksbd.com",
-    "https://www.dev.fruitsnacksbd.com",
-    "https://admin.fruitsnacksbd.com",
-    "https://www.admin.fruitsnacksbd.com",
-    "https://dev-admin.fruitsnacksbd.com",
-    "https://www.dev-admin.fruitsnacksbd.com",
-    "https://fruitsnacks-frontend.vercel.app",
-  ], // Allow only this origin
+  origin: [...DEV_ORIGINS, ...envOrigins],
   credentials: true, // Allow credentials
 };
 

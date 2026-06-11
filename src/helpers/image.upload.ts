@@ -10,15 +10,9 @@ import ApiError from "../errors/ApiError";
 const path = require("path");
 const uuid = require("uuid");
 
-// ================= AWS Config (DigitalOcean Spaces) ===================
-// Digital Ocean space object
-// const region = "sgp1"; // তোমার space এর region
-// const endpoint = "https://sgp1.digitaloceanspaces.com"; // DO এর endpoint
-// accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
-// secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
-// const SpaceName = "fruit-snacks";
-// const Location = `https://${SpaceName}.${region}.cdn.digitaloceanspaces.com/${Key}`;
-
+// ================= S3-compatible storage (Contabo / DigitalOcean Spaces) =====
+// All credentials come from env — never hardcode keys here (F009b: removed a
+// real access/secret key pair that was left in comments).
 const region = process.env.S3_REGION!;
 const endpoint = process.env.S3_ENDPOINT!;
 const s3 = new S3Client({
@@ -26,15 +20,11 @@ const s3 = new S3Client({
   endpoint,
   forcePathStyle: true,
   credentials: {
-    // accessKeyId: "DO00UEML8FLHCBP94G6M", // তোমার DO Access Key
-    // secretAccessKey: "yMPeWzDhxgAL81luOgSE/Hzx+n0IabVbYJqAwSIxYS0", // তোমার DO Secret Key
     accessKeyId: process.env.S3_ACCESS_KEY!,
     secretAccessKey: process.env.S3_SECRET_KEY!,
   },
 });
 
-// তোমার Space name
-// const SpaceName = "fruit-snacks";
 const SpaceName = process.env.S3_BUCKET!;
 // ================= Multer Config ===================
 const storage = multer.diskStorage({
@@ -45,10 +35,26 @@ const storage = multer.diskStorage({
   },
 });
 
+// F009 — whitelist the extensions we actually serve. Previously the filter
+// accepted EVERYTHING (cb(null, true)), so an .exe / .html / .svg (stored XSS)
+// could be uploaded and served from the public bucket. We allow images + the
+// doc/video types getContentType() already knows; anything else is rejected
+// before it ever touches disk or S3.
+const ALLOWED_UPLOAD_EXT =
+  /\.(webp|png|jpe?g|gif|mp4|mov|avi|webm|m4v|mkv|pdf)$/i;
+
 const ImageUpload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
-    cb(null, true);
+    if (ALLOWED_UPLOAD_EXT.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "Unsupported file type. Allowed: images, mp4/mov/avi/webm/m4v/mkv, pdf.",
+        ),
+      );
+    }
   },
   limits: {
     fileSize: 10 * 1024 * 1024, // 10 MB limit
