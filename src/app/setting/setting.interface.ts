@@ -185,6 +185,7 @@ export interface ISettingInterface {
   // Tier A — Storefront essentials (7 fields)
   maintain_stock?: boolean;          // false → skip guard AND decrement (pre-order/MTO mode)
   show_sold_count?: boolean;         // false → hide "X জন কিনেছে" badge on PDP
+  show_view_count?: boolean;         // false → hide "X জন দেখেছেন" view-count badge on PDP
   show_email_field_checkout?: boolean; // false → remove email input from checkout
   enable_promo_at_checkout?: boolean;  // false → remove coupon input from checkout
   verify_phone_on_order?: boolean;   // true → OTP step before order submit (default OFF = anon checkout preserved)

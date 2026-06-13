@@ -3437,6 +3437,41 @@ export const patchProductImagesServices = async (
     }
     product.other_images = [...reordered, ...keyless] as any;
     await product.save();
+  } else if (mode === "swap_video") {
+    // Upload/replace the product's main_video (mp4/mov/webm). Video lives only
+    // in product.main_video — it isn't shared like images, so we delete the old
+    // key directly after a successful swap. The uploaded file arrives under the
+    // `main_video` multer fieldname (grouped by the controller).
+    const videoFile = files?.main_video?.[0];
+    if (!videoFile) throw new ApiError(400, "main_video file required");
+    // VideoUploader puts the file under fruit_snacks_videos/ with a URL-encoded
+    // key (handles spaces/unicode in filenames) — same path the full product
+    // route uses, so PDP/admin render videos identically regardless of which
+    // route uploaded them.
+    const uploaded = await FileUploadHelper.VideoUploader(videoFile);
+    const oldKey = (product as any).main_video_key;
+    (product as any).main_video = uploaded.Location;
+    (product as any).main_video_key = uploaded.Key;
+    await product.save();
+    if (oldKey && oldKey !== uploaded.Key) {
+      try {
+        await FileUploadHelper.deleteFromSpaces(oldKey);
+      } catch {
+        // Swallow — orphaned S3 video is harmless; the swap already succeeded.
+      }
+    }
+  } else if (mode === "remove_video") {
+    const oldKey = (product as any).main_video_key;
+    (product as any).main_video = "";
+    (product as any).main_video_key = "";
+    await product.save();
+    if (oldKey) {
+      try {
+        await FileUploadHelper.deleteFromSpaces(oldKey);
+      } catch {
+        // Swallow — already-deleted or permission issue; not fatal.
+      }
+    }
   } else {
     throw new ApiError(400, `Unknown mode: ${mode}`);
   }

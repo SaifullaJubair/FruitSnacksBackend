@@ -61,6 +61,28 @@ const ImageUpload = multer({
   },
 });
 
+// Media upload for the product Images/Video modal route (PATCH /product/images).
+// Same extension whitelist as ImageUpload but a 20 MB cap so main_video swaps
+// (which can exceed the 10 MB image limit) go through the SAME safe partial
+// route instead of the full-rebuild /product PATCH.
+const MediaUpload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_UPLOAD_EXT.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "Unsupported file type. Allowed: images, mp4/mov/avi/webm/m4v/mkv, pdf.",
+        ),
+      );
+    }
+  },
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20 MB — accommodates short product videos
+  },
+});
+
 // ================= Content-Type Checker ===================
 const getContentType = (filename: string) => {
   const extension = path.extname(filename).toLowerCase();
@@ -276,6 +298,7 @@ const uploadFilesInChunks = async (
 // ================= Export Helper ===================
 export const FileUploadHelper = {
   ImageUpload,
+  MediaUpload,
   uploadToSpaces,
   uploadFilesInChunks,
   deleteFromSpaces, // এই ফাংশন এখন যেকোন ফাইল ডিলিট করতে পারবে

@@ -1911,10 +1911,11 @@ export const patchProductImages: RequestHandler = async (
     const { _id, mode, removed_keys, ordered_keys } = req.body;
     // multer .any() returns an array; group by fieldname for the service.
     const filesArr = (req.files as any[]) || [];
-    const grouped: any = { main_image: [], other_images: [] };
+    const grouped: any = { main_image: [], other_images: [], main_video: [] };
     filesArr.forEach((f) => {
       if (f.fieldname === "main_image") grouped.main_image.push(f);
       else if (f.fieldname === "other_images") grouped.other_images.push(f);
+      else if (f.fieldname === "main_video") grouped.main_video.push(f);
     });
     const parsedRemoved = Array.isArray(removed_keys)
       ? removed_keys

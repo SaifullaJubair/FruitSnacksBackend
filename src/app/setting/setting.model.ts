@@ -203,6 +203,7 @@ const settingSchema = new Schema<ISettingInterface>(
     // Tier A — Storefront essentials
     maintain_stock: { type: Boolean, default: true },
     show_sold_count: { type: Boolean, default: true },
+    show_view_count: { type: Boolean, default: true },
     show_email_field_checkout: { type: Boolean, default: true },
     enable_promo_at_checkout: { type: Boolean, default: true },
     verify_phone_on_order: { type: Boolean, default: false }, // OFF = anon checkout preserved

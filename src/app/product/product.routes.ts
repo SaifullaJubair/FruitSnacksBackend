@@ -114,7 +114,9 @@ router
   .route("/images")
   .patch(
     verifyToken("product_update"),
-    FileUploadHelper.ImageUpload.any(),
+    // MediaUpload (20 MB) instead of ImageUpload (10 MB) so the swap_video mode
+    // can replace short product videos through this same safe partial route.
+    FileUploadHelper.MediaUpload.any(),
     patchProductImages,
   );
 
