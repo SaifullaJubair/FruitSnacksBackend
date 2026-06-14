@@ -13,6 +13,7 @@ import {
   findBrandMatchProduct,
   findCartProduct,
   findCompareProduct,
+  findFaqPlaceholderKeys,
   findECommerceChoiceProduct,
   findTopSellingProduct,
   findNewArrivalProduct,
@@ -128,6 +129,12 @@ router.route("/cart_product").post(findCartProduct);
 
 // get compare product details
 router.route("/compare_product").get(findCompareProduct);
+
+// distinct FAQ placeholder keys across the catalog (admin chip picker).
+// MUST stay above "/:product_slug" so it isn't captured as a slug.
+router
+  .route("/faq-placeholder-keys")
+  .get(verifyToken("product_show"), findFaqPlaceholderKeys);
 
 // get a product details
 router.route("/:product_slug").get(findAProductDetails);

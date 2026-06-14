@@ -3718,3 +3718,42 @@ export const findLowStockServices = async (): Promise<{
 
   return { products, variations };
 };
+
+// FAQ placeholder keys — distinct, slugged labels from every product's
+// custom_fields (spec) + nutrition rows, plus the universal core keys. Powers
+// the admin FAQ-template editor's clickable placeholder chips so a merchant
+// sees what {{tokens}} their catalog supports without opening a product. Slug
+// rule matches the admin/PDP fill logic (lowercase, ascii-alnum runs joined by
+// underscore); non-ascii (e.g. Bangla) labels slug to "" and are dropped.
+const slugifyPlaceholderKey = (label: string): string =>
+  String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+export const listFaqPlaceholderKeysService = async (): Promise<{
+  core: string[];
+  fromProducts: string[];
+}> => {
+  const core = ["product_name", "price", "weight"];
+  // Pull only the two label-bearing arrays across the catalog.
+  const rows = await ProductModel.find(
+    {},
+    { custom_fields: 1, "nutrition.rows": 1 },
+  ).lean();
+  const keys = new Set<string>();
+  for (const p of rows as any[]) {
+    (p?.custom_fields || []).forEach((f: any) => {
+      const k = slugifyPlaceholderKey(f?.label);
+      if (k) keys.add(k);
+    });
+    (p?.nutrition?.rows || []).forEach((r: any) => {
+      const k = slugifyPlaceholderKey(r?.label);
+      if (k) keys.add(k);
+    });
+  }
+  // Core keys are listed separately and excluded from the product set so the UI
+  // can group them.
+  core.forEach((c) => keys.delete(c));
+  return { core, fromProducts: Array.from(keys).sort() };
+};

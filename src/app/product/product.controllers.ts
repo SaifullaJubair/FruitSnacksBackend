@@ -35,6 +35,7 @@ import {
   updateProductPageContentServices,
   findLowStockServices,
   cleanupOrphanedProductMedia,
+  listFaqPlaceholderKeysService,
 } from "./product.services";
 import QRCode from "qrcode";
 import VariationModel from "../variation/variation.model";
@@ -1941,6 +1942,25 @@ export const patchProductImages: RequestHandler = async (
       data: result,
     });
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// Distinct FAQ placeholder keys across the catalog (for the admin chip picker).
+export const findFaqPlaceholderKeys: RequestHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await listFaqPlaceholderKeysService();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Placeholder keys fetched",
+      data: result,
+    });
+  } catch (error) {
     next(error);
   }
 };
