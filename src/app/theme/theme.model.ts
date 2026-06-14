@@ -17,6 +17,11 @@ const floatingAssetSchema = new Schema(
       enum: ["top", "middle", "bottom"],
       default: "middle",
     },
+    // MULTI-NICHE-DEBT: section enum hardcoded food (hero/order/benefits/use_cases/
+    // nutrition/reviews/faq). When the PDP section registry + pdp_section_array lands,
+    // derive this list from the active niche's section registry instead.
+    // See docs/_ai/MULTI_NICHE_PLAN.md §4. Mirror change in product.model.ts +
+    // FloatingAssets.jsx + ThemeFloatingManager.jsx + ProductFloatingTab.jsx.
     section: {
       type: String,
       enum: [

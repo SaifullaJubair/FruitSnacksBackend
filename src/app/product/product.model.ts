@@ -421,6 +421,9 @@ const productSchema = new Schema<IProductInterface>(
                 enum: ["top", "middle", "bottom"],
                 default: "middle",
               },
+              // MULTI-NICHE-DEBT: section enum hardcoded food — mirror of theme.model.ts.
+              // Derive from pdp_section_array when the PDP section registry lands.
+              // See docs/_ai/MULTI_NICHE_PLAN.md §4.
               section: {
                 type: String,
                 enum: [
