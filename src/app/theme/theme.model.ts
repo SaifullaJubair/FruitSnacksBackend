@@ -1,11 +1,22 @@
 import { Schema, model } from "mongoose";
+import { randomUUID } from "crypto";
 import { IThemeInterface } from "./theme.interface";
 
 const floatingAssetSchema = new Schema(
   {
+    // Stable id so product-level overrides can target this asset (hide/replace).
+    // Auto-filled when missing — covers legacy assets + admin payloads that
+    // don't send an id.
+    id: { type: String, default: () => randomUUID() },
     asset_url: { type: String, required: true },
     asset_key: { type: String, required: true },
     position: { type: String, enum: ["left", "right"], required: true },
+    // Vertical placement inside the anchored section.
+    align: {
+      type: String,
+      enum: ["top", "middle", "bottom"],
+      default: "middle",
+    },
     section: {
       type: String,
       enum: [

@@ -88,6 +88,50 @@ export interface IProductFloatingImage {
   size?: "sm" | "md" | "lg";
 }
 
+// ── Section-anchored floating (unified model, shared with theme.floating_assets) ──
+// A product-only floating asset. Same shape the theme uses (minus theme-only
+// bookkeeping) so it renders through the exact same FloatingAssets component.
+export interface IProductFloatingExtra {
+  id?: string; // stable id (auto-gen) so the admin UI can address rows
+  asset_url: string;
+  asset_key?: string; // optional — only used for S3 cleanup
+  position: "left" | "right";
+  align?: "top" | "middle" | "bottom";
+  section:
+    | "hero"
+    | "order"
+    | "benefits"
+    | "use_cases"
+    | "nutrition"
+    | "reviews"
+    | "faq"
+    | "any";
+  animation_type?: "float" | "spin" | "bounce" | "sway" | "none";
+  animation_speed?: "slow" | "normal" | "fast";
+  size?: "xs" | "sm" | "md" | "lg";
+  opacity?: number;
+  hide_on_mobile?: boolean;
+}
+
+// A single replacement of an inherited theme asset, scoped to THIS product only.
+// Same position/section/animation as the theme asset — just a different image.
+export interface IProductFloatingReplacement {
+  theme_asset_id: string; // which theme floating asset this overrides
+  asset_url: string;
+  asset_key?: string; // optional — only used for S3 cleanup
+}
+
+// Per-product override layer over the assigned theme's floating_assets[].
+// Empty/absent → product inherits the theme's floating assets unchanged.
+export interface IProductFloatingOverrides {
+  // Theme asset ids the product wants hidden (inherited-but-removed).
+  hidden_ids?: string[];
+  // Theme asset id → product-specific replacement image.
+  replacements?: IProductFloatingReplacement[];
+  // Extra floats that exist ONLY on this product (not inherited).
+  extras?: IProductFloatingExtra[];
+}
+
 export interface IProductThemeOverrides {
   colors?: {
     primary?: string;
@@ -172,7 +216,9 @@ export interface IProductInterface {
   use_cases?: IconTextItem[];
   nutrition?: IProductNutrition;
   faqs?: IProductFaq[];
-  floating_images?: IProductFloatingImage[];
+  floating_images?: IProductFloatingImage[]; // legacy full-page floats (back-compat)
+  // Section-anchored override layer over the assigned theme's floating_assets.
+  floating_overrides?: IProductFloatingOverrides;
 
   // Open Graph
   og_image?: string;

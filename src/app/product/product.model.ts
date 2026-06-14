@@ -1,4 +1,5 @@
 import { Schema, model } from "mongoose";
+import { randomUUID } from "crypto";
 import { IProductInterface } from "./product.interface";
 import ThemeModel from "../theme/theme.model";
 
@@ -382,6 +383,82 @@ const productSchema = new Schema<IProductInterface>(
         size: { type: String, enum: ["sm", "md", "lg"], default: "md" },
       },
     ],
+
+    // Section-anchored override layer over the assigned theme's floating_assets.
+    // Empty → product inherits the theme floats unchanged. See IProductFloatingOverrides.
+    floating_overrides: {
+      type: {
+        _id: false,
+        // Theme asset ids the product hides (inherited-but-removed).
+        hidden_ids: { type: [String], default: [] },
+        // Theme asset id → product-specific replacement image (same slot).
+        replacements: {
+          type: [
+            {
+              _id: false,
+              theme_asset_id: { type: String, required: true },
+              asset_url: { type: String, required: true },
+              // key optional — only needed for S3 cleanup; a URL-only
+              // replacement (legacy / pasted URL) is still valid.
+              asset_key: { type: String, default: "" },
+            },
+          ],
+          default: [],
+        },
+        // Floats unique to THIS product (same shape as theme.floating_assets).
+        extras: {
+          type: [
+            {
+              _id: false,
+              id: { type: String, default: () => randomUUID() },
+              asset_url: { type: String, required: true },
+              // key optional — only needed for S3 cleanup; legacy floats had a
+              // URL but no key, and admins may paste a URL directly.
+              asset_key: { type: String, default: "" },
+              position: { type: String, enum: ["left", "right"], default: "left" },
+              align: {
+                type: String,
+                enum: ["top", "middle", "bottom"],
+                default: "middle",
+              },
+              section: {
+                type: String,
+                enum: [
+                  "hero",
+                  "order",
+                  "benefits",
+                  "use_cases",
+                  "nutrition",
+                  "reviews",
+                  "faq",
+                  "any",
+                ],
+                default: "any",
+              },
+              animation_type: {
+                type: String,
+                enum: ["float", "spin", "bounce", "sway", "none"],
+                default: "float",
+              },
+              animation_speed: {
+                type: String,
+                enum: ["slow", "normal", "fast"],
+                default: "normal",
+              },
+              size: {
+                type: String,
+                enum: ["xs", "sm", "md", "lg"],
+                default: "md",
+              },
+              opacity: { type: Number, min: 0, max: 1, default: 1 },
+              hide_on_mobile: { type: Boolean, default: true },
+            },
+          ],
+          default: [],
+        },
+      },
+      default: undefined,
+    },
 
     og_image: { type: String },
     og_image_key: { type: String },

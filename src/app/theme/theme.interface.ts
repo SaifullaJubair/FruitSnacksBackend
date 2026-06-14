@@ -23,6 +23,8 @@ export type FloatingAssetSpeed = "slow" | "normal" | "fast";
 
 export type FloatingAssetSize = "xs" | "sm" | "md" | "lg";
 
+export type FloatingAssetAlign = "top" | "middle" | "bottom";
+
 export type FontKey =
   | "hind-siliguri"
   | "tiro-bangla"
@@ -49,9 +51,16 @@ export interface IThemeColors {
 }
 
 export interface IFloatingAsset {
+  // Stable per-asset id (uuid). Lets a product-level override target THIS
+  // asset to hide/replace it. Auto-generated on create/update when missing
+  // (legacy theme assets get one via the floating migration / save hook).
+  id: string;
   asset_url: string;
   asset_key: string;
   position: "left" | "right";
+  // Vertical placement WITHIN the anchored section (section is the anchor;
+  // align positions the asset inside that section's box). Defaults "middle".
+  align: FloatingAssetAlign;
   section: FloatingAssetSection;
   animation_type: FloatingAssetAnimation;
   animation_speed: FloatingAssetSpeed;

@@ -2808,6 +2808,7 @@ const PAGE_CONTENT_FIELDS = [
   "use_cases",
   "faqs",
   "floating_images",
+  "floating_overrides",
   "nutrition",
   "og_image",
   "og_image_key",
@@ -3518,6 +3519,26 @@ export const collectAllProductImageRefs = async (
     if (o?.other_image) urls.add(o.other_image);
     if (o?.other_image_key) keys.add(o.other_image_key);
   });
+
+  // Legacy full-page floats (back-compat) + the new section-anchored override
+  // layer. These are PRODUCT-owned S3 objects, so they're cleaned on delete.
+  // Theme floating_assets keys are intentionally NOT collected here — they're
+  // theme-owned and shared across every product using that theme.
+  (product.floating_images || []).forEach((f: any) => {
+    if (f?.asset_url) urls.add(f.asset_url);
+    if (f?.asset_key) keys.add(f.asset_key);
+  });
+  const fo: any = (product as any).floating_overrides;
+  if (fo) {
+    (fo.extras || []).forEach((e: any) => {
+      if (e?.asset_url) urls.add(e.asset_url);
+      if (e?.asset_key) keys.add(e.asset_key);
+    });
+    (fo.replacements || []).forEach((r: any) => {
+      if (r?.asset_url) urls.add(r.asset_url);
+      if (r?.asset_key) keys.add(r.asset_key);
+    });
+  }
 
   const variations = await VariationModel.find({ product_id: productId })
     .select(

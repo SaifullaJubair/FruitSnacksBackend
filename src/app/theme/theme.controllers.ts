@@ -217,6 +217,7 @@ export const postFloatingAsset: RequestHandler = async (
       asset_url: upload?.Location,
       asset_key: upload?.Key,
       position: meta.position || "left",
+      align: meta.align || "middle",
       section: meta.section || "any",
       animation_type: meta.animation_type || "float",
       animation_speed: meta.animation_speed || "normal",
