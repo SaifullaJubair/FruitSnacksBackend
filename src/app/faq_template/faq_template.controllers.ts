@@ -7,6 +7,7 @@ import {
   deleteFaqTemplateService,
   findFaqTemplateByIdService,
   listFaqTemplatesService,
+  listFaqTemplateTopicsService,
   updateFaqTemplateService,
 } from "./faq_template.services";
 import { IFaqTemplateInterface } from "./faq_template.interface";
@@ -52,6 +53,24 @@ export const findAllFaqTemplates: RequestHandler = async (
       message: "FAQ templates fetched",
       data: result.data as any,
       totalData: result.total,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const findFaqTemplateTopics: RequestHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const result = await listFaqTemplateTopicsService();
+    return sendResponse<string[]>(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "FAQ template topics fetched",
+      data: result,
     });
   } catch (error) {
     next(error);

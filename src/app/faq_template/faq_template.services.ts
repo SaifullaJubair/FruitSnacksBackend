@@ -50,3 +50,11 @@ export const listFaqTemplatesService = async (args: ListArgs) => {
 export const deleteFaqTemplateService = async (_id: string) => {
   return FaqTemplateModel.deleteOne({ _id });
 };
+
+// Distinct topic labels currently in use — powers the admin datalist so the
+// `category` free-text input suggests existing topics (plus the seeded
+// defaults, merged on the client). Cheap distinct query, no pagination needed.
+export const listFaqTemplateTopicsService = async (): Promise<string[]> => {
+  const topics = await FaqTemplateModel.distinct("category");
+  return (topics as string[]).filter(Boolean).sort();
+};

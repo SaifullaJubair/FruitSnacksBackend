@@ -4,6 +4,7 @@ import {
   deleteFaqTemplate,
   findAllFaqTemplates,
   findFaqTemplateById,
+  findFaqTemplateTopics,
   patchFaqTemplate,
   postFaqTemplate,
 } from "./faq_template.controllers";
@@ -14,6 +15,10 @@ router
   .route("/")
   .get(findAllFaqTemplates)
   .post(verifyToken("faq_template_create"), postFaqTemplate);
+
+// MUST be declared before "/:id" or "topics" gets captured as an :id param
+// (the route-ordering pitfall noted in the backend CLAUDE.md).
+router.route("/topics").get(findFaqTemplateTopics);
 
 router
   .route("/:id")
