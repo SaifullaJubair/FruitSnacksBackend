@@ -3733,7 +3733,7 @@ const slugifyPlaceholderKey = (label: string): string =>
 
 export const listFaqPlaceholderKeysService = async (): Promise<{
   core: string[];
-  fromProducts: string[];
+  fromProducts: Array<{ key: string; label: string }>;
 }> => {
   const core = ["product_name", "price", "weight"];
   // Pull only the two label-bearing arrays across the catalog.
@@ -3741,19 +3741,22 @@ export const listFaqPlaceholderKeysService = async (): Promise<{
     {},
     { custom_fields: 1, "nutrition.rows": 1 },
   ).lean();
-  const keys = new Set<string>();
+  // slug → original label. Keep the FIRST human label we see for each slug so
+  // the admin chip can show what {{c}} actually means (e.g. label "Color").
+  const labelByKey = new Map<string, string>();
+  const consider = (rawLabel: any) => {
+    const label = String(rawLabel || "").trim();
+    const k = slugifyPlaceholderKey(label);
+    if (k && !labelByKey.has(k)) labelByKey.set(k, label);
+  };
   for (const p of rows as any[]) {
-    (p?.custom_fields || []).forEach((f: any) => {
-      const k = slugifyPlaceholderKey(f?.label);
-      if (k) keys.add(k);
-    });
-    (p?.nutrition?.rows || []).forEach((r: any) => {
-      const k = slugifyPlaceholderKey(r?.label);
-      if (k) keys.add(k);
-    });
+    (p?.custom_fields || []).forEach((f: any) => consider(f?.label));
+    (p?.nutrition?.rows || []).forEach((r: any) => consider(r?.label));
   }
-  // Core keys are listed separately and excluded from the product set so the UI
-  // can group them.
-  core.forEach((c) => keys.delete(c));
-  return { core, fromProducts: Array.from(keys).sort() };
+  // Core keys are listed separately, so drop them from the product set.
+  core.forEach((c) => labelByKey.delete(c));
+  const fromProducts = Array.from(labelByKey.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  return { core, fromProducts };
 };
