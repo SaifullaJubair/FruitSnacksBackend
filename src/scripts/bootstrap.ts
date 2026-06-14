@@ -11,6 +11,7 @@
  *   3. Settings doc        — Mongoose defaults + brand-neutral overrides.
  *   4. Authentication doc  — Mongoose defaults (SMS/OTP config placeholder).
  *   5. Page SEO seed        — reuses seedPageSeoService().
+ *   6. Starter FAQ templates — 6 conventional topics (only on an empty collection).
  *
  * Idempotent: re-running skips anything that already exists. Safe to run twice.
  *
@@ -45,6 +46,7 @@ import RoleModel from "../app/role/role.model";
 import AdminModel from "../app/adminRegLog/admin.model";
 import SettingModel from "../app/setting/setting.model";
 import AuthenticationModel from "../app/authentication/authentication.model";
+import FaqTemplateModel from "../app/faq_template/faq_template.model";
 import { seedPageSeoService } from "../app/pageSeo/pageSeo.services";
 
 const SUPER_ADMIN_ROLE_NAME = "Super Admin";
@@ -151,6 +153,65 @@ const seedPages = async (): Promise<void> => {
   );
 };
 
+// Starter FAQ templates so a fresh shop has sensible topic suggestions in the
+// admin datalist instead of an empty box. `category` is free-text (these six
+// are just the conventional topics); each is global (no category_ids) so it
+// suggests for every product. Skipped entirely if ANY template already exists,
+// so we never duplicate or fight an owner who curated their own set.
+const STARTER_FAQ_TEMPLATES = [
+  {
+    category: "shelf_life",
+    question: "{{product_name}} কতদিন ভালো থাকে?",
+    answer:
+      "সঠিকভাবে সংরক্ষণ করলে {{product_name}} {{shelf_life}} পর্যন্ত ভালো থাকে।",
+  },
+  {
+    category: "storage",
+    question: "কীভাবে সংরক্ষণ করব?",
+    answer:
+      "ঠান্ডা ও শুকনো জায়গায়, সরাসরি রোদ থেকে দূরে রাখুন। প্যাকেট খোলার পর মুখ ভালোভাবে বন্ধ করে রাখুন।",
+  },
+  {
+    category: "ingredients",
+    question: "এতে কী কী উপাদান আছে?",
+    answer: "এটি ১০০% প্রাকৃতিক — কোনো কৃত্রিম রং, প্রিজারভেটিভ বা বাড়তি চিনি নেই।",
+  },
+  {
+    category: "usage",
+    question: "কীভাবে খাব / ব্যবহার করব?",
+    answer:
+      "সরাসরি স্ন্যাক্স হিসেবে খেতে পারেন, অথবা পছন্দমতো রেসিপিতে ব্যবহার করতে পারেন।",
+  },
+  {
+    category: "health",
+    question: "এটি কি স্বাস্থ্যকর?",
+    answer:
+      "হ্যাঁ, এতে বাড়তি চিনি নেই এবং ফাইবার বেশি। পরিমাণে নিয়ন্ত্রণ রেখে খাওয়া ভালো।",
+  },
+  {
+    category: "general",
+    question: "ডেলিভারিতে কতদিন লাগে?",
+    answer:
+      "ঢাকার ভেতরে ১–২ কর্মদিবস, ঢাকার বাইরে ২–৪ কর্মদিবসের মধ্যে ডেলিভারি হয়।",
+  },
+];
+
+const seedFaqTopics = async (): Promise<void> => {
+  const count = await FaqTemplateModel.estimatedDocumentCount();
+  if (count > 0) {
+    console.log(
+      `• FAQ templates already exist (${count}) — skipping starter seed.`,
+    );
+    return;
+  }
+  await FaqTemplateModel.insertMany(
+    STARTER_FAQ_TEMPLATES.map((t) => ({ ...t, is_active: true })),
+  );
+  console.log(
+    `✓ Seeded ${STARTER_FAQ_TEMPLATES.length} starter FAQ templates (topic suggestions).`,
+  );
+};
+
 // --sync-superadmin: refresh the existing super-admin role so newly added
 // permission flags are turned on (post-schema-change maintenance).
 const syncSuperAdmin = async (): Promise<void> => {
@@ -190,6 +251,7 @@ const run = async () => {
       await ensureSettingsDoc();
       await ensureAuthDoc();
       await seedPages();
+      await seedFaqTopics();
       const loginPhone = process.env.SUPER_ADMIN_PHONE || DEMO_PHONE;
       const loginPass = process.env.SUPER_ADMIN_PASSWORD || DEMO_PASSWORD;
       console.log(
