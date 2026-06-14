@@ -276,7 +276,10 @@ export const updateReview: RequestHandler = async (
 
 // ─── Seed Review — Bulk Upload ────────────────────────────────────────────────
 // POST /api/v1/review/seed/bulk?dry_run=true|false
-// Body: JSON array via req.body.rows  OR  CSV file parsed upstream (multer → csvParse)
+// multipart form:
+//   rows           — JSON-stringified array of review objects (or raw JSON body)
+//   shared_image    — optional image file, uploaded lazily (only on a real run)
+// Shared image is applied to any row that has no review_image of its own.
 export const seedReviewBulk: RequestHandler = async (
   req: Request,
   res: Response,
@@ -286,16 +289,42 @@ export const seedReviewBulk: RequestHandler = async (
     const dry_run = req.query.dry_run === "true";
     let rows: any[] = [];
 
-    // Accept JSON body array
+    // rows may arrive as: a raw JSON array body, a "rows" form field
+    // (stringified by the multipart FE), or an already-parsed array.
     if (Array.isArray(req.body)) {
       rows = req.body;
     } else if (Array.isArray(req.body?.rows)) {
       rows = req.body.rows;
+    } else if (typeof req.body?.rows === "string") {
+      try {
+        const parsed = JSON.parse(req.body.rows);
+        if (!Array.isArray(parsed)) throw new Error();
+        rows = parsed;
+      } catch {
+        throw new ApiError(400, "rows must be a JSON array");
+      }
     } else {
       throw new ApiError(400, "Body must be a JSON array or { rows: [...] }");
     }
 
-    const result = await seedReviewBulkServices(rows, dry_run);
+    // Lazy shared-image upload: only push to S3 on a real run, so a "Validate
+    // (dry run)" — or an abandoned page — never orphans a file in the bucket.
+    let shared_image: string | undefined;
+    const sharedFile =
+      req.files && "shared_image" in req.files
+        ? (req.files as any)["shared_image"][0]
+        : null;
+    if (sharedFile) {
+      if (dry_run) {
+        // Don't upload during validation — discard the temp file instead.
+        try { fs.unlinkSync(sharedFile.path); } catch { /* best-effort */ }
+      } else {
+        const uploaded = await FileUploadHelper.uploadToSpaces(sharedFile);
+        shared_image = uploaded?.Location;
+      }
+    }
+
+    const result = await seedReviewBulkServices(rows, dry_run, shared_image);
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -323,11 +352,34 @@ export const seedReviewManual: RequestHandler = async (
       const uploaded = await FileUploadHelper.uploadToSpaces(imgFile);
       review_image = uploaded?.Location;
     }
-    const result = await seedReviewManualServices({ ...req.body, review_image });
+
+    // review_product_ids arrives as a JSON-stringified array (FormData can't
+    // carry a native array reliably). Parse it; fall back to a single
+    // review_product_id for back-compat. Bad JSON → clear 400.
+    let review_product_ids: string[] = [];
+    const raw = req.body.review_product_ids;
+    if (raw !== undefined) {
+      try {
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        review_product_ids = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        throw new ApiError(400, "review_product_ids must be a JSON array of product ids");
+      }
+    } else if (req.body.review_product_id) {
+      review_product_ids = [req.body.review_product_id];
+    }
+
+    const result = await seedReviewManualServices({
+      ...req.body,
+      review_product_ids,
+      review_image,
+    });
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
-      message: "Seed review added successfully!",
+      message: `Seed review added to ${result.inserted} product(s)${
+        result.skipped ? `, skipped ${result.skipped} duplicate(s)` : ""
+      }.`,
       data: result,
     });
   } catch (error) {

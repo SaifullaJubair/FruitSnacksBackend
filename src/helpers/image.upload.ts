@@ -61,6 +61,23 @@ const ImageUpload = multer({
   },
 });
 
+// Image-ONLY upload (seed review images). Reuses the same disk storage + 10 MB
+// cap as ImageUpload but rejects pdf/video — a review image must be an image.
+const SEED_IMAGE_EXT = /\.(webp|png|jpe?g|gif)$/i;
+const SeedImageUpload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (SEED_IMAGE_EXT.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files allowed (webp, png, jpg, jpeg, gif)."));
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10 MB
+  },
+});
+
 // Media upload for the product Images/Video modal route (PATCH /product/images).
 // Same extension whitelist as ImageUpload but a 20 MB cap so main_video swaps
 // (which can exceed the 10 MB image limit) go through the SAME safe partial
@@ -298,6 +315,7 @@ const uploadFilesInChunks = async (
 // ================= Export Helper ===================
 export const FileUploadHelper = {
   ImageUpload,
+  SeedImageUpload,
   MediaUpload,
   uploadToSpaces,
   uploadFilesInChunks,

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import ApiError from "../../errors/ApiError";
 import OrderProductModel from "../orderProducts/orderProduct.model";
+import ProductModel from "../product/product.model";
 import { IReviewInterface, reviewSearchableField } from "./review.interface";
 import ReviewModel from "./review.model";
 
@@ -277,6 +278,7 @@ export const findUnReviewedProductServices = async (
 export const seedReviewBulkServices = async (
   rows: any[],
   dry_run = false,
+  shared_image?: string,
 ): Promise<{ inserted: number; skipped: number; failed: { row: number; reason: string }[] }> => {
   if (!rows || rows.length === 0) {
     return { inserted: 0, skipped: 0, failed: [] };
@@ -300,6 +302,20 @@ export const seedReviewBulkServices = async (
       const rating = Number(review_ratting);
       if (isNaN(rating) || rating < 1 || rating > 5) { failed.push({ row: rowNum, reason: "review_ratting must be 1–5" }); continue; }
 
+      // Reject bad/non-existent product ids up front so we never create orphan
+      // reviews (valid-format-but-missing ObjectIds would otherwise insert).
+      if (!mongoose.Types.ObjectId.isValid(review_product_id)) {
+        failed.push({ row: rowNum, reason: "review_product_id is not a valid id" }); continue;
+      }
+      const productExists = await ProductModel.exists({ _id: review_product_id });
+      if (!productExists) { failed.push({ row: rowNum, reason: "product not found" }); continue; }
+
+      // Row's own image wins; only empty/missing rows fall back to shared_image.
+      const rowImage =
+        review_image && String(review_image).trim() !== ""
+          ? String(review_image).trim()
+          : shared_image || undefined;
+
       // Dedup check: same product + reviewer_name + description = duplicate
       const existing = await ReviewModel.findOne({
         review_product_id,
@@ -319,7 +335,7 @@ export const seedReviewBulkServices = async (
           source: "csv_bulk",
           reviewer_name: String(reviewer_name || "").trim(),
           reviewer_verified: Boolean(reviewer_verified),
-          review_image: review_image || undefined,
+          review_image: rowImage,
         });
       }
       inserted++;
@@ -331,28 +347,60 @@ export const seedReviewBulkServices = async (
   return { inserted, skipped, failed };
 };
 
-// ─── Seed Review — Manual Admin Add ──────────────────────────────────────────
+// ─── Seed Review — Manual Admin Add (one or many products) ───────────────────
+// Same review text/rating/image is copied to every selected product. Dedup ON:
+// a product that already has this exact seed (product + name + description) is
+// skipped, not duplicated. Returns per-product insert/skip counts.
 export const seedReviewManualServices = async (
   data: any,
-): Promise<IReviewInterface> => {
-  const { review_product_id, review_ratting, review_description, reviewer_name, reviewer_verified, review_image, review_status } = data;
-  if (!review_product_id) throw new ApiError(400, "review_product_id required");
+): Promise<{ inserted: number; skipped: number; skippedProducts: string[] }> => {
+  const { review_product_ids, review_ratting, review_description, reviewer_name, reviewer_verified, review_image, review_status } = data;
+
+  const ids: string[] = Array.isArray(review_product_ids) ? review_product_ids : [];
+  if (ids.length === 0) throw new ApiError(400, "At least one product is required");
   if (!review_description || String(review_description).trim() === "") throw new ApiError(400, "review_description required");
   const rating = Number(review_ratting);
   if (isNaN(rating) || rating < 1 || rating > 5) throw new ApiError(400, "review_ratting must be 1–5");
 
-  const created = await ReviewModel.create({
-    review_product_id,
-    review_ratting: rating,
-    review_description: String(review_description).trim(),
-    review_status: review_status || "active",
-    is_seeded: true,
-    source: "manual_admin",
-    reviewer_name: String(reviewer_name || "").trim(),
-    reviewer_verified: Boolean(reviewer_verified),
-    review_image: review_image || undefined,
-  });
-  return created;
+  const name = String(reviewer_name || "").trim();
+  const description = String(review_description).trim();
+  const status = review_status || "active";
+
+  let inserted = 0;
+  let skipped = 0;
+  const skippedProducts: string[] = [];
+
+  for (const pid of ids) {
+    if (!mongoose.Types.ObjectId.isValid(pid)) {
+      skipped++; skippedProducts.push(pid); continue;
+    }
+    const productExists = await ProductModel.exists({ _id: pid });
+    if (!productExists) { skipped++; skippedProducts.push(pid); continue; }
+
+    // Dedup: same product + reviewer_name + description already seeded → skip.
+    const existing = await ReviewModel.findOne({
+      review_product_id: pid,
+      reviewer_name: name,
+      review_description: description,
+      is_seeded: true,
+    }).lean();
+    if (existing) { skipped++; skippedProducts.push(pid); continue; }
+
+    await ReviewModel.create({
+      review_product_id: pid,
+      review_ratting: rating,
+      review_description: description,
+      review_status: status,
+      is_seeded: true,
+      source: "manual_admin",
+      reviewer_name: name,
+      reviewer_verified: Boolean(reviewer_verified),
+      review_image: review_image || undefined,
+    });
+    inserted++;
+  }
+
+  return { inserted, skipped, skippedProducts };
 };
 
 // ─── Seed Review — List (admin view of seeded reviews) ───────────────────────

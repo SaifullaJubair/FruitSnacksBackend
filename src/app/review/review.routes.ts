@@ -42,10 +42,17 @@ router.route("/dashboard").get(verifyToken("review_show"), findAllDashboardRevie
 router.route("/by-ids").get(findReviewsByIds);
 
 // Sprint 3 — Seed Review routes (admin only)
-router.route("/seed/bulk").post(verifyToken("review_seed_bulk"), seedReviewBulk);
+// Bulk accepts an optional shared image as multipart (field "shared_image"),
+// uploaded lazily on submit so abandoned uploads never orphan an S3 file.
+// The JSON rows arrive in a "rows" form field (stringified).
+router.route("/seed/bulk").post(
+  verifyToken("review_seed_bulk"),
+  FileUploadHelper.SeedImageUpload.fields([{ name: "shared_image", maxCount: 1 }]),
+  seedReviewBulk,
+);
 router.route("/seed/manual").post(
   verifyToken("review_seed_manual"),
-  FileUploadHelper.ImageUpload.fields([{ name: "review_image", maxCount: 1 }]),
+  FileUploadHelper.SeedImageUpload.fields([{ name: "review_image", maxCount: 1 }]),
   seedReviewManual,
 );
 router.route("/seed/list").get(verifyToken("review_show"), findAllSeededReview);
