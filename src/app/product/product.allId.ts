@@ -1,7 +1,7 @@
 import ProductModel from "./product.model";
 import fs from "fs";
 import path from "path";
-import anyAscii from "any-ascii";
+import anyAscii from "../../helpers/anyAscii";
 
 // Function to delete all files in the upload folder
 export const deleteAllFilesInDirectory = (directoryPath: string) => {

@@ -19,6 +19,7 @@ import cron from "node-cron";
 import CampaignModel from "./app/campaign/campaign.model";
 import OfferModel from "./app/offer/offer.model";
 import ProductModel from "./app/product/product.model";
+import { warmAnyAscii } from "./helpers/anyAscii";
 
 const app: Application = express();
 
@@ -114,6 +115,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 //connect to db
 connectDB();
+
+// Eager-load the ESM-only any-ascii transliterator so the sync slug/SKU paths
+// have it ready (see helpers/anyAscii.ts). Fire-and-forget; the wrapper also
+// self-warms on require, this just guarantees the module is referenced/bundled.
+void warmAnyAscii();
 
 // Function to update campaign status
 const updateCampaignStatus = async () => {

@@ -34,7 +34,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 
-import anyAscii from "any-ascii";
+import anyAscii from "../helpers/anyAscii";
 
 import AttributeModel from "../app/attribute/attribute.model";
 import CategoryModel from "../app/category/category.model";

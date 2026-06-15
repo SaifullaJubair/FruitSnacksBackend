@@ -2,7 +2,7 @@ import { customAlphabet } from "nanoid";
 // any-ascii covers Bangla, Hindi, Arabic, Chinese, etc. → ASCII so the SKU
 // builder works for owner clients who type attribute names in their own
 // script (Phase 0.5 V3). MIT-licensed, no native deps, ~80kB.
-import anyAscii from "any-ascii";
+import anyAscii from "../../helpers/anyAscii";
 import ProductModel from "./product.model";
 import VariationModel from "../variation/variation.model";
 import SettingModel from "../setting/setting.model";
