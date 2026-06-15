@@ -8,7 +8,7 @@ import multer from "multer";
 import * as fs from "fs";
 import ApiError from "../errors/ApiError";
 const path = require("path");
-const uuid = require("uuid");
+import { randomUUID } from "crypto";
 
 // ================= S3-compatible storage (Contabo / DigitalOcean Spaces) =====
 // All credentials come from env — never hardcode keys here (F009b: removed a
@@ -30,7 +30,7 @@ const SpaceName = process.env.S3_BUCKET!;
 const storage = multer.diskStorage({
   destination: "uploads/",
   filename: function (req, file, cb) {
-    const uniqueSuffix = uuid.v4();
+    const uniqueSuffix = randomUUID();
     cb(null, uniqueSuffix + "-" + file?.originalname);
   },
 });
