@@ -1,5 +1,6 @@
 import { NextFunction, Request, RequestHandler, Response } from "express";
 import httpStatus from "http-status";
+import { randomUUID } from "crypto";
 import sendResponse from "../../shared/sendResponse";
 import ApiError from "../../errors/ApiError";
 import { FileUploadHelper } from "../../helpers/image.upload";
@@ -214,6 +215,11 @@ export const postFloatingAsset: RequestHandler = async (
 
     const meta = normalizeBody(req.body);
     const asset = {
+      // Stable id assigned here: $push (used by addFloatingAssetService) bypasses
+      // Mongoose subdoc defaults, so the schema's `id: default randomUUID` never
+      // fires on insert. Without an id, product-level hide/replace overrides can't
+      // target this asset (Replace button disabled). Assign explicitly.
+      id: randomUUID(),
       asset_url: upload?.Location,
       asset_key: upload?.Key,
       position: meta.position || "left",

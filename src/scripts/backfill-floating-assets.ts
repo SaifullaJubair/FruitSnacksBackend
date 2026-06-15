@@ -72,29 +72,38 @@ async function run() {
   log("Connected to MongoDB");
 
   // ── Pass 1: theme floating_assets id + align backfill ──────────────────────
+  // IMPORTANT: read raw DB docs (NOT Mongoose-hydrated), because the schema's
+  // `id: { default: randomUUID }` makes Mongoose synthesize a *fresh* id on every
+  // hydration — so a hydrated `a.id` is always truthy even when the DB field is
+  // missing, and that synthetic id changes each read (never matches a product
+  // override). We must inspect the raw stored value and persist via a positional
+  // updateOne so the id is written ONCE and stays stable.
   let themesScanned = 0;
   let themesUpdated = 0;
   let assetsStamped = 0;
-  const themeCursor = ThemeModel.find({ "floating_assets.0": { $exists: true } })
-    .select("_id theme_name floating_assets")
-    .cursor();
+  const coll = ThemeModel.collection;
+  const rawCursor = coll.find({ "floating_assets.0": { $exists: true } });
 
-  for await (const theme of themeCursor as any) {
+  for await (const theme of rawCursor as any) {
     themesScanned++;
+    const assets = theme.floating_assets || [];
     let dirty = false;
-    for (const a of theme.floating_assets || []) {
+    for (let i = 0; i < assets.length; i++) {
+      const a = assets[i];
+      const set: Record<string, any> = {};
       if (!a.id) {
-        a.id = randomUUID();
+        set[`floating_assets.${i}.id`] = randomUUID();
         assetsStamped++;
-        dirty = true;
       }
       if (!a.align) {
-        a.align = "middle";
+        set[`floating_assets.${i}.align`] = "middle";
+      }
+      if (Object.keys(set).length) {
+        await coll.updateOne({ _id: theme._id }, { $set: set });
         dirty = true;
       }
     }
     if (dirty) {
-      await theme.save();
       themesUpdated++;
       log(`✓ theme ${theme._id} (${theme.theme_name}) — stamped ids/align`);
     }
