@@ -85,8 +85,22 @@ const ensureSuperAdminRole = async (): Promise<any> => {
 const DEMO_PHONE = "01700000000";
 const DEMO_PASSWORD = "123456";
 
+// The admin + storefront login forms use react-phone-number-input, which always
+// submits E.164 (e.g. "+8801700000000"). Login matches admin_phone exactly, so
+// the seeded super-admin MUST be stored in the same E.164 shape — otherwise the
+// form sends "+880..." and the DB has a raw "01..." → "Admin Not Found".
+// Normalize any reasonable input (01XXXXXXXXX / 8801XXXXXXXXX / +8801XXXXXXXXX).
+const toE164BD = (raw: string): string => {
+  let p = (raw || "").trim().replace(/[\s-]/g, "");
+  if (p.startsWith("+")) return p; // already E.164 (any country)
+  if (p.startsWith("880")) return "+" + p; // 8801... → +8801...
+  if (p.startsWith("01")) return "+88" + p; // 01... → +8801...
+  if (p.startsWith("1") && p.length === 10) return "+880" + p; // 1XXXXXXXXX
+  return p; // leave anything else untouched
+};
+
 const ensureSuperAdminUser = async (roleId: any): Promise<void> => {
-  const phone = process.env.SUPER_ADMIN_PHONE || DEMO_PHONE;
+  const phone = toE164BD(process.env.SUPER_ADMIN_PHONE || DEMO_PHONE);
   const password = process.env.SUPER_ADMIN_PASSWORD || DEMO_PASSWORD;
   const name = process.env.SUPER_ADMIN_NAME || "Super Admin";
   const email = process.env.SUPER_ADMIN_EMAIL;
@@ -252,7 +266,7 @@ const run = async () => {
       await ensureAuthDoc();
       await seedPages();
       await seedFaqTopics();
-      const loginPhone = process.env.SUPER_ADMIN_PHONE || DEMO_PHONE;
+      const loginPhone = toE164BD(process.env.SUPER_ADMIN_PHONE || DEMO_PHONE);
       const loginPass = process.env.SUPER_ADMIN_PASSWORD || DEMO_PASSWORD;
       console.log(
         `\n✅ Bootstrap complete.\n   Log in →  phone: ${loginPhone}  |  password: ${loginPass}\n   Then change the password and configure the shop from Admin → Settings.`,
