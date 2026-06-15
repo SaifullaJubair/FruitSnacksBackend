@@ -295,6 +295,9 @@ export interface IProductInterface {
   delivery_mode?: "inherit" | "free" | "flat" | "qty_threshold";
   delivery_flat_amount?: number;
   delivery_free_after_qty?: number;
+
+  // Demo-seed marker — see product.model.ts. Cleared by "Clear demo data".
+  is_demo?: boolean;
 }
 
 export const productSearchableField = [

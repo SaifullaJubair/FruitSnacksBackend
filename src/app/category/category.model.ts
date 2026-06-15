@@ -96,6 +96,9 @@ const categorySchema = new Schema<ICategoryInterface>(
       type: Schema.Types.ObjectId,
       ref: "admins",
     },
+
+    // Demo-seed marker — see product.model.ts. Cleared by "Clear demo data".
+    is_demo: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

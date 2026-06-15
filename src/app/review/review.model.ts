@@ -42,7 +42,7 @@ const reviewSchema = new Schema<IReviewInterface>(
     is_seeded: { type: Boolean, default: false },
     source: {
       type: String,
-      enum: ["customer", "csv_bulk", "manual_admin"],
+      enum: ["customer", "csv_bulk", "manual_admin", "demo_seed"],
       default: "customer",
     },
     // Display name for seeded reviews (review_user_id is null when seeded)

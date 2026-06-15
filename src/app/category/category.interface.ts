@@ -33,6 +33,9 @@ export interface ICategoryInterface {
 
   category_publisher_id: Types.ObjectId | IAdminInterface;
   category_updated_by?: Types.ObjectId | IAdminInterface;
+
+  // Demo-seed marker — cleared by "Clear demo data".
+  is_demo?: boolean;
 }
 
 export const categorySearchableField = [

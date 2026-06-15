@@ -558,6 +558,12 @@ const productSchema = new Schema<IProductInterface>(
     },
     delivery_flat_amount: { type: Number },
     delivery_free_after_qty: { type: Number },
+
+    // Demo-seed marker. true ONLY for docs created by `npm run seed:demo` so the
+    // Admin "Clear demo data" button can remove the whole demo catalog in one
+    // click (delete-by-flag, never by name/slug). Default false; STRIPPED from
+    // admin create/update payloads so it can never be set true via the form.
+    is_demo: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import { FileUploadHelper } from "../../helpers/image.upload";
+import { stripDemoFlag } from "../../helpers/stripDemoFlag";
 import ApiError from "../../errors/ApiError";
 import * as fs from "fs";
 import { IBannerInterface } from "./banner.interface";
@@ -23,7 +24,7 @@ export const postBanner: RequestHandler = async (
 ): Promise<IBannerInterface | any> => {
   try {
     if (req.files && "banner_image" in req.files && req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findBannerIsExistWithSerial: IBannerInterface | null =
         await findABannerSerialServices(requestData?.banner_serial);
       if (findBannerIsExistWithSerial) {
@@ -113,7 +114,7 @@ export const updateBanner: RequestHandler = async (
 ): Promise<IBannerInterface | any> => {
   try {
     if (req.files && "banner_image" in req.files && req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findBannerIsExistWithSerial: IBannerInterface | null =
         await findABannerSerialServices(requestData?.banner_serial);
       if (
@@ -150,7 +151,7 @@ export const updateBanner: RequestHandler = async (
         throw new ApiError(400, "Banner Update Failed !");
       }
     } else {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findBannerIsExistWithSerial: IBannerInterface | null =
         await findABannerSerialServices(requestData?.banner_serial);
       if (

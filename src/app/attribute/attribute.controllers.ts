@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import ApiError from "../../errors/ApiError";
+import { stripDemoFlag } from "../../helpers/stripDemoFlag";
 import {
   attributeSearchableField,
   attributeValuesArray,
@@ -120,7 +121,7 @@ export const postAttribute: RequestHandler = async (
   next: NextFunction
 ): Promise<IAttributeInterface | any> => {
   try {
-    const requestData = req.body;
+    const requestData = stripDemoFlag(req.body);
 
     // Phase 0.5 V1 — empty / whitespace-only value rejection.
     // isCreate=true → attribute_name is mandatory.
@@ -255,7 +256,7 @@ export const updateAttribute: RequestHandler = async (
   next: NextFunction
 ): Promise<IAttributeInterface | any> => {
   try {
-    const requestData = req.body;
+    const requestData = stripDemoFlag(req.body);
 
     // Phase 0.5 V1 — empty / whitespace-only value rejection.
     // isCreate=false → partial PATCH OK (e.g. status toggle from list view

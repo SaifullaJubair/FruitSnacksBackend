@@ -5,6 +5,7 @@ import {
 } from "./category.interface";
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
+import { stripDemoFlag } from "../../helpers/stripDemoFlag";
 import {
   categoryHasChildrenServices,
   categoryHasProductsServices,
@@ -177,7 +178,7 @@ export const postCategory: RequestHandler = async (
       ("category_logo" in req.files || "category_video" in req.files) &&
       req.body
     ) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
@@ -282,7 +283,7 @@ export const postCategory: RequestHandler = async (
       }
     } else {
       // No file uploaded — child/leaf nodes in the tree may have no logo/video.
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       normalizeAttributeArrays(requestData);
       if (!requestData?.category_name || !requestData?.category_slug) {
         throw new ApiError(400, "Category name and slug are required");
@@ -412,7 +413,7 @@ export const updateCategory: RequestHandler = async (
       ("category_logo" in req.files || "category_video" in req.files) &&
       req.body
     ) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({
@@ -549,7 +550,7 @@ export const updateCategory: RequestHandler = async (
         throw new ApiError(400, "Category Update Failed !");
       }
     } else {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       normalizeAttributeArrays(requestData);
       const findCategoryNameExit: boolean | null | undefined | any =
         await CategoryModel.exists({

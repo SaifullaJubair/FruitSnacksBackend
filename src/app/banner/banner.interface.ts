@@ -6,4 +6,6 @@ export interface IBannerInterface {
   banner_status: "active" | "in-active";
   banner_path?: string;
   banner_serial: number;
+  // Demo-seed marker — cleared by "Clear demo data".
+  is_demo?: boolean;
 }

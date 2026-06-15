@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "seed:theme": "ts-node-dev --transpile-only src/seeds/seed.theme.ts",
+    "seed:demo": "ts-node-dev --transpile-only src/scripts/seed-demo.ts",
     "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts"
   },
   "author": "",

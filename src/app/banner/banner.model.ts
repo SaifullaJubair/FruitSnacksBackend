@@ -29,6 +29,9 @@ const bannerSchema = new Schema<IBannerInterface>(
       enum: ["active", "in-active"],
       default: "active",
     },
+
+    // Demo-seed marker — see product.model.ts. Cleared by "Clear demo data".
+    is_demo: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

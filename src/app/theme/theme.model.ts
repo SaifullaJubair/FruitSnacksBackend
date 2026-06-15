@@ -135,6 +135,12 @@ const themeSchema = new Schema<IThemeInterface>(
     approved_at: { type: Date },
     created_by: { type: Schema.Types.ObjectId, ref: "admins" },
     updated_by: { type: Schema.Types.ObjectId, ref: "admins" },
+
+    // Demo-seed marker. Set true for themes created by `npm run seed:demo`.
+    // Unlike the catalog, "Clear demo data" KEEPS these themes (the client may
+    // want to keep using a nice demo theme); the flag only lets the admin tell
+    // demo themes apart from ones they built themselves.
+    is_demo: { type: Boolean, default: false, index: true },
   },
   { timestamps: true },
 );

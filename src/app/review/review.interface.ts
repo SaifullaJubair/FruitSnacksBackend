@@ -15,7 +15,10 @@ export interface IReviewInterface {
   review_updated_by?: Types.ObjectId | IAdminInterface;
   // Sprint 3 — seed review fields
   is_seeded?: boolean;
-  source?: "customer" | "csv_bulk" | "manual_admin";
+  // "demo_seed" = created by `npm run seed:demo`; the demo clear removes reviews
+  // by THIS source (not by is_seeded), so a client's real csv_bulk/manual_admin
+  // seeded reviews are never wiped by "Clear demo data".
+  source?: "customer" | "csv_bulk" | "manual_admin" | "demo_seed";
   reviewer_name?: string;
   reviewer_verified?: boolean;
 }

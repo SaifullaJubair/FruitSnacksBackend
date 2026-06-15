@@ -6,6 +6,7 @@ import {
   Response,
 } from "express";
 import { FileUploadHelper } from "../../helpers/image.upload";
+import { stripDemoFlag } from "../../helpers/stripDemoFlag";
 import sendResponse from "../../shared/sendResponse";
 import ApiError from "../../errors/ApiError";
 import ProductModel from "./product.model";
@@ -651,7 +652,7 @@ export const postProduct: RequestHandler = async (
   session.startTransaction();
   try {
     if (req.files || req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       // if (requestData?.showProductVariation == "false") {
       //   if (requestData?.barcode) {
       //     const varCodeCheck = await ProductModel.findOne({
@@ -1132,7 +1133,7 @@ export const updateProduct: RequestHandler = async (
 ) => {
   try {
     if (req.files || req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       let barcode: any;
       // if (requestData.is_variation == "false") {
       //   if (requestData.barcode) {

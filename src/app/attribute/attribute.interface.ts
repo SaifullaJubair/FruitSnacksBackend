@@ -31,6 +31,9 @@ export interface IAttributeInterface {
   // Phase A: marks attributes whose values carry weight (e.g. Size, Pack).
   // Variation matrix auto-fills variation_weight_grams from these.
   tracks_weight?: boolean;
+
+  // Demo-seed marker — cleared by "Clear demo data".
+  is_demo?: boolean;
 }
 
 export const attributeSearchableField = [

@@ -79,6 +79,7 @@ export interface IRoleInterface {
   theme_create?: true | false;
   theme_update?: true | false;
   theme_delete?: true | false;
+  demo_data_clear?: true | false;
   faq_template_show?: true | false;
   faq_template_create?: true | false;
   faq_template_update?: true | false;

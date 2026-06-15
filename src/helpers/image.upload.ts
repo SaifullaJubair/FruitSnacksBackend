@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  HeadObjectCommand,
   ObjectCannedACL,
   PutObjectCommand,
   S3Client,
@@ -162,13 +163,19 @@ const getContentType = (filename: string) => {
 };
 
 // ================= Upload Image to DigitalOcean Spaces ===================
-const uploadToSpaces = async (file: any) => {
+// `keyPrefix` lets callers route uploads to a different S3 folder than the
+// default `fruit_snacks_images/`. The demo-seed script passes e.g. "demo/food/"
+// so demo assets live in their own niche-namespaced folder (shared across
+// clients of the same niche, NOT deleted when a client clears demo data).
+// Trailing slash is normalized so both "demo/food" and "demo/food/" work.
+const uploadToSpaces = async (file: any, keyPrefix = "fruit_snacks_images/") => {
   const fileStream = fs.createReadStream(file.path);
   const contentType = getContentType(file.filename);
 
+  const prefix = keyPrefix.endsWith("/") ? keyPrefix : `${keyPrefix}/`;
   const uploadParams = {
     Bucket: SpaceName,
-    Key: `fruit_snacks_images/${file.filename}`, // DO তে ফোল্ডার + filename
+    Key: `${prefix}${file.filename}`, // DO তে ফোল্ডার + filename
     Body: fileStream,
     ACL: "public-read" as ObjectCannedACL, // Public read access
     ContentType: contentType,
@@ -215,6 +222,55 @@ const deleteFromSpaces = async (key: any) => {
   } catch (error) {
     throw error;
   }
+};
+
+// ================= S3 object existence check ===================
+// Returns true if `key` already exists in the bucket. Used by the demo-seed
+// image helper for idempotency — a demo image already uploaded (same
+// deterministic key) is reused instead of re-uploaded, so re-running the seed
+// doesn't create duplicate S3 objects.
+const objectExists = async (key: string): Promise<boolean> => {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: SpaceName, Key: key }));
+    return true;
+  } catch (err: any) {
+    // 404 / NotFound / NoSuchKey → genuinely absent. Anything else (403, network)
+    // re-throws so the caller doesn't silently treat an outage as "absent" and
+    // overwrite. The AWS SDK surfaces missing objects as name "NotFound".
+    const code = err?.name || err?.Code;
+    if (code === "NotFound" || code === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw err;
+  }
+};
+
+// ================= Upload an in-memory buffer to S3 ===================
+// Like uploadToSpaces but takes a Buffer + an explicit S3 key (no local temp
+// file, no multer). Used by the demo-seed image helper which downloads remote
+// stock photos into memory and pushes them to a deterministic `demo/<niche>/`
+// key. Idempotent at the call site via objectExists().
+const uploadBufferToSpaces = async (
+  buffer: Buffer,
+  key: string,
+  contentTypeOverride?: string,
+): Promise<{ Location: string; Key: string }> => {
+  const contentType = contentTypeOverride || getContentType(key);
+  const data = await s3.send(
+    new PutObjectCommand({
+      Bucket: SpaceName,
+      Key: key,
+      Body: buffer,
+      ACL: "public-read" as ObjectCannedACL,
+      ContentType: contentType,
+    }),
+  );
+  if (data?.$metadata?.httpStatusCode !== 200) {
+    throw new ApiError(400, `Buffer upload failed for ${key}`);
+  }
+  const encodedKey = key.split("/").map(encodeURIComponent).join("/");
+  const Location = `${process.env.S3_PUBLIC_URL}:${process.env.S3_BUCKET}/${encodedKey}`;
+  return { Location, Key: key };
 };
 
 // ================= Video Upload ===================
@@ -319,6 +375,8 @@ export const FileUploadHelper = {
   MediaUpload,
   uploadToSpaces,
   uploadFilesInChunks,
+  uploadBufferToSpaces, // demo-seed: push an in-memory buffer to a fixed S3 key
+  objectExists, // demo-seed: idempotency check before re-uploading
   deleteFromSpaces, // এই ফাংশন এখন যেকোন ফাইল ডিলিট করতে পারবে
   VideoUploader,
   VideoUpload,

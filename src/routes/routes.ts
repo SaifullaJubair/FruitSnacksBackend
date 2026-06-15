@@ -45,6 +45,7 @@ import { LoyaltyRoutes } from "../app/loyalty/loyalty.routes";
 import { ProductFeedRoutes } from "../app/productFeed/productFeed.routes";
 import { SiteFaqRoutes } from "../app/siteFaq/siteFaq.routes";
 import { NewsletterSubscriberRoutes } from "../app/newsletterSubscriber/newsletterSubscriber.routes";
+import { DemoRoutes } from "../app/demo/demo.routes";
 
 const router = express.Router();
 
@@ -187,6 +188,7 @@ const moduleRoutes = [
   { path: "/product-feed", route: ProductFeedRoutes },
   { path: "/site-faq", route: SiteFaqRoutes },
   { path: "/newsletter-subscriber", route: NewsletterSubscriberRoutes },
+  { path: "/demo", route: DemoRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

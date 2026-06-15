@@ -291,6 +291,13 @@ const roleSchema = new Schema<IRoleInterface>(
       type: Boolean,
       default: false,
     },
+    // One-click "Clear demo data" (removes is_demo catalog rows). Default false
+    // so only the super-admin (schema-derived all-true role) gets it; the owner
+    // can grant it to a custom role from Admin → Roles.
+    demo_data_clear: {
+      type: Boolean,
+      default: false,
+    },
     faq_template_show: {
       type: Boolean,
       default: false,

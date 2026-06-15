@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import { FileUploadHelper } from "../../helpers/image.upload";
+import { stripDemoFlag } from "../../helpers/stripDemoFlag";
 import ApiError from "../../errors/ApiError";
 import * as fs from "fs";
 import { ISliderInterface } from "./slider.interface";
@@ -16,7 +17,7 @@ export const postSlider: RequestHandler = async (
 ): Promise<ISliderInterface | any> => {
   try {
     if (req.files && "slider_image" in req.files && req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findSliderIsExistWithSerial: ISliderInterface | null =
         await findASliderSerialServices(requestData?.slider_serial);
       if (findSliderIsExistWithSerial) {
@@ -106,7 +107,7 @@ export const updateSlider: RequestHandler = async (
 ): Promise<ISliderInterface | any> => {
   try {
     if (req.files && "slider_image" in req.files && req.body) {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findSliderIsExistWithSerial: ISliderInterface | null =
         await findASliderSerialServices(requestData?.slider_serial);
       if (
@@ -143,7 +144,7 @@ export const updateSlider: RequestHandler = async (
         throw new ApiError(400, "Slider Update Failed !");
       }
     } else {
-      const requestData = req.body;
+      const requestData = stripDemoFlag(req.body);
       const findSliderIsExistWithSerial: ISliderInterface | null =
         await findASliderSerialServices(requestData?.slider_serial);
       if (

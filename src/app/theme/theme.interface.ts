@@ -113,6 +113,9 @@ export interface IThemeInterface {
   created_by?: Types.ObjectId;
   updated_by?: Types.ObjectId;
 
+  // Demo-seed marker — KEPT by "Clear demo data" (label-only). See theme.model.ts.
+  is_demo?: boolean;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
