@@ -27,9 +27,11 @@ export const SETTING_SECRET_FIELDS = [
   "pathao_client_secret",
   "steadfast_api_secret",
   "redx_api_key",
-  // Track D: live-chat embed code is arbitrary JS — treated as secret so it
-  // never appears in public /setting response (same pattern as CAPI tokens).
-  "chat_livechat_embed_code",
+  // NOTE: chat_livechat_embed_code used to live here as "secret", but a
+  // live-chat widget (Tawk.to/Crisp) is client-side JS that MUST reach the
+  // browser to render — keeping it in the secret-strip meant the storefront
+  // never received it and the widget never loaded. It is now a general public
+  // setting field (delivered via /setting, injected by ChatWidgetStacker).
 ];
 
 const PUBLIC_PROJECTION = SETTING_SECRET_FIELDS.map((f) => `-${f}`).join(" ");
