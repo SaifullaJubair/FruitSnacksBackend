@@ -328,6 +328,14 @@ export const HOME_SECTION_DEFAULTS = [
   { id: "promo_banner",        enabled: false, order: 13 },
   { id: "site_faq",            enabled: true,  order: 14 },
   { id: "newsletter",          enabled: true,  order: 15 },
+  // ── Boutique preset sections (few-products storytelling home) ──
+  // Shipped DISABLED so the default (marketplace) home is unchanged. A
+  // boutique/small-catalog client enables these + disables the grid sections
+  // from Admin → Settings → Home Layout. Data source = the trending_product
+  // flag (no separate picker). See .claude/work/boutique-home/PLAN.md.
+  { id: "hero_spotlight",      enabled: false, order: 16 },
+  { id: "product_features",    enabled: false, order: 17 },
+  { id: "story_band",          enabled: false, order: 18 },
 ];
 
 // Home-layout fields that are handled by /setting/home_layout (kept separate

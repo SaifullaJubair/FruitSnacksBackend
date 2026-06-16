@@ -999,6 +999,19 @@ export const findTrendingProductServices = async (
         main_video: 1,
         product_price: 1,
         product_discount_price: 1,
+        // Page-content fields — needed by the boutique home (product_features /
+        // hero_spotlight) to render rich feature rows. Default sliders/cards
+        // ignore the extra fields; only the payload grows slightly. See
+        // .claude/work/boutique-home/PLAN.md H4.
+        short_description: 1,
+        badge_text: 1,
+        benefits: 1,
+        use_cases: 1,
+        nutrition: 1,
+        // Full image list for the boutique home carousel (works for variation
+        // products too, where `other_images` above is REMOVED). Other consumers
+        // ignore this; the existing `other_images` field is untouched.
+        gallery_images: { $ifNull: ["$other_images", []] },
         createdAt: 1,
         updatedAt: 1,
         category: {
@@ -1016,6 +1029,33 @@ export const findTrendingProductServices = async (
             if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
             then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
             else: {}, // Set variations to an empty array if is_variation is false
+          },
+        },
+        // Boutique home (product_features) needs the FULL variation list — each
+        // pack-size as a clickable chip that swaps image/video + price. Separate
+        // field so the existing first-only `variations` (ProductCard relies on
+        // it) is untouched. Empty array for simple products; other consumers
+        // simply ignore this field.
+        variation_options: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $map: {
+                input: "$variations",
+                as: "v",
+                in: {
+                  _id: "$$v._id",
+                  variation_name: "$$v.variation_name",
+                  variation_price: "$$v.variation_price",
+                  variation_discount_price: "$$v.variation_discount_price",
+                  variation_quantity: "$$v.variation_quantity",
+                  variation_image: "$$v.variation_image",
+                  variation_video: "$$v.variation_video",
+                  combination: "$$v.combination",
+                },
+              },
+            },
+            else: [],
           },
         },
         campaign_details: {
@@ -1406,6 +1446,19 @@ export const findBrandMatchProductServices = async (
         main_video: 1,
         product_price: 1,
         product_discount_price: 1,
+        // Page-content fields — needed by the boutique home (product_features /
+        // hero_spotlight) to render rich feature rows. Default sliders/cards
+        // ignore the extra fields; only the payload grows slightly. See
+        // .claude/work/boutique-home/PLAN.md H4.
+        short_description: 1,
+        badge_text: 1,
+        benefits: 1,
+        use_cases: 1,
+        nutrition: 1,
+        // Full image list for the boutique home carousel (works for variation
+        // products too, where `other_images` above is REMOVED). Other consumers
+        // ignore this; the existing `other_images` field is untouched.
+        gallery_images: { $ifNull: ["$other_images", []] },
         createdAt: 1,
         updatedAt: 1,
         category: {
@@ -1423,6 +1476,33 @@ export const findBrandMatchProductServices = async (
             if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
             then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
             else: {}, // Set variations to an empty array if is_variation is false
+          },
+        },
+        // Boutique home (product_features) needs the FULL variation list — each
+        // pack-size as a clickable chip that swaps image/video + price. Separate
+        // field so the existing first-only `variations` (ProductCard relies on
+        // it) is untouched. Empty array for simple products; other consumers
+        // simply ignore this field.
+        variation_options: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $map: {
+                input: "$variations",
+                as: "v",
+                in: {
+                  _id: "$$v._id",
+                  variation_name: "$$v.variation_name",
+                  variation_price: "$$v.variation_price",
+                  variation_discount_price: "$$v.variation_discount_price",
+                  variation_quantity: "$$v.variation_quantity",
+                  variation_image: "$$v.variation_image",
+                  variation_video: "$$v.variation_video",
+                  combination: "$$v.combination",
+                },
+              },
+            },
+            else: [],
           },
         },
         campaign_details: {
@@ -2434,6 +2514,33 @@ export const findECommerceChoiceProductServices = async (
             if: { $eq: ["$is_variation", true] }, // Only include variations if is_variation is true
             then: { $arrayElemAt: ["$variations", 0] }, // Include only the first variation
             else: {}, // Set variations to an empty array if is_variation is false
+          },
+        },
+        // Boutique home (product_features) needs the FULL variation list — each
+        // pack-size as a clickable chip that swaps image/video + price. Separate
+        // field so the existing first-only `variations` (ProductCard relies on
+        // it) is untouched. Empty array for simple products; other consumers
+        // simply ignore this field.
+        variation_options: {
+          $cond: {
+            if: { $eq: ["$is_variation", true] },
+            then: {
+              $map: {
+                input: "$variations",
+                as: "v",
+                in: {
+                  _id: "$$v._id",
+                  variation_name: "$$v.variation_name",
+                  variation_price: "$$v.variation_price",
+                  variation_discount_price: "$$v.variation_discount_price",
+                  variation_quantity: "$$v.variation_quantity",
+                  variation_image: "$$v.variation_image",
+                  variation_video: "$$v.variation_video",
+                  combination: "$$v.combination",
+                },
+              },
+            },
+            else: [],
           },
         },
         campaign_details: {

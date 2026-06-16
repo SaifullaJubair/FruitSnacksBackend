@@ -259,6 +259,10 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
       slug: "dates-main",
       url: "https://images.unsplash.com/photo-1577003833619-76bbd7f82948?w=900&q=80",
     },
+    other_images: [
+      { slug: "dates-2", url: "https://images.unsplash.com/photo-1611078489935-0cb964de46d6?w=900&q=80" },
+      { slug: "dates-3", url: "https://images.unsplash.com/photo-1567892737950-30c4db37cd89?w=900&q=80" },
+    ],
     variation: {
       attribute_slug: "pack-size",
       rows: [
@@ -304,6 +308,9 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
       slug: "mango-bar-main",
       url: "https://images.unsplash.com/photo-1605027990121-cbae9e0642df?w=900&q=80",
     },
+    other_images: [
+      { slug: "mango-bar-2", url: "https://images.unsplash.com/photo-1610725664285-7c57e6eeac3f?w=900&q=80" },
+    ],
     benefits: ["চিনি ছাড়া", "আসল ফলের পাল্প", "কৃত্রিম রং নেই", "বাচ্চাদের জন্য নিরাপদ"],
     use_cases: [{ text: "টিফিনে" }, { text: "চলার পথে স্ন্যাকস" }],
     nutrition: {
@@ -339,6 +346,9 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
       slug: "trail-mix-main",
       url: "https://images.unsplash.com/photo-1606312619070-d48b4c652a52?w=900&q=80",
     },
+    other_images: [
+      { slug: "trail-mix-2", url: "https://images.unsplash.com/photo-1559656914-a30970c1affd?w=900&q=80" },
+    ],
     benefits: ["মাল্টি-নিউট্রিয়েন্ট", "ইনস্ট্যান্ট এনার্জি", "ফাইবার সমৃদ্ধ", "প্রিজারভেটিভ ছাড়া"],
     use_cases: [{ text: "ভ্রমণে" }, { text: "অফিসে" }, { text: "পড়ার সময়" }],
     nutrition: {
@@ -378,6 +388,9 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
       slug: "cashew-main",
       url: "https://images.unsplash.com/photo-1502741126161-b048400d085d?w=900&q=80",
     },
+    other_images: [
+      { slug: "cashew-2", url: "https://images.unsplash.com/photo-1567892737950-30c4db37cd89?w=900&q=80" },
+    ],
     benefits: ["প্রোটিন সমৃদ্ধ", "ম্যাগনেশিয়ামের উৎস", "গোটা ও অক্ষত", "হার্ট-ফ্রেন্ডলি ফ্যাট"],
     use_cases: [{ text: "রান্নায়" }, { text: "স্ন্যাকস হিসেবে" }, { text: "মিষ্টি তৈরিতে" }],
     nutrition: {
@@ -416,6 +429,9 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
       slug: "apricot-main",
       url: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=900&q=80",
     },
+    other_images: [
+      { slug: "apricot-2", url: "https://images.unsplash.com/photo-1610725664285-7c57e6eeac3f?w=900&q=80" },
+    ],
     benefits: ["ফাইবার সমৃদ্ধ", "আয়রনের উৎস", "সালফার ছাড়া", "প্রাকৃতিক মিষ্টতা"],
     use_cases: [{ text: "স্ন্যাকস হিসেবে" }, { text: "বেকিং-এ" }, { text: "ওটমিল/স্মুদিতে" }],
     nutrition: {
