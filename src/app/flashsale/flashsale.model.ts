@@ -10,7 +10,9 @@ const flashSaleSchema = new Schema<IFlashSaleInterface>(
     status: {
       type: String,
       enum: ["active", "in-active"],
-      default: "active",
+      // Default in-active so a flash sale never goes live just because the admin
+      // saved it without an explicit status (matches coupon/campaign/offer).
+      default: "in-active",
     },
     products: [
       {

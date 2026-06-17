@@ -1,13 +1,21 @@
 import express from "express";
-import { findUserProfileDashboardDataServices, getMeUser } from "./getme.controllers";
-import { updateUser } from "../user/user.controllers";
+import {
+  findUserProfileDashboardDataServices,
+  getMeUser,
+  updateMyProfile,
+} from "./getme.controllers";
+import { verifyUserToken } from "../../middlewares/verify.user.token";
 const router = express.Router();
 
-//  Get and update User
-router.route("/").get(getMeUser).patch(updateUser);
+// Get current user (getMeUser reads + validates the token itself) and
+// self-update the profile (verifyUserToken → updateMyProfile, own record only,
+// strict field allowlist). Previously PATCH reused the admin updateUser by
+// body._id with no auth — an IDOR. See updateMyProfile for details.
+router.route("/").get(getMeUser).patch(verifyUserToken, updateMyProfile);
 
-// get profile dashboard data
-router.route("/dashboard_data").get(findUserProfileDashboardDataServices)
-
+// profile dashboard stats — own data only (req.user.id, was an unauthed query)
+router
+  .route("/dashboard_data")
+  .get(verifyUserToken, findUserProfileDashboardDataServices);
 
 export const UserGetMeRoutes = router;

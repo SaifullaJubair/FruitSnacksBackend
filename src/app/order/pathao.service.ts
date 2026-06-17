@@ -306,6 +306,24 @@ export const bulkSendToPathaoService = async (
         : `Invoice: ${o.invoice_id}`;
       const altPhone = o.delivery_alt_phone || "";
 
+      // ── Compute item_weight (kg) + item_quantity from line items ─────────────
+      // Mirror single-send: sum variation_weight_grams (500g fallback per unit),
+      // floor at 0.5kg. Previously this bulk path hardcoded 0.5kg/qty:1, so bulk
+      // orders were billed the wrong courier weight.
+      const oProducts = await OrderProductModel.find({ order_id: o._id })
+        .populate({ path: "variation_id", select: "variation_weight_grams" })
+        .lean();
+      let totalGrams = 0;
+      let totalQty = 0;
+      for (const op of oProducts) {
+        const qty = op.product_quantity || 1;
+        totalQty += qty;
+        const grams = (op.variation_id as any)?.variation_weight_grams;
+        totalGrams += (typeof grams === "number" && grams > 0 ? grams : 500) * qty;
+      }
+      const item_weight = Math.max(0.5, totalGrams / 1000);
+      const item_quantity = Math.max(1, totalQty);
+
       const payload = {
         store_id: storeId,
         merchant_order_id: o.invoice_id,
@@ -318,8 +336,8 @@ export const bulkSendToPathaoService = async (
         delivery_type: 48,
         item_type: 2,
         special_instruction: specialNote,
-        item_quantity: 1,
-        item_weight: 0.5,
+        item_quantity,
+        item_weight,
         amount_to_collect: o.grand_total_amount,
         item_description: `Order ${o.invoice_id}`,
       };

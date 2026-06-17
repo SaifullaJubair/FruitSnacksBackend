@@ -4,7 +4,8 @@
  * A row is created (or upserted) when a user reaches checkout-intent but
  * doesn't complete an order. Captures contact + cart snapshot so an offline
  * job (or admin UI later) can send a recovery email/SMS. `recovered` flips
- * true if an order is later placed with the same invoice_id reference.
+ * true (and `recovered_order_id` is linked) when an order is later placed with
+ * the same `customer_phone` — recovery is matched by PHONE, not invoice_id.
  */
 
 import { Types } from "mongoose";

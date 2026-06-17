@@ -109,8 +109,12 @@ export const findACoupon: RequestHandler = async (
     }
     // Per-user usage cap only checkable when we know who the user is.
     if (customer_id) {
+      // Was result?.coupon_id — the coupon doc has no coupon_id field (it's
+      // _id), so this lookup always returned null and the per-person cap
+      // silently never fired here. Use _id. (Order-time recompute already
+      // enforces it, so this was a dead validation-stage check, not a hole.)
       const getCouponUserIsUsedThisCoupon: ICouponUsedInterface | any =
-        await getCouponUserByIdServices(result?.coupon_id, customer_id);
+        await getCouponUserByIdServices(result?._id, customer_id);
       if (getCouponUserIsUsedThisCoupon) {
         if (
           result?.coupon_use_per_person <= getCouponUserIsUsedThisCoupon?.used

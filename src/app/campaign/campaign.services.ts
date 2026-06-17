@@ -333,7 +333,7 @@ export const findProductToAddCampaignServices = async (
 
 // Update a Campaign
 export const updateCampaignServices = async (
-  data: ICampaignInterface,
+  data: ICampaignInterface | any,
   _id: string
 ): Promise<ICampaignInterface | any> => {
   const updateCampaignInfo: ICampaignInterface | null =
@@ -343,7 +343,26 @@ export const updateCampaignServices = async (
   if (!updateCampaignInfo) {
     return {};
   }
-  const Campaign = await CampaignModel.updateOne({ _id: _id }, data, {
+  // Field allowlist (mirrors the hardened updateCouponServices). Previously the
+  // raw request body was passed straight to updateOne, letting a PATCH write any
+  // arbitrary field. Only these may be updated.
+  const ALLOWED: string[] = [
+    "campaign_image",
+    "campaign_image_key",
+    "campaign_title",
+    "campaign_description",
+    "campaign_start_date",
+    "campaign_end_date",
+    "campaign_status",
+    "campaign_products",
+    "campaign_updated_by",
+  ];
+  const update: Record<string, unknown> = {};
+  for (const key of ALLOWED) {
+    if (data?.[key] !== undefined) update[key] = data[key];
+  }
+
+  const Campaign = await CampaignModel.updateOne({ _id: _id }, update, {
     runValidators: true,
   });
   return Campaign;
