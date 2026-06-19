@@ -264,38 +264,44 @@ export const findCartProductServices = async (
   ].map((id) => new Types.ObjectId(id as string));
 
   const campaignByProductId = new Map<string, any>();
-  if (campaignIds.length) {
-    const activeCampaigns: any[] = await CampaignModel.find({
-      _id: { $in: campaignIds },
-      campaign_status: "active",
-    })
-      .select(
-        "_id campaign_title campaign_start_date campaign_end_date campaign_status campaign_products",
-      )
-      .lean();
+  // Best-effort — never crash the cart on a campaign lookup hiccup (mirrors the
+  // PDP path's try/catch). On failure the cart just falls back to base price.
+  try {
+    if (campaignIds.length) {
+      const activeCampaigns: any[] = await CampaignModel.find({
+        _id: { $in: campaignIds },
+        campaign_status: "active",
+      })
+        .select(
+          "_id campaign_title campaign_start_date campaign_end_date campaign_status campaign_products",
+        )
+        .lean();
 
-    for (const product of foundProducts) {
-      if (!product.product_campaign_id) continue;
-      const campaign = activeCampaigns.find(
-        (c) =>
-          c._id.toString() === product.product_campaign_id.toString(),
-      );
-      if (!campaign) continue;
-      const campaignProduct = campaign.campaign_products?.find(
-        (cp: any) =>
-          String(cp?.campaign_product_id) === String(product._id) &&
-          cp?.campaign_product_status === "active",
-      );
-      if (!campaignProduct) continue;
-      campaignByProductId.set(product._id.toString(), {
-        _id: campaign._id,
-        campaign_title: campaign.campaign_title,
-        campaign_start_date: campaign.campaign_start_date,
-        campaign_end_date: campaign.campaign_end_date,
-        campaign_status: campaign.campaign_status,
-        campaign_product: campaignProduct,
-      });
+      for (const product of foundProducts) {
+        if (!product.product_campaign_id) continue;
+        const campaign = activeCampaigns.find(
+          (c) =>
+            c._id.toString() === product.product_campaign_id.toString(),
+        );
+        if (!campaign) continue;
+        const campaignProduct = campaign.campaign_products?.find(
+          (cp: any) =>
+            String(cp?.campaign_product_id) === String(product._id) &&
+            cp?.campaign_product_status === "active",
+        );
+        if (!campaignProduct) continue;
+        campaignByProductId.set(product._id.toString(), {
+          _id: campaign._id,
+          campaign_title: campaign.campaign_title,
+          campaign_start_date: campaign.campaign_start_date,
+          campaign_end_date: campaign.campaign_end_date,
+          campaign_status: campaign.campaign_status,
+          campaign_product: campaignProduct,
+        });
+      }
     }
+  } catch (_) {
+    // campaign enrichment is best-effort — never block the cart on it.
   }
 
   // ── Step 4: একটাই aggregate তে সব review ──────────────────
