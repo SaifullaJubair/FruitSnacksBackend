@@ -207,7 +207,8 @@ export const findAllDashboardCampaignServices = async (
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
-    .select("-__v")
+    // SHF-3: don't expose which admin created/edited the campaign.
+    .select("-__v -campaign_publisher_id -campaign_updated_by")
     .lean();
 
   // Check for products with is_variation = true and fetch variations
