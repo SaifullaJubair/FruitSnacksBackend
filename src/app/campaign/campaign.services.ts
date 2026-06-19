@@ -319,11 +319,24 @@ export const findProductToAddCampaignServices = async (
     { $skip: skip },
     { $limit: limit },
     {
+      // SHF-1: strip cost/warehouse-only fields so the campaign product picker
+      // never exposes buying price, alert qty, SKU or barcodes (admin-only data
+      // not needed to choose products for a campaign).
       $project: {
         __v: 0,
+        product_buying_price: 0,
+        product_alert_quantity: 0,
+        product_sku: 0,
+        barcode: 0,
+        barcode_image: 0,
         "category_info.__v": 0,
         "subcategory_info.__v": 0,
         "variation_details.__v": 0,
+        "variation_details.variation_buying_price": 0,
+        "variation_details.variation_alert_quantity": 0,
+        "variation_details.variation_sku": 0,
+        "variation_details.variation_barcode": 0,
+        "variation_details.variation_barcode_image": 0,
       },
     },
   ]);
