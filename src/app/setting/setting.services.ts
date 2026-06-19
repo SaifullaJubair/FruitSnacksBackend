@@ -313,11 +313,16 @@ export const getEmailConfig = async (
 // settings doc has no home_section_array (fresh clone or pre-Track-D doc).
 // Not persisted to DB on GET — only written when admin explicitly saves.
 export const HOME_SECTION_DEFAULTS = [
-  { id: "trust_strip",         enabled: true,  order: 1  },
-  { id: "feature_categories",  enabled: true,  order: 2  },
+  // F3.4 — trust_strip / feature_categories / offers_block have no wired
+  // SECTION_COMPONENTS on the FE yet, so they rendered as blank gaps at the top
+  // of a fresh clone's home. Shipped OFF by default until their components land;
+  // the owner can enable them from Admin → Home Layout once built. (Only affects
+  // NEW DBs — existing home_section_array docs are untouched.)
+  { id: "trust_strip",         enabled: false, order: 1  },
+  { id: "feature_categories",  enabled: false, order: 2  },
   { id: "flash_sale",          enabled: false, order: 3  },
   { id: "bestsellers",         enabled: true,  order: 4  },
-  { id: "offers_block",        enabled: true,  order: 5  },
+  { id: "offers_block",        enabled: false, order: 5  },
   { id: "new_arrivals",        enabled: true,  order: 6  },
   { id: "brand_story",         enabled: true,  order: 7  },
   { id: "reviews_carousel",    enabled: true,  order: 8  },
