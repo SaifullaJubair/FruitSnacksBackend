@@ -245,6 +245,59 @@ export const findCartProductServices = async (
   const variationById = new Map<string, any>();
   foundVariations.forEach((v) => variationById.set(v._id.toString(), v));
 
+  // ── Step 3.5: একটাই query তে সব active campaign ───────────
+  // F1.1 fix — cart must carry campaign_details so (a) the cart UI shows the
+  // campaign price and (b) AddToCart sends a real campaign_id to checkout
+  // (was always null → campaign discount silently lost). Batched ($in) to
+  // avoid N+1 on large carts. Same campaign_details shape as the PDP/strip
+  // path so FE helper.js productPrice() campaign branch reads it unchanged.
+  // NOTE: flash is intentionally NOT enriched here yet — flash "fixed"/percent
+  // base semantics differ FE↔BE (resolver.ts vs helper.js) and aligning them
+  // touches the core price resolver; tracked separately. Flash stays a known
+  // "regular shown / flash charged" (under-charge, buyer-favourable) gap.
+  const campaignIds = [
+    ...new Set(
+      foundProducts
+        .filter((p) => p.product_campaign_id)
+        .map((p) => p.product_campaign_id.toString()),
+    ),
+  ].map((id) => new Types.ObjectId(id as string));
+
+  const campaignByProductId = new Map<string, any>();
+  if (campaignIds.length) {
+    const activeCampaigns: any[] = await CampaignModel.find({
+      _id: { $in: campaignIds },
+      campaign_status: "active",
+    })
+      .select(
+        "_id campaign_title campaign_start_date campaign_end_date campaign_status campaign_products",
+      )
+      .lean();
+
+    for (const product of foundProducts) {
+      if (!product.product_campaign_id) continue;
+      const campaign = activeCampaigns.find(
+        (c) =>
+          c._id.toString() === product.product_campaign_id.toString(),
+      );
+      if (!campaign) continue;
+      const campaignProduct = campaign.campaign_products?.find(
+        (cp: any) =>
+          String(cp?.campaign_product_id) === String(product._id) &&
+          cp?.campaign_product_status === "active",
+      );
+      if (!campaignProduct) continue;
+      campaignByProductId.set(product._id.toString(), {
+        _id: campaign._id,
+        campaign_title: campaign.campaign_title,
+        campaign_start_date: campaign.campaign_start_date,
+        campaign_end_date: campaign.campaign_end_date,
+        campaign_status: campaign.campaign_status,
+        campaign_product: campaignProduct,
+      });
+    }
+  }
+
   // ── Step 4: একটাই aggregate তে সব review ──────────────────
   const reviewAggregates = await ReviewModel.aggregate([
     { $match: { review_product_id: { $in: productIds } } },
@@ -303,6 +356,14 @@ export const findCartProductServices = async (
     // variation attach
     if (findProduct?.is_variation && cartItem?.variation_id) {
       findProduct.variations = variationById.get(cartItem.variation_id) || null;
+    }
+
+    // campaign attach (F1.1) — after the deep-copy so each cart line owns its
+    // own campaign_details; productPrice() (FE) then enters the campaign branch
+    // and AddToCart sends campaign_details._id as a real campaign_id.
+    const campaignDetails = campaignByProductId.get(productIdStr);
+    if (campaignDetails) {
+      findProduct.campaign_details = campaignDetails;
     }
 
     // review attach
