@@ -6,6 +6,7 @@ import {
   findAllSeededReview,
   findAllUnReviewProduct,
   findReviewsByIds,
+  findFeaturedReviews,
   findUserReview,
   postReview,
   seedReviewBulk,
@@ -40,6 +41,11 @@ router.route("/dashboard").get(verifyToken("review_show"), findAllDashboardRevie
 
 // Track D — Reviews carousel manual-pick (public, before wildcard)
 router.route("/by-ids").get(findReviewsByIds);
+
+// F4.1 — public featured reviews for home carousel auto_featured mode
+// (active + 5-star + has photo). MUST stay before the :review_product_id
+// wildcard or "featured" gets matched as a product id.
+router.route("/featured").get(findFeaturedReviews);
 
 // Sprint 3 — Seed Review routes (admin only)
 // Bulk accepts an optional shared image as multipart (field "shared_image"),

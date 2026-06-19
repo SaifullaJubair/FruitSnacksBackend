@@ -97,6 +97,32 @@ export const findUserReviewServices = async (
   return findReview;
 };
 
+// F4.1 — public featured reviews for the home ReviewsCarousel (auto_featured
+// mode). Active + top-rated + has a photo. No auth, no review_user_id needed
+// (the old carousel call hit findUserReview which 400s without it → section
+// never rendered). Populates the product name/slug for the card subtitle.
+export const findFeaturedReviewsServices = async (
+  limit: number,
+  minRating = 5,
+): Promise<IReviewInterface[] | []> => {
+  return ReviewModel.find({
+    review_status: "active",
+    review_ratting: { $gte: minRating },
+    review_image: { $exists: true, $nin: [null, ""] },
+  })
+    .populate([
+      {
+        path: "review_product_id",
+        model: "products",
+        select: ["product_name", "product_slug", "main_image"],
+      },
+    ])
+    .sort({ _id: -1 })
+    .limit(limit)
+    .select("-__v -review_user_id")
+    .lean();
+};
+
 // Find all dashboard Review
 // C13 HIGH 7 — optional `status` param for Pending Reviews moderation queue.
 // Pass status="pending" to get only pending reviews; omit for all reviews.

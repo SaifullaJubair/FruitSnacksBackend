@@ -10,6 +10,7 @@ import {
   findAllReviewServices,
   findAllSeededReviewServices,
   findReviewsByIdsServices,
+  findFeaturedReviewsServices,
   findUnReviewedProductServices,
   findUserReviewServices,
   postReviewServices,
@@ -430,6 +431,26 @@ export const findReviewsByIds: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Reviews fetched",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// F4.1 — public featured reviews for the home carousel (auto_featured mode).
+export const findFeaturedReviews: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const result = await findFeaturedReviewsServices(limit);
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Featured reviews fetched",
       data: result,
     });
   } catch (error) {
