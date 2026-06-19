@@ -324,6 +324,23 @@ export const getAOrderWithOrderProductsServices = async (
 };
 
 // Update A Order
+// A2.3 — allowed forward / terminal order-status transitions. The FE dropdown
+// only offers these, but a crafted PATCH could otherwise jump pending→completed
+// or revive a cancelled order; this is the server-side guard. Mirrors the
+// (previously dead) OrderTable dropdown map.
+const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
+  pending: ["on_hold", "confirmed", "cancel"],
+  on_hold: ["confirmed", "cancel"],
+  confirmed: ["processing", "cancel"],
+  processing: ["shipped", "cancel"],
+  shipped: ["delivered", "return"],
+  delivered: ["completed", "return"],
+  // terminal — no onward transitions
+  completed: [],
+  cancel: [],
+  return: [],
+};
+
 export const updateOrderServices = async (
   data: IOrderInterface,
   _id: string,
@@ -331,6 +348,19 @@ export const updateOrderServices = async (
 ): Promise<IOrderInterface | any> => {
   const updateOrderInfo = await OrderModel.findOne({ _id });
   if (!updateOrderInfo) throw new ApiError(400, "Order Not Found !");
+
+  // Guard the status change (only when the PATCH actually changes order_status).
+  const nextStatus = (data as any)?.order_status;
+  const currentStatus = (updateOrderInfo as any)?.order_status;
+  if (nextStatus && nextStatus !== currentStatus) {
+    const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? [];
+    if (!allowed.includes(nextStatus)) {
+      throw new ApiError(
+        400,
+        `Invalid order status change: "${currentStatus}" → "${nextStatus}".`,
+      );
+    }
+  }
 
   return await OrderModel.updateOne({ _id }, data, {
     session,
