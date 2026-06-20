@@ -534,12 +534,41 @@ export const findAllActiveFilteredProductServices = async (
         },
         average_review_rating: 1,
         total_reviews: 1,
+        // F3.3 — these must survive the $project so the downstream $sort can
+        // order by them. effective_price is computed earlier (variation-aware
+        // "from" price); sold_count is a root field (default 0). Without
+        // re-including them here the inclusion-projection drops them → $sort
+        // sees null and price/popular ordering silently no-ops.
+        effective_price: 1,
+        sold_count: 1,
       },
     },
   ];
 
+  // F3.3 — catalog-wide sort. The pipeline above produces effective_price /
+  // average_review_rating / createdAt / sold_count for every matched row, so we
+  // can sort the WHOLE result set here (server-side) instead of the FE only
+  // re-ordering the current page's ~20 rows ("popular ≠ popular" bug).
+  //   - "trending" is NOT a sort: it's a trending_product flag filter applied
+  //     pre-pipeline (matchConditions), so it never reaches this map.
+  //   - Unknown / missing sort → latest (createdAt desc) = the old natural-ish
+  //     default the FE used.
+  // Tie-breakers (createdAt) keep pagination deterministic across pages.
+  const SORT_MAP: Record<string, Record<string, 1 | -1>> = {
+    latest: { createdAt: -1 },
+    price_asc: { effective_price: 1, createdAt: -1 },
+    price_desc: { effective_price: -1, createdAt: -1 },
+    popular: { sold_count: -1, createdAt: -1 },
+    rating: { average_review_rating: -1, createdAt: -1 },
+  };
+  const sortStage = SORT_MAP[conditions?.sort as string] || SORT_MAP.latest;
+
+  // $sort lives ONLY in the paginated arm — adding it to the count arm would
+  // force Mongo to materialise + sort the whole match set just to $count it
+  // (B2). Count is order-independent, so it stays sort-free.
   const findFilterProduct: any = await ProductModel.aggregate([
     ...pipeline,
+    { $sort: sortStage },
     { $skip: skip },
     { $limit: limitNumber },
   ]);

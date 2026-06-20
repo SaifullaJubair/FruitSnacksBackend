@@ -74,6 +74,7 @@ export const findAllFilteredProduct: RequestHandler = async (
       limit = 20,
       trending_only,
       searchTerm,
+      sort,
     } = req.query;
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
@@ -95,6 +96,12 @@ export const findAllFilteredProduct: RequestHandler = async (
 
     if (searchTerm) {
       conditions.searchTerm = searchTerm;
+    }
+
+    // F3.3 — catalog-wide sort key (latest|price_asc|price_desc|popular|rating).
+    // "trending" is intentionally NOT a sort — it routes via trending_only above.
+    if (sort) {
+      conditions.sort = sort;
     }
 
     // if (child_categoryType) {
