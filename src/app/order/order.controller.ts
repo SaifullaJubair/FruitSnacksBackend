@@ -68,6 +68,16 @@ const findOrCreateUser = async (
   requestData: any,
   session: mongoose.ClientSession,
 ) => {
+  // F1.3 (2026-06-20) — normalize the stored order phone for EVERY order, not
+  // just guest auto-create. The FE sends `01XXXXXXXXX` for logged-in users
+  // (user_phone.slice) and E.164 `+8801…` for guests; without this the orders
+  // collection holds two formats, so any direct equality lookup on
+  // customer_phone (e.g. markAbandonedCartRecoveredByPhone) silently misses.
+  // normalizeBdPhone leaves non-BD/foreign numbers untouched (clone-safe).
+  const rawPhone = requestData?.customer_phone;
+  const normalizedPhone = normalizeBdPhone(rawPhone);
+  requestData.customer_phone = normalizedPhone;
+
   if (!requestData?.need_user_create) {
     // ✅ Logged in user — DB থেকে user_verified নিয়ে আসো
     const loggedInUser: any = await UserModel.findOne({
@@ -78,13 +88,9 @@ const findOrCreateUser = async (
     return;
   }
 
-  // B1 (2026-06-04) — normalize the inbound phone so guest-order auto-create
-  // doesn't spin up a duplicate account when the same buyer returns with a
-  // slightly different format. Look up against BOTH the normalized form AND
-  // the raw form until the backfill script rewrites legacy docs.
-  const rawPhone = requestData?.customer_phone;
-  const normalizedPhone = normalizeBdPhone(rawPhone);
-  requestData.customer_phone = normalizedPhone;
+  // B1 (2026-06-04) — guest auto-create dedup: look up against BOTH the
+  // normalized form AND the raw form until the backfill script rewrites legacy
+  // docs.
 
   const userCheck: any = await UserModel.findOne({
     $or: [
