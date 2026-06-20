@@ -59,7 +59,7 @@ FRAUDBD_API_KEY=
 **Entry points:**
 - [src/index.ts](src/index.ts) — Express app, CORS, middleware, route mounting, daily cron job
 - [src/server.ts](src/server.ts) — Mongoose connection
-- [src/routes/routes.ts](src/routes/routes.ts) — Central router that mounts all 37+ module routes under `/api/v1`
+- [src/routes/routes.ts](src/routes/routes.ts) — Central router that mounts all 45+ module routes under `/api/v1`
 
 ### Module Pattern (CRISM)
 
@@ -75,13 +75,16 @@ Every feature module under `src/app/[module]/` follows:
 
 ### Module Groups (37 modules total)
 
+> ⚠️ Module list updated 2026-06-16. Removed: `sub_category`, `child_category`, `specification` (→ nested category tree + attribute engine), `offerOrder` (→ merged into `orders` as `order_type:"offer"`). Authoritative mount list: [src/routes/routes.ts](src/routes/routes.ts).
+
 | Group | Modules |
 |-------|---------|
 | **Auth & Users** | authentication, adminRegLog, user, role, getme, supplier |
-| **Catalog** | category, sub_category, child_category, brand, attribute, specification, product, variation, productFilter |
-| **Commerce** | cart, order, orderProducts, order/courier (Pathao+Steadfast), order/webhook, fraud, coupon |
-| **Marketing** | campaign, offer, offerOrder, banner, slider, review, question |
-| **Admin Config** | setting, pageSeo, theme, faq_template, dashboard, paymentWithdrawList, withdrow_payment_method |
+| **Catalog** | category (nested tree), brand, attribute, product, variation, productFilter |
+| **Commerce** | cart, order (offer merged), orderProducts, order/courier (Pathao+Steadfast), order/webhook, fraud, coupon, payment (SSLCommerz) |
+| **Marketing** | campaign, offer, flashsale, banner, slider, review, question |
+| **Storefront extras** | wishlist, wallet, loyalty, abandonedCart, productFeed, siteFaq, newsletterSubscriber, trustPoint |
+| **Admin Config** | setting, pageSeo, theme, faq_template, dashboard, warehouse, demo, paymentWithdrawList, withdrow_payment_method |
 | **Integrations** | metaPixel, tiktokPixel, image upload helpers |
 
 ### Key Shared Utilities
@@ -130,7 +133,7 @@ A theming layer that lets each product page render with a unique palette, floati
 Key wiring:
 - `themes` collection holds reusable theme presets (colors, floating_assets, typography, button_style)
 - `products.theme_id` → references a theme; `products.theme_overrides` lets per-product fields override the base theme
-- `subcategories.default_theme_id` → applied to new products in that sub-category by default
+- `categories.default_theme_id` → applied to new products in that category node by default (nested tree; was subcategories)
 - Product model has 4 lifecycle hooks (`save`, `findOneAndDelete`, `deleteOne`, `findOneAndUpdate`) that keep `themes.used_in_products` counter in sync — this drives the `is_deletable` flag (a theme used by any product cannot be deleted)
 - `faq_templates` collection — reusable FAQ entries admin can copy into a product's `faqs[]` array
 - Variations now have `variation_weight_grams` to fix the old hardcoded `0.5kg` Pathao courier weight

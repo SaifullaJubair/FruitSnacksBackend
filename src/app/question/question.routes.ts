@@ -16,7 +16,9 @@ router
   .get(findUserQuestion)
   .post(postQuestion)
   .patch(verifyToken("question_update"), updateQuestion)
-  .delete(deleteAQuestionInfo);
+  // SHF-2: was unauthenticated — anyone with a question id could hard-delete.
+  // POST stays public (storefront customers ask questions); delete is admin-only.
+  .delete(verifyToken("question_update"), deleteAQuestionInfo);
 
 // get all Question in dashboard
 router.route("/dashboard").get(verifyToken("question_show"), findAllDashboardQuestion);

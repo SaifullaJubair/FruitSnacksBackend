@@ -11,17 +11,22 @@ import {
 
 const router = express.Router();
 
+// NOTE: previously gated by setting_update / setting_show — flags that don't
+// exist in role.model.ts, so verifyToken always failed → warehouse CRUD was
+// permanently 403 (even for super-admin). Repointed to the existing
+// `site_setting_update` flag (warehouse is part of site config). `/default`
+// stays public (product form + storefront need the default warehouse).
 router
   .route("/")
-  .post(verifyToken("setting_update"), postWarehouse)
-  .get(verifyToken("setting_show"), findAllWarehouse);
+  .post(verifyToken("site_setting_update"), postWarehouse)
+  .get(verifyToken("site_setting_update"), findAllWarehouse);
 
 router.route("/default").get(findDefaultWarehouse);
 
 router
   .route("/:_id")
-  .get(verifyToken("setting_show"), findAWarehouse)
-  .patch(verifyToken("setting_update"), updateWarehouse)
-  .delete(verifyToken("setting_update"), deleteWarehouse);
+  .get(verifyToken("site_setting_update"), findAWarehouse)
+  .patch(verifyToken("site_setting_update"), updateWarehouse)
+  .delete(verifyToken("site_setting_update"), deleteWarehouse);
 
 export const WarehouseRoutes = router;

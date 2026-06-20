@@ -32,10 +32,11 @@ router
   )
   .delete(verifyToken("campaign_delete"), deleteACampaignInfo);
 
-// get all Campaign in dashboard
+// Admin-only product picker for adding products to a campaign. SHF-1: was
+// public + leaked product_buying_price/sku/barcode/alert_qty to anyone.
 router
   .route("/dashboard/add_campaign_product")
-  .get(findProductToAddCampaign);
+  .get(verifyToken("campaign_create"), findProductToAddCampaign);
 
 // get all Campaign in dashboard
 router.route("/dashboard").get(verifyToken("campaign_show"), findAllDashboardCampaign);

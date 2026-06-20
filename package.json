@@ -9,6 +9,7 @@
     "build": "tsc",
     "seed:theme": "ts-node-dev --transpile-only src/seeds/seed.theme.ts",
     "seed:demo": "ts-node-dev --transpile-only src/scripts/seed-demo.ts",
+    "seed:promo": "ts-node-dev --transpile-only src/scripts/seed-promotions.ts",
     "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts"
   },
   "author": "",

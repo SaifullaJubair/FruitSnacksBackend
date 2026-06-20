@@ -3,46 +3,11 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import OrderModel from "../order.model";
 import { restockOrder } from "../order.stock";
+// Single source of truth — same map the send-service uses. Was duplicated here
+// (drift risk); import it instead so the two never diverge.
+import { pathaoStatusMap } from "../pathao.service";
 
 const PATHAO_WEBHOOK_SECRET = process.env.PATHAO_WEBHOOK_SECRET || "";
-
-// ── Pathao status → আমাদের order_status ──────────────────────
-const pathaoStatusMap: Record<string, string> = {
-  // Processing
-  Pending: "processing",
-  "Order Created": "processing",
-  "Order Updated": "processing",
-  "Pickup Requested": "processing",
-  "Pickup Scheduled": "processing",
-  "Assigned For Pickup": "processing",
-  "Pickup Failed": "processing",
-  "Pickup Cancel": "cancel",
-  "Pickup Cancelled": "cancel",
-  Exchange: "processing",
-  // Shipped
-  Pickup: "shipped",
-  "Picked Up": "shipped",
-  "At the Sorting Hub": "shipped",
-  "In Transit": "shipped",
-  "Received at Last Mile Hub": "shipped",
-  "Assigned for Delivery": "shipped",
-  "Out for Delivery": "shipped",
-  "On Hold": "shipped",
-  Hold: "shipped",
-  // Delivered
-  Delivered: "delivered",
-  "Partial Delivery": "delivered",
-  "Partially Delivered": "delivered",
-  // Return
-  Return: "return",
-  Returned: "return",
-  "Paid Return": "return",
-  "Partially Returned": "return",
-  // Cancel
-  "Delivery Failed": "cancel",
-  Cancelled: "cancel",
-  "Delivery Cancelled": "cancel",
-};
 
 // ── Signature verify ──────────────────────────────────────────
 const verifyPathaoSignature = (

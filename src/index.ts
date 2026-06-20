@@ -161,11 +161,18 @@ const updateCampaignStatus = async () => {
   }
 };
 
-// Schedule the cron job to run every day at 11:55 PM
-cron.schedule("55 23 * * *", () => {
-  logger.info("Running daily campaign/offer status cron at 23:55");
-  updateCampaignStatus();
-});
+// Schedule the cron job to run every day at 23:55 UTC.
+// Pin the timezone explicitly — without it node-cron uses the server's local
+// TZ, which on the VPS is not UTC, so the run time drifted from the documented
+// "23:55 UTC".
+cron.schedule(
+  "55 23 * * *",
+  () => {
+    logger.info("Running daily campaign/offer status cron at 23:55 UTC");
+    updateCampaignStatus();
+  },
+  { timezone: "UTC" },
+);
 
 const port: number | any = process.env.PORT || 8080;
 

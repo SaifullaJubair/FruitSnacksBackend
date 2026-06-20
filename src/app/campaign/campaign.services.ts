@@ -207,7 +207,8 @@ export const findAllDashboardCampaignServices = async (
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
-    .select("-__v")
+    // SHF-3: don't expose which admin created/edited the campaign.
+    .select("-__v -campaign_publisher_id -campaign_updated_by")
     .lean();
 
   // Check for products with is_variation = true and fetch variations
@@ -319,11 +320,24 @@ export const findProductToAddCampaignServices = async (
     { $skip: skip },
     { $limit: limit },
     {
+      // SHF-1: strip cost/warehouse-only fields so the campaign product picker
+      // never exposes buying price, alert qty, SKU or barcodes (admin-only data
+      // not needed to choose products for a campaign).
       $project: {
         __v: 0,
+        product_buying_price: 0,
+        product_alert_quantity: 0,
+        product_sku: 0,
+        barcode: 0,
+        barcode_image: 0,
         "category_info.__v": 0,
         "subcategory_info.__v": 0,
         "variation_details.__v": 0,
+        "variation_details.variation_buying_price": 0,
+        "variation_details.variation_alert_quantity": 0,
+        "variation_details.variation_sku": 0,
+        "variation_details.variation_barcode": 0,
+        "variation_details.variation_barcode_image": 0,
       },
     },
   ]);
@@ -333,7 +347,7 @@ export const findProductToAddCampaignServices = async (
 
 // Update a Campaign
 export const updateCampaignServices = async (
-  data: ICampaignInterface,
+  data: ICampaignInterface | any,
   _id: string
 ): Promise<ICampaignInterface | any> => {
   const updateCampaignInfo: ICampaignInterface | null =
@@ -343,7 +357,26 @@ export const updateCampaignServices = async (
   if (!updateCampaignInfo) {
     return {};
   }
-  const Campaign = await CampaignModel.updateOne({ _id: _id }, data, {
+  // Field allowlist (mirrors the hardened updateCouponServices). Previously the
+  // raw request body was passed straight to updateOne, letting a PATCH write any
+  // arbitrary field. Only these may be updated.
+  const ALLOWED: string[] = [
+    "campaign_image",
+    "campaign_image_key",
+    "campaign_title",
+    "campaign_description",
+    "campaign_start_date",
+    "campaign_end_date",
+    "campaign_status",
+    "campaign_products",
+    "campaign_updated_by",
+  ];
+  const update: Record<string, unknown> = {};
+  for (const key of ALLOWED) {
+    if (data?.[key] !== undefined) update[key] = data[key];
+  }
+
+  const Campaign = await CampaignModel.updateOne({ _id: _id }, update, {
     runValidators: true,
   });
   return Campaign;
