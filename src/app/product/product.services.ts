@@ -2966,6 +2966,8 @@ export const findJustForYouProductServices = async (): Promise<
 // stock, category, name, etc. theme_id "" / null is treated as "clear theme".
 const PAGE_CONTENT_FIELDS = [
   "theme_id",
+  "description",
+  "custom_fields",
   "short_description",
   "benefits_side_image",
   "benefits_side_image_key",
@@ -3017,6 +3019,20 @@ export const updateProductPageContentServices = async (
         continue;
       }
       set.theme_id = value;
+      continue;
+    }
+    // Free-form spec rows — normalize the same way the full-create controller
+    // does (trim label/value, drop rows missing either, keep optional icon_key)
+    // so the Page Content editor can't persist half-filled / raw rows.
+    if (field === "custom_fields") {
+      const arr = Array.isArray(value) ? value : [];
+      set.custom_fields = arr
+        .map((row: any) => ({
+          label: String(row?.label ?? "").trim(),
+          value: String(row?.value ?? "").trim(),
+          icon_key: row?.icon_key ? String(row.icon_key) : undefined,
+        }))
+        .filter((row: any) => row.label && row.value);
       continue;
     }
     set[field] = value;
