@@ -3035,6 +3035,23 @@ export const updateProductPageContentServices = async (
         .filter((row: any) => row.label && row.value);
       continue;
     }
+    // benefits: per-item {text, icon_url?, icon_key?}. Accept BOTH the new
+    // object rows AND legacy plain strings (older clients / migration) and
+    // normalize to the object shape; drop rows with no text.
+    if (field === "benefits") {
+      const arr = Array.isArray(value) ? value : [];
+      set.benefits = arr
+        .map((row: any) => {
+          if (typeof row === "string") return { text: row.trim() };
+          return {
+            text: String(row?.text ?? "").trim(),
+            icon_url: row?.icon_url ? String(row.icon_url) : undefined,
+            icon_key: row?.icon_key ? String(row.icon_key) : undefined,
+          };
+        })
+        .filter((row: any) => row.text);
+      continue;
+    }
     set[field] = value;
   }
 

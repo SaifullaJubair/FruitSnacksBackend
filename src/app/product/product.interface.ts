@@ -212,7 +212,10 @@ export interface IProductInterface {
   process_steps?: IconTextItem[];
 
   // Sections
-  benefits?: string[];
+  // benefits: now per-item text + optional icon (IconTextItem), same shape as
+  // use_cases. `string` kept in the union for back-compat with legacy rows
+  // (seed/demo + products created before this change).
+  benefits?: (string | IconTextItem)[];
   use_cases?: IconTextItem[];
   nutrition?: IProductNutrition;
   faqs?: IProductFaq[];
