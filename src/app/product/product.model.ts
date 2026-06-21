@@ -327,7 +327,10 @@ const productSchema = new Schema<IProductInterface>(
       },
     ],
 
-    benefits: [{ type: String }],
+    // benefits: per-item text + optional admin-picked/uploaded icon (mirrors
+    // use_cases). Schema.Types.Mixed so legacy string[] rows (seed/demo + older
+    // products) still load — the FE + write-path normalize handle both shapes.
+    benefits: [{ type: Schema.Types.Mixed }],
 
     use_cases: [
       {
