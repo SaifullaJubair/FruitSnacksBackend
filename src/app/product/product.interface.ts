@@ -206,6 +206,11 @@ export interface IProductInterface {
   use_cases_side_image_key?: string;
   faq_side_image?: string;
   faq_side_image_key?: string;
+  // Per-section side-image visibility toggle. Absent/true = show (storefront
+  // gate is `!== false`); false = hide the side image including main_image fallback.
+  benefits_side_image_show?: boolean;
+  use_cases_side_image_show?: boolean;
+  faq_side_image_show?: boolean;
 
   // Below-hero icon rows (max 4)
   short_features?: IconTextItem[];

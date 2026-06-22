@@ -2975,9 +2975,13 @@ const PAGE_CONTENT_FIELDS = [
   "use_cases_side_image_key",
   "faq_side_image",
   "faq_side_image_key",
+  "benefits_side_image_show",
+  "use_cases_side_image_show",
+  "faq_side_image_show",
   "badge_text",
   "hero_corner_badge",
   "video_title",
+  "video_link",
   "benefits",
   "short_features",
   "process_steps",
@@ -3050,6 +3054,16 @@ export const updateProductPageContentServices = async (
           };
         })
         .filter((row: any) => row.text);
+      continue;
+    }
+    // Side-image visibility toggles are booleans. Normalize explicitly because
+    // a form could send the string "false", which Mongoose casts to `true`.
+    if (
+      field === "benefits_side_image_show" ||
+      field === "use_cases_side_image_show" ||
+      field === "faq_side_image_show"
+    ) {
+      set[field] = value === true || value === "true";
       continue;
     }
     set[field] = value;

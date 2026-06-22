@@ -309,6 +309,13 @@ const productSchema = new Schema<IProductInterface>(
     use_cases_side_image_key: { type: String },
     faq_side_image: { type: String },
     faq_side_image_key: { type: String },
+    // Per-section "show the side image on PDP" toggle. Absent = show (the
+    // storefront gate is `!== false`, so legacy products keep their image +
+    // main_image fallback). Setting false hides the side image entirely,
+    // including the main_image fallback.
+    benefits_side_image_show: { type: Boolean, default: true },
+    use_cases_side_image_show: { type: Boolean, default: true },
+    faq_side_image_show: { type: Boolean, default: true },
 
     short_features: [
       {
