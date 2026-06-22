@@ -355,7 +355,71 @@ export const findAllActiveFilteredProductServices = async (
               variation_price_delta: "$$variation.variation_price_delta",
               variation_quantity: "$$variation.variation_quantity",
               variation_image: "$$variation.variation_image",
+              variation_images: "$$variation.variation_images",
               is_active: "$$variation.is_active",
+            },
+          },
+        },
+      },
+    },
+    // Card hover-carousel images: flatten every variation's variation_images
+    // (the multi-image array), append other_images, drop the main_image (it's
+    // the card's base layer) + empties, de-dupe, cap. The storefront ProductCard
+    // reads `card_hover_images` directly so the list payload stays lean (we
+    // don't ship full variation/other_image objects to the grid).
+    {
+      $addFields: {
+        card_hover_images: {
+          $let: {
+            vars: {
+              merged: {
+                $concatArrays: [
+                  {
+                    $reduce: {
+                      input: { $ifNull: ["$variations", []] },
+                      initialValue: [],
+                      in: {
+                        $concatArrays: [
+                          "$$value",
+                          { $ifNull: ["$$this.variation_images", []] },
+                        ],
+                      },
+                    },
+                  },
+                  {
+                    $map: {
+                      input: { $ifNull: ["$other_images", []] },
+                      as: "o",
+                      in: "$$o.other_image",
+                    },
+                  },
+                ],
+              },
+            },
+            in: {
+              $slice: [
+                {
+                  $reduce: {
+                    input: "$$merged",
+                    initialValue: [],
+                    in: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $ne: ["$$this", null] },
+                            { $ne: ["$$this", ""] },
+                            { $ne: ["$$this", "$main_image"] },
+                            { $not: [{ $in: ["$$this", "$$value"] }] },
+                          ],
+                        },
+                        { $concatArrays: ["$$value", ["$$this"]] },
+                        "$$value",
+                      ],
+                    },
+                  },
+                },
+                6,
+              ],
             },
           },
         },
@@ -469,6 +533,11 @@ export const findAllActiveFilteredProductServices = async (
         product_name: 1,
         product_slug: 1,
         main_image: 1,
+        // Storefront card media: main_video drives the hover-video; if there's
+        // no video, card_hover_images drives the hover carousel. Both must
+        // survive the inclusion-projection or the card has nothing to show.
+        main_video: 1,
+        card_hover_images: 1,
         attributes_details: {
           $let: {
             vars: {
