@@ -170,6 +170,13 @@ export interface IProductInterface {
   main_image_key?: string;
   size_chart?: string;
   size_chart_key?: string;
+  // Structured size guide (niche-agnostic). columns = admin-defined headers;
+  // each row is a flat string[] of cells aligned to columns. PDP renders a
+  // table, data-gated when empty.
+  size_guide_title?: string;
+  size_guide_note?: string;
+  size_guide_columns?: string[];
+  size_guide_rows?: string[][];
   main_video?: string;
   main_video_key?: string;
   other_images?: otherimagesArray[];
