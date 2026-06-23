@@ -189,6 +189,17 @@ const productSchema = new Schema<IProductInterface>(
     size_chart_key: {
       type: String,
     },
+    // Structured size guide (niche-agnostic). `size_guide_columns` are the
+    // admin-defined headers (e.g. ["Size","EU","UK","CM"] for shoes, or
+    // ["Size","Chest","Waist","Length"] for shirts); each row in
+    // `size_guide_rows` is a flat string[] of cell values aligned to those
+    // columns. Rendered as a table on the PDP, data-gated (hidden when empty),
+    // so food / unsized products simply leave it blank. The size_chart IMAGE
+    // above is separate and complements this (admin can give either or both).
+    size_guide_title: { type: String },
+    size_guide_note: { type: String },
+    size_guide_columns: [{ type: String }],
+    size_guide_rows: [[{ type: String }]],
     main_video: {
       type: String,
     },

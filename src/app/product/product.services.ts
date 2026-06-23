@@ -2978,6 +2978,10 @@ const PAGE_CONTENT_FIELDS = [
   "benefits_side_image_show",
   "use_cases_side_image_show",
   "faq_side_image_show",
+  "size_guide_title",
+  "size_guide_note",
+  "size_guide_columns",
+  "size_guide_rows",
   "badge_text",
   "hero_corner_badge",
   "video_title",
@@ -3064,6 +3068,44 @@ export const updateProductPageContentServices = async (
       field === "faq_side_image_show"
     ) {
       set[field] = value === true || value === "true";
+      continue;
+    }
+    // Size-guide grid: columns is a flat string[]; rows is string[][] where each
+    // row's cell count is padded/truncated to the column count so the PDP table
+    // never renders ragged (a row with fewer cells than headers, or extras).
+    // Trim empty trailing columns/rows so a half-filled paste doesn't persist.
+    if (field === "size_guide_columns") {
+      const cols = (Array.isArray(value) ? value : [])
+        .map((c: any) => String(c ?? "").trim())
+        .slice(0, 8); // cap (MEDIUM)
+      // drop trailing empty headers
+      while (cols.length && !cols[cols.length - 1]) cols.pop();
+      set.size_guide_columns = cols;
+      continue;
+    }
+    if (field === "size_guide_rows") {
+      // Need the resolved column count to pad rows. Prefer the columns coming in
+      // the same payload; fall back to the longest row if columns weren't sent.
+      const incomingCols = Array.isArray(data?.size_guide_columns)
+        ? data.size_guide_columns.filter((c: any) => String(c ?? "").trim())
+            .length
+        : 0;
+      const rawRows = (Array.isArray(value) ? value : [])
+        .map((r: any) => (Array.isArray(r) ? r.map((c) => String(c ?? "").trim()) : []))
+        .slice(0, 30); // cap (MEDIUM)
+      const width =
+        incomingCols ||
+        rawRows.reduce((m: number, r: string[]) => Math.max(m, r.length), 0);
+      const rows = rawRows
+        // pad/truncate each row to `width`
+        .map((r: string[]) => {
+          const out = r.slice(0, width);
+          while (out.length < width) out.push("");
+          return out;
+        })
+        // drop fully-empty rows
+        .filter((r: string[]) => r.some((c) => c));
+      set.size_guide_rows = rows;
       continue;
     }
     set[field] = value;
