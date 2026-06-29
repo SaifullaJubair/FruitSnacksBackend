@@ -13,6 +13,7 @@ import connectDB from "./server";
 import httpStatus from "http-status";
 import routes from "./routes/routes";
 import globalErrorHandler from "./middlewares/global.error.handler";
+import { responseContext } from "./middlewares/response.context";
 import { logger } from "./utils/logger";
 const cookieParser = require("cookie-parser");
 import cron from "node-cron";
@@ -27,6 +28,10 @@ const app: Application = express();
 // Coolify's reverse proxy. "1" = trust the first proxy hop only (safe — don't
 // blindly trust spoofed X-Forwarded-For from arbitrary upstreams).
 app.set("trust proxy", 1);
+
+// §9.1 envelope context — must run before everything so res.locals carries
+// requestId/path/method/timestamp for every response (success and error).
+app.use(responseContext);
 
 // F003: security headers (helmet). CSP intentionally off — needs separate
 // session to map all external sources (S3, pixels, SSLCommerz iframe). See
@@ -98,19 +103,24 @@ app.use("/api/v1", routes);
 //global error handler
 app.use(globalErrorHandler);
 
-//handle not found
-app.use((req: Request, res: Response, next: NextFunction) => {
+//handle not found — same §9.1 envelope so the V2 apiClient sees a consistent
+// error shape (error.code NOT_FOUND) on unmatched routes too.
+app.use((req: Request, res: Response, _next: NextFunction) => {
   res.status(httpStatus.NOT_FOUND).json({
     success: false,
+    statusCode: httpStatus.NOT_FOUND,
     message: "Not Found",
-    errorMessages: [
-      {
-        path: req.originalUrl,
-        message: "API Not Found",
-      },
-    ],
+    data: null,
+    error: {
+      code: "NOT_FOUND",
+      message: "API Not Found",
+      details: [{ path: req.originalUrl, message: "API Not Found" }],
+    },
+    path: res.locals.path ?? req.originalUrl,
+    method: res.locals.method ?? req.method,
+    requestId: res.locals.requestId,
+    timestamp: res.locals.timestamp ?? new Date().toISOString(),
   });
-  next();
 });
 
 //connect to db
