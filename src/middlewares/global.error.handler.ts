@@ -46,8 +46,13 @@ const globalErrorHandler: ErrorRequestHandler = (
   } else if (error instanceof ApiError) {
     statusCode = error.statusCode;
     message = error.message;
-    code = codeFromStatus(statusCode);
-    details = error.message ? [{ path: "", message: error.message }] : [];
+    // explicit code/details (V2 rich errors) win; else derive from status.
+    code = error.code ?? codeFromStatus(statusCode);
+    details = error.details?.length
+      ? error.details
+      : error.message
+        ? [{ path: "", message: error.message }]
+        : [];
   } else if (error instanceof Error) {
     message = error.message;
     details = error.message ? [{ path: "", message: error.message }] : [];

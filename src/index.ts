@@ -14,6 +14,7 @@ import httpStatus from "http-status";
 import routes from "./routes/routes";
 import globalErrorHandler from "./middlewares/global.error.handler";
 import { responseContext } from "./middlewares/response.context";
+import v2Router from "./app/v2/v2.routes";
 import { logger } from "./utils/logger";
 const cookieParser = require("cookie-parser");
 import cron from "node-cron";
@@ -99,6 +100,9 @@ app.get("/", async (req: Request, res: Response) => {
 
 // Import All Api
 app.use("/api/v1", routes);
+
+// V2 clean REST layer (brand/category/... ) — alongside V1, never replaces it.
+app.use("/api/v2", v2Router);
 
 //global error handler
 app.use(globalErrorHandler);
