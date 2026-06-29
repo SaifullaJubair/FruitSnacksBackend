@@ -1,5 +1,6 @@
 import express from "express";
 import { V2BrandRoutes } from "./brand/v2.brand.routes";
+import { V2CategoryRoutes } from "./category/v2.category.routes";
 
 // Aggregate router for the clean V2 REST layer, mounted at /api/v2 (alongside
 // the untouched V1 /api/v1). Every V2 admin resource gets a clean contract:
@@ -8,7 +9,10 @@ import { V2BrandRoutes } from "./brand/v2.brand.routes";
 // future resources register here.
 const v2Router = express.Router();
 
-const v2Modules = [{ path: "/brand", route: V2BrandRoutes }];
+const v2Modules = [
+  { path: "/brand", route: V2BrandRoutes },
+  { path: "/category", route: V2CategoryRoutes },
+];
 
 v2Modules.forEach((m) => v2Router.use(m.path, m.route));
 
