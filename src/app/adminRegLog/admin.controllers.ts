@@ -44,8 +44,12 @@ export const getMeAdmin: RequestHandler = async (
       throw new ApiError(401, "Not an admin token.");
     }
 
+    // Never leak the bcrypt hash to the client — getMe is read by the admin UI
+    // on every protected page load.
     const Admin = decode?._id
-      ? await AdminModel.findById(decode._id).populate("role_id")
+      ? await AdminModel.findById(decode._id)
+          .select("-admin_password")
+          .populate("role_id")
       : await findAdminInfoServices(decode.admin_phone);
 
     if (Admin) {

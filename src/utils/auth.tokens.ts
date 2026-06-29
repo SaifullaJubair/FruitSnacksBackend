@@ -111,10 +111,20 @@ type ResLike = {
   clearCookie: (name: string, opts?: any) => void;
 };
 
+// Cookie cross-site policy must differ by environment:
+//  - production: the admin/storefront/API live on separate subdomains, so the
+//    cookie has to be sent cross-site → `sameSite:"none"` which REQUIRES
+//    `secure:true` (HTTPS only).
+//  - local dev: there is no HTTPS, and `secure:true` makes the browser silently
+//    DROP the cookie over http://localhost → login appears to work but getMe is
+//    always 401. localhost:3000↔localhost:5000 are the same site (host
+//    `localhost`), so `sameSite:"lax"` + `secure:false` lets the cookie stick.
+// Toggled off NODE_ENV so V1 and V2 dev both work without HTTPS.
+const isProd = process.env.NODE_ENV === "production";
 const baseCookieOpts = {
   httpOnly: true,
-  secure: true,
-  sameSite: "none" as const,
+  secure: isProd,
+  sameSite: (isProd ? "none" : "lax") as "none" | "lax",
 };
 
 export const setAccessCookie = (res: ResLike, who: Who, token: string) => {
