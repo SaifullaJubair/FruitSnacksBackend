@@ -65,11 +65,30 @@ export const v2CategoryList: RequestHandler = async (req, res, next) => {
     if (status) and.push({ category_status: status });
     const where = and.length ? { $and: and } : {};
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, statsAgg] = await Promise.all([
       CategoryModel.find(where).sort(sort).skip(skip).limit(limit).select("-__v").lean(),
       CategoryModel.countDocuments(where),
+      // Whole-collection stats (NOT filtered by search/page) for the stat cards.
+      CategoryModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            roots: {
+              $sum: {
+                $cond: [{ $in: ["$parent_id", [null, undefined]] }, 1, 0],
+              },
+            },
+            featured: { $sum: { $cond: ["$feature_category_show", 1, 0] } },
+            inactive: {
+              $sum: { $cond: [{ $eq: ["$category_status", "in-active"] }, 1, 0] },
+            },
+          },
+        },
+      ]),
     ]);
 
+    const s = statsAgg[0] ?? {};
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -78,6 +97,12 @@ export const v2CategoryList: RequestHandler = async (req, res, next) => {
       total,
       page,
       limit,
+      stats: {
+        total: s.total ?? 0,
+        roots: s.roots ?? 0,
+        featured: s.featured ?? 0,
+        inactive: s.inactive ?? 0,
+      },
     });
   } catch (error) {
     next(error);

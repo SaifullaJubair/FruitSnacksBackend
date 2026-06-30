@@ -23,6 +23,10 @@ export interface IApiEnvelope<T> {
   message: string | null;
   data: T | null;
   meta?: IResponseMeta;
+  /** Optional whole-collection summary counts for a list (NOT page-scoped) —
+   *  e.g. { total, active, inactive } so admin stat cards are accurate across
+   *  pages. Each resource defines its own keys. */
+  stats?: Record<string, number>;
   error?: IResponseError;
   path: string;
   method: string;

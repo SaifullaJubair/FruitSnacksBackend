@@ -52,7 +52,7 @@ export const v2BrandList: RequestHandler = async (req, res, next) => {
     if (status) and.push({ brand_status: status });
     const where = and.length ? { $and: and } : {};
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, statsAgg] = await Promise.all([
       BrandModel.find(where)
         .populate("category_id")
         .sort(sort)
@@ -61,8 +61,25 @@ export const v2BrandList: RequestHandler = async (req, res, next) => {
         .select("-__v")
         .lean(),
       BrandModel.countDocuments(where),
+      // Whole-collection stats (NOT filtered by search/page) for the stat cards.
+      BrandModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            active: {
+              $sum: { $cond: [{ $eq: ["$brand_status", "active"] }, 1, 0] },
+            },
+            inactive: {
+              $sum: { $cond: [{ $eq: ["$brand_status", "in-active"] }, 1, 0] },
+            },
+            shown: { $sum: { $cond: ["$brand_show", 1, 0] } },
+          },
+        },
+      ]),
     ]);
 
+    const s = statsAgg[0] ?? {};
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
@@ -71,6 +88,12 @@ export const v2BrandList: RequestHandler = async (req, res, next) => {
       total,
       page,
       limit,
+      stats: {
+        total: s.total ?? 0,
+        active: s.active ?? 0,
+        inactive: s.inactive ?? 0,
+        shown: s.shown ?? 0,
+      },
     });
   } catch (error) {
     next(error);

@@ -23,6 +23,8 @@ type IApiResponse<T> = {
   total?: number;
   page?: number;
   limit?: number;
+  // whole-collection summary counts for list stat cards (NOT page-scoped).
+  stats?: Record<string, number>;
 };
 
 const resolveMeta = <T>(input: IApiResponse<T>): IResponseMeta | undefined => {
@@ -45,6 +47,7 @@ const sendResponse = <T>(res: Response, input: IApiResponse<T>): void => {
     message: input.message ?? null,
     data: input.data ?? null,
     ...(meta ? { meta } : {}),
+    ...(input.stats ? { stats: input.stats } : {}),
     path: res.locals.path ?? "",
     method: res.locals.method ?? "",
     requestId: res.locals.requestId ?? randomUUID(),
