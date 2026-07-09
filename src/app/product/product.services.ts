@@ -3135,11 +3135,19 @@ export const updateProductPageContentServices = async (
 // $unset.
 //
 // Item 10 post-hoc audit (2026-06-05) — expanded OPTIONAL_FK_FIELDS to also
-// cover `product_supplier_id`, `warehouse_id`, and `theme_id`. All three had
-// the same silent-fail-on-clear bug; the audit also flagged that switching
-// from `updateOne` to `findOneAndUpdate` is required for the existing
-// theme-usage counter hooks in product.model.ts (pre/post findOneAndUpdate)
-// to actually fire — otherwise theme.used_in_products drifts permanently.
+// cover `product_supplier_id` and `warehouse_id`; both had the same
+// silent-fail-on-clear bug. The audit also flagged that switching from
+// `updateOne` to `findOneAndUpdate` is required for the existing theme-usage
+// counter hooks in product.model.ts (pre/post findOneAndUpdate) to actually
+// fire — otherwise theme.used_in_products drifts permanently.
+//
+// `theme_id` is deliberately NOT in this list, though that same audit added it.
+// Every field here is one the main product form always sends, so "absent" can
+// only mean the admin cleared it. The main form has no theme control at all and
+// never sends theme_id — so the absent-means-cleared rule below silently
+// $unset the theme on every ordinary product save. Themes are assigned and
+// cleared solely through updateProductPageContentServices, which has its own
+// $set/$unset handling (explicit `null` clears, missing key = no change).
 //
 // `category_path` is intentionally NOT in the allow-list: the controller
 // always sends it as `[]` for "no category" (via resolveProductCategoryPath),
@@ -3149,7 +3157,6 @@ const OPTIONAL_FK_FIELDS = [
   "category_id",
   "product_supplier_id",
   "warehouse_id",
-  "theme_id",
 ] as const;
 
 export const updateProductServices = async (
@@ -3167,10 +3174,12 @@ export const updateProductServices = async (
   const unsetData: any = {};
 
   for (const field of OPTIONAL_FK_FIELDS) {
-    const present = Object.prototype.hasOwnProperty.call(data, field);
+    // A missing key means "this caller does not manage the field" — leave it
+    // alone. Only an explicitly-sent empty value is the admin clearing it.
+    // (Treating absent as cleared is what wiped theme_id on every save.)
+    if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
     const value = (data as any)[field];
-    const isCleared =
-      !present || value === undefined || value === null || value === "";
+    const isCleared = value === undefined || value === null || value === "";
     if (isCleared) {
       unsetData[field] = "";
       delete updateData[field];
