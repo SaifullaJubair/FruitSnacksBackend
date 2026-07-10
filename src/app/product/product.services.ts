@@ -3411,12 +3411,46 @@ export const findAllDashboardProductRichServices = async (
     ? await VariationModel.aggregate([
         { $match: { product_id: { $in: variationProductIds } } },
         {
+          // The price a customer actually pays for this variation: the discount
+          // when one is set, otherwise the list price. Mirrors the storefront's
+          // VariationPicker. Only active variations count toward the range — a
+          // disabled one can't be bought, so it must not widen the "from" price.
+          $addFields: {
+            _effective_price: {
+              $cond: [
+                {
+                  $and: [
+                    { $gt: ["$variation_discount_price", 0] },
+                    {
+                      $ne: [
+                        "$variation_discount_price",
+                        "$variation_price",
+                      ],
+                    },
+                  ],
+                },
+                "$variation_discount_price",
+                "$variation_price",
+              ],
+            },
+            _is_buyable: { $cond: [{ $ne: ["$is_active", false] }, 1, 0] },
+          },
+        },
+        {
           $group: {
             _id: "$product_id",
             count: { $sum: 1 },
             stock_total: { $sum: { $ifNull: ["$variation_quantity", 0] } },
-            active_count: {
-              $sum: { $cond: [{ $ne: ["$is_active", false] }, 1, 0] },
+            active_count: { $sum: "$_is_buyable" },
+            price_min: {
+              $min: {
+                $cond: [{ $eq: ["$_is_buyable", 1] }, "$_effective_price", null],
+              },
+            },
+            price_max: {
+              $max: {
+                $cond: [{ $eq: ["$_is_buyable", 1] }, "$_effective_price", null],
+              },
             },
           },
         },
@@ -3449,6 +3483,11 @@ export const findAllDashboardProductRichServices = async (
         ...p,
         _variation_count: variation_count,
         _variation_active_count: variationStats?.active_count || 0,
+        // Effective price range across the ACTIVE variations. null when the
+        // product has no variations (or none active) — the admin list falls
+        // back to the product-level price then, same as the storefront does.
+        _price_min: variationStats?.price_min ?? null,
+        _price_max: variationStats?.price_max ?? null,
         _stock_total: stock_total,
         _is_low_stock: alert_qty > 0 && stock_total <= alert_qty,
         _is_out_of_stock: stock_total <= 0,
