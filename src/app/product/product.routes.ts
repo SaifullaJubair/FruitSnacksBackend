@@ -122,7 +122,16 @@ router
   );
 
 // get a dashboard product
-router.route("/dashboard/:_id").get(findADashboardProduct);
+//
+// Admin-only, like the /dashboard list route above — this single-doc variant
+// was the one that got missed. It returns product_buying_price and every
+// variation's variation_buying_price (the shop's cost prices), plus SKUs and
+// barcodes, so an anonymous request could read the margins for any guessable
+// product id. Its only callers are the admin's stock + variations modals, both
+// of which already send credentials; the storefront never touches it.
+router
+  .route("/dashboard/:_id")
+  .get(verifyToken("product_show"), findADashboardProduct);
 
 // get cart product details (POST — body avoids URL length limits on large carts)
 router.route("/cart_product").post(findCartProduct);
