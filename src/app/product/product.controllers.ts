@@ -142,22 +142,48 @@ const processVariationImages = async (
   delete product.variation_images_urls;
 };
 
+/** A value that arrived over multipart/form-data and means "empty". */
+const isBlankFormValue = (v: any): boolean =>
+  v === "" ||
+  v === null ||
+  v === undefined ||
+  v === "null" ||
+  v === "undefined" ||
+  (typeof v === "string" && v.trim() === "");
+
 /**
- * Phase A MOD #3 — coerce empty-string variation_weight_grams to null before
- * insertMany. Empty string casts to NaN in Mongoose Number fields, which
- * throws on `insertMany({ ordered: true })` and rolls back the entire batch.
- * Most rows arrive with `""` because the admin matrix input is blank.
- * Frontend also coerces but this is the authoritative safety net.
+ * Normalise the optional variation fields that arrive over FormData, where
+ * there is no `null` — only strings. Every one of these is `default: null` in
+ * variation.model.ts, so a blank must become `null`, not `""`.
+ *
+ * Phase A MOD #3 — variation_weight_grams: empty string casts to NaN in
+ * Mongoose Number fields, which throws on `insertMany({ ordered: true })` and
+ * rolls back the entire batch. Most rows arrive with `""` because the admin
+ * matrix input is blank.
+ *
+ * The badge fields (2026-07-10): the admin form used to *omit* these keys when
+ * empty, and the update path spreads the row straight into
+ * `VariationModel.updateOne({_id}, v)` — Mongoose wraps that in `$set`, which
+ * only merges keys that are present. So clearing a badge silently left the old
+ * value behind, and the PDP kept rendering it (the client saw a badge moved
+ * from row 1 to row 2 show up on *both*). The admin now always sends the keys;
+ * this is the authoritative coercion, so the fix does not depend on the client
+ * sending exactly the right thing.
  */
-const sanitizeVariationWeights = (rows: any[]): void => {
+const sanitizeVariationOptionalFields = (rows: any[]): void => {
   for (const r of rows || []) {
-    if (
-      r?.variation_weight_grams === "" ||
-      r?.variation_weight_grams === undefined ||
-      r?.variation_weight_grams === "null" ||
-      r?.variation_weight_grams === "undefined"
-    ) {
+    if (!r) continue;
+    if (isBlankFormValue(r.variation_weight_grams)) {
       r.variation_weight_grams = null;
+    }
+    if (isBlankFormValue(r.variation_badge_text)) {
+      r.variation_badge_text = null;
+    } else if (typeof r.variation_badge_text === "string") {
+      // maxLength=20 in the admin input is client-side only.
+      r.variation_badge_text = r.variation_badge_text.trim().slice(0, 20);
+    }
+    if (isBlankFormValue(r.variation_badge_icon_key)) {
+      r.variation_badge_icon_key = null;
     }
   }
 };
@@ -1033,8 +1059,8 @@ export const postProduct: RequestHandler = async (
         // the batch + throws, which fails the parent transaction cleanly.
         // Defense-in-depth count assertion catches silent partial inserts
         // even if a future Mongoose version changes default behavior.
-        // Phase A MOD #3 — empty-string weights to null, else NaN throws.
-        sanitizeVariationWeights(updatedVariation_details);
+        // Blank weight/badge strings → null, else NaN throws on the weight.
+        sanitizeVariationOptionalFields(updatedVariation_details);
         const insertResult: any = await VariationModel.insertMany(
           updatedVariation_details,
           { session, ordered: true },
@@ -1626,9 +1652,11 @@ export const updateProduct: RequestHandler = async (
           // Path A Q4-5 — split into update vs insert paths. Updates stay
           // per-row (admin rarely bulk-edits many existing rows; runValidators
           // is needed). NEW rows use insertMany for the bulk-create benefit.
-          // Phase A MOD #3 — empty-string weights to null for BOTH paths
-          // (update path runs runValidators too, which casts NaN → throws).
-          sanitizeVariationWeights(updatedVariation_details);
+          // Blank weight/badge strings → null, for BOTH paths (the update path
+          // runs runValidators too, which casts NaN → throws). Must happen
+          // before the toUpdate/toInsert split below, since the update loop
+          // spreads each row straight into $set.
+          sanitizeVariationOptionalFields(updatedVariation_details);
           const successVariationUpload: any = [];
           const toUpdate = updatedVariation_details.filter(
             (v: any) => v._id,
