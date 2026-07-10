@@ -64,6 +64,11 @@ export const countDemoDataServices = async (): Promise<DemoCounts> => {
 //      Looped one-by-one (not deleteMany) so the cascade + theme-counter hooks
 //      run per product. Best-effort per product: one failure doesn't abort the
 //      rest (we collect and report).
+//      NB: the theme-counter hook only fires because that service uses
+//      findOneAndDelete. It used to use a query-level deleteOne, which fires
+//      neither counter hook — so clearing demo data was the fastest way to
+//      inflate themes.used_in_products. Repair drift with `npm run
+//      fix:theme-usage`.
 //   3. banners / sliders / attributes / categories — plain deleteMany by flag.
 export const clearDemoDataServices = async (): Promise<
   DemoCounts & { product_errors: number }

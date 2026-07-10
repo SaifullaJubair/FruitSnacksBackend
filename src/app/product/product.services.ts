@@ -3964,12 +3964,16 @@ export const deleteProductServices = async (
   // Cascade variations (orphan rows otherwise).
   await VariationModel.deleteMany({ product_id: _id });
 
-  const Product = await ProductModel.deleteOne(
-    { _id: _id },
-    {
-      runValidators: true,
-    },
-  );
+  // findOneAndDelete, NOT deleteOne: the theme-usage counter hook in
+  // product.model.ts is registered on `findOneAndDelete` (and on a
+  // document-level `deleteOne`, which a query-level ProductModel.deleteOne()
+  // never triggers). With deleteOne the hook never ran, so deleting a themed
+  // product left themes.used_in_products inflated forever — which in turn
+  // pinned is_deletable=false on themes that no product actually used.
+  //
+  // Returns the deleted document (or null), not a { deletedCount } result.
+  // Callers must test the document itself.
+  const Product = await ProductModel.findOneAndDelete({ _id: _id });
   return Product;
 };
 

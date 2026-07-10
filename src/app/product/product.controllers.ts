@@ -2107,8 +2107,10 @@ export const deleteAProductInfo = async (
     if (findProductInOfferExist) {
       throw new ApiError(400, "Already Added In Offer !");
     }
+    // deleteProductServices returns the deleted document (findOneAndDelete, so
+    // the theme-usage counter hook fires) — not a { deletedCount } result.
     const result = await deleteProductServices(_id);
-    if (result?.deletedCount > 0) {
+    if (result) {
       await VariationModel.deleteMany({ product_id: _id });
       return sendResponse(res, {
         statusCode: httpStatus.OK,

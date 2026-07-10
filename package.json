@@ -10,7 +10,8 @@
     "seed:theme": "ts-node-dev --transpile-only src/seeds/seed.theme.ts",
     "seed:demo": "ts-node-dev --transpile-only src/scripts/seed-demo.ts",
     "seed:promo": "ts-node-dev --transpile-only src/scripts/seed-promotions.ts",
-    "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts"
+    "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts",
+    "fix:theme-usage": "ts-node-dev --transpile-only src/scripts/backfill-theme-usage.ts"
   },
   "author": "",
   "license": "ISC",
