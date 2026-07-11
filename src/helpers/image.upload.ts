@@ -41,8 +41,15 @@ const storage = multer.diskStorage({
 // could be uploaded and served from the public bucket. We allow images + the
 // doc/video types getContentType() already knows; anything else is rejected
 // before it ever touches disk or S3.
+//
+// avif/heic/heif added 2026-07-10: these are what a phone or a modern browser
+// hands you by default now — an iPhone photo is .heic, and "Save image as" in
+// Chrome on many sites yields .avif. Rejecting them meant the admin picked a
+// perfectly ordinary image and got "Unsupported file type". Safe to allow:
+// nothing is re-encoded here (raw passthrough to S3) and next/image re-encodes
+// on the storefront anyway. `.svg` stays out on purpose — it can carry script.
 const ALLOWED_UPLOAD_EXT =
-  /\.(webp|png|jpe?g|gif|mp4|mov|avi|webm|m4v|mkv|pdf)$/i;
+  /\.(webp|avif|heic|heif|png|jpe?g|gif|mp4|mov|avi|webm|m4v|mkv|pdf)$/i;
 
 const ImageUpload = multer({
   storage: storage,
@@ -102,12 +109,21 @@ const MediaUpload = multer({
 });
 
 // ================= Content-Type Checker ===================
+// Must know every extension ALLOWED_UPLOAD_EXT lets through: the default here
+// is application/octet-stream, which makes the browser DOWNLOAD the file rather
+// than render it.
 const getContentType = (filename: string) => {
   const extension = path.extname(filename).toLowerCase();
   switch (extension) {
     // Image types
     case ".webp":
       return "image/webp";
+    case ".avif":
+      return "image/avif";
+    case ".heic":
+      return "image/heic";
+    case ".heif":
+      return "image/heif";
     case ".png":
       return "image/png";
     case ".jpg":
@@ -135,27 +151,9 @@ const getContentType = (filename: string) => {
     case ".pdf":
       return "application/pdf";
 
-    // Uppercase versions
-    case ".WEBP":
-      return "image/webp";
-    case ".PNG":
-      return "image/png";
-    case ".JPG":
-      return "image/jpeg";
-    case ".JPEG":
-      return "image/jpeg";
-    case ".GIF":
-      return "image/gif";
-    case ".MP4":
-      return "video/mp4";
-    case ".MOV":
-      return "video/quicktime";
-    case ".AVI":
-      return "video/x-msvideo";
-    case ".WEBM":
-      return "video/webm";
-    case ".PDF":
-      return "application/pdf";
+    // (There used to be a second, uppercase copy of every case here. `extension`
+    // is already lower-cased above, so none of them could ever match — and they
+    // invited anyone adding a format to add it twice.)
 
     default:
       return "application/octet-stream";
