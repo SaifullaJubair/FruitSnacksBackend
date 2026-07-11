@@ -198,11 +198,18 @@ export const findAllActiveSideFilteredDataServices = async (
     },
     {
       $addFields: {
-        _activeVariations: {
+        // Only variations with a real absolute price may set the slider's right
+        // edge — same reasoning as `effective_price` in the listing pipeline.
+        _pricedVariations: {
           $filter: {
             input: "$variations",
             as: "v",
-            cond: { $ne: ["$$v.is_active", false] },
+            cond: {
+              $and: [
+                { $ne: ["$$v.is_active", false] },
+                { $gt: [{ $ifNull: ["$$v.variation_price", 0] }, 0] },
+              ],
+            },
           },
         },
       },
@@ -214,10 +221,10 @@ export const findAllActiveSideFilteredDataServices = async (
             if: {
               $and: [
                 { $eq: ["$is_variation", true] },
-                { $gt: [{ $size: "$_activeVariations" }, 0] },
+                { $gt: [{ $size: "$_pricedVariations" }, 0] },
               ],
             },
-            then: { $max: "$_activeVariations.variation_price" },
+            then: { $max: "$_pricedVariations.variation_price" },
             else: "$product_price",
           },
         },
@@ -445,6 +452,24 @@ export const findAllActiveFilteredProductServices = async (
         },
       },
     },
+    // Stock counts every active variation, but only variations carrying a real
+    // absolute price may set the effective price. `variation_price` is 0 in two
+    // cases, and both must fall back to product_price instead of dragging the
+    // price down to zero: delta-model rows (price IS product_price + delta), and
+    // rows saved before the admin typed a base price. Left unguarded, a single 0
+    // made $min return 0 and the product disappeared from every price-range
+    // filter, since it could never satisfy a min_price above 0.
+    {
+      $addFields: {
+        _pricedVariations: {
+          $filter: {
+            input: "$_activeVariations",
+            as: "v",
+            cond: { $gt: [{ $ifNull: ["$$v.variation_price", 0] }, 0] },
+          },
+        },
+      },
+    },
     {
       $addFields: {
         effective_price: {
@@ -452,8 +477,8 @@ export const findAllActiveFilteredProductServices = async (
             if: { $eq: ["$is_variation", true] },
             then: {
               $cond: {
-                if: { $gt: [{ $size: "$_activeVariations" }, 0] },
-                then: { $min: "$_activeVariations.variation_price" },
+                if: { $gt: [{ $size: "$_pricedVariations" }, 0] },
+                then: { $min: "$_pricedVariations.variation_price" },
                 else: "$product_price",
               },
             },

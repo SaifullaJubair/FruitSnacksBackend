@@ -3616,6 +3616,40 @@ export const patchProductQuickServices = async (
     delete update.product_quantity;
   }
 
+  // Price rules. The admin's Price modal only rejected NaN, so a literal 0 sailed
+  // through and became the product's list price — which then reads as "free" to
+  // every price consumer downstream. A product always has a regular price; a
+  // discount is optional but only means anything strictly below it.
+  if (update.product_price !== undefined) {
+    const price = Number(update.product_price);
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new ApiError(400, "Product price must be greater than 0");
+    }
+    update.product_price = price;
+  }
+  if (
+    update.product_discount_price !== undefined &&
+    update.product_discount_price !== null &&
+    update.product_discount_price !== ""
+  ) {
+    const discount = Number(update.product_discount_price);
+    if (!Number.isFinite(discount) || discount < 0) {
+      throw new ApiError(400, "Product discount price must be 0 or more");
+    }
+    // Compare against the price arriving in this request, else the stored one.
+    const regular =
+      update.product_price !== undefined
+        ? Number(update.product_price)
+        : Number(existing.product_price) || 0;
+    if (discount > 0 && regular > 0 && discount >= regular) {
+      throw new ApiError(
+        400,
+        "Product discount price must be less than the product price",
+      );
+    }
+    update.product_discount_price = discount;
+  }
+
   if (updatedBy) update.product_updated_by = updatedBy;
 
   const result = await ProductModel.findByIdAndUpdate(

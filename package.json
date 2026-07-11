@@ -11,7 +11,9 @@
     "seed:demo": "ts-node-dev --transpile-only src/scripts/seed-demo.ts",
     "seed:promo": "ts-node-dev --transpile-only src/scripts/seed-promotions.ts",
     "bootstrap": "ts-node-dev --transpile-only src/scripts/bootstrap.ts",
-    "fix:theme-usage": "ts-node-dev --transpile-only src/scripts/backfill-theme-usage.ts"
+    "fix:theme-usage": "ts-node-dev --transpile-only src/scripts/backfill-theme-usage.ts",
+    "fix:variation-price": "ts-node-dev --transpile-only src/scripts/backfill-variation-price.ts",
+    "fix:pageseo-copy": "ts-node-dev --transpile-only src/scripts/fix-pageseo-leather-copy.ts"
   },
   "author": "",
   "license": "ISC",

@@ -25,13 +25,23 @@ export const updatePageSeoService = async (
 
 // ── Seed ─────────────────────────────────────────────────────────────────────
 // প্রথমবার সব default data DB তে ঢোকানো
+//
+// Product-line-neutral on purpose. This codebase is resold, and the seed runs
+// once per deployment — whatever sits here becomes a client's live <title> until
+// somebody edits it. The previous copy still described leather wallets, bags and
+// belts from the original shop, so a fruit-snack storefront went live announcing
+// itself as a leather goods store to every visitor and to Google.
+//
+// The shop owner replaces these from Admin → Page SEO with copy that matches what
+// they actually sell. Keep titles under 40 characters and descriptions around
+// 120–150 — the admin form enforces the same limits.
 const DEFAULT_PAGES: IPageSeo[] = [
   {
     page_key: "home",
     path: "",
-    title: "Premium Genuine Leather Wallets, Ladies Bags & Belts in Bangladesh",
+    title: "Premium Quality Products | Fast Delivery",
     description:
-      "বাংলাদেশে ১০০% খাঁটি চামড়ার মানিব্যাগ, স্টাইলিশ লেডিস ব্যাগ ও মজবুত বেল্টের বিশাল কালেকশন। প্রিমিয়াম কোয়ালিটি ও ফাস্ট ক্যাশ অন ডেলিভারি সুবিধা।",
+      "প্রিমিয়াম কোয়ালিটির পণ্যের বিশাল কালেকশন। সারা বাংলাদেশে দ্রুত হোম ডেলিভারি ও নিরাপদ ক্যাশ অন ডেলিভারি সুবিধা।",
     noIndex: false,
   },
   // Main product-listing page (the storefront's /shop). buildPageMeta("shop")
@@ -50,46 +60,47 @@ const DEFAULT_PAGES: IPageSeo[] = [
   {
     page_key: "allProducts",
     path: "all-products",
-    title: "All Products | Shop All Genuine Leather Products",
+    title: "All Products | Full Collection",
     description:
-      "আমাদের সব এক্সক্লুসিভ লেদার কালেকশন। প্রিমিয়াম মানিব্যাগ, ফ্যাশনেবল লেডিস ব্যাগ ও টেকসই লেদার বেল্ট কিনুন সেরা দামে।",
+      "আমাদের সম্পূর্ণ প্রোডাক্ট কালেকশন দেখুন। প্রিমিয়াম কোয়ালিটি, সেরা দাম ও সারা বাংলাদেশে ক্যাশ অন ডেলিভারি।",
     noIndex: true,
   },
   {
     page_key: "allTrending",
     path: "all-trending-products",
-    title: "Trending Products | Best Selling Wallets & Bags",
+    title: "Trending Products | Best Sellers",
     description:
-      "বর্তমানে সবচেয়ে জনপ্রিয় ও ট্রেন্ডিং লেদার প্রোডাক্টগুলো দেখে নিন।",
+      "বর্তমানে সবচেয়ে জনপ্রিয় ও ট্রেন্ডিং প্রোডাক্টগুলো দেখে নিন।",
     noIndex: true,
   },
   {
     page_key: "newArrival",
     path: "new-arrival",
-    title: "New Arrival Leather Collection | Latest Wallets & Belts",
+    title: "New Arrivals | Latest Collection",
     description:
-      "আমাদের স্টকে আসা একদম নতুন ডিজাইনের লেদার মানিব্যাগ, লেডিস ব্যাগ এবং বেল্ট।",
+      "আমাদের স্টকে আসা একদম নতুন প্রোডাক্টগুলো দেখুন।",
     noIndex: true,
   },
   {
     page_key: "topProduct",
     path: "top-product",
-    title: "Top Rated Leather Products | Premium Quality Selection",
-    description: "সবচেয়ে বেশি বিক্রিত এবং টপ রেটেড লেদার আইটেম।",
+    title: "Top Rated Products | Best Quality",
+    description: "সবচেয়ে বেশি বিক্রিত এবং টপ রেটেড প্রোডাক্ট।",
     noIndex: true,
   },
   {
     page_key: "latestProduct",
     path: "latest-product",
-    title: "Latest Leather Goods | Just Launched Collection",
-    description: "নতুন এবং এক্সক্লুসিভ সব লেদার এক্সেসরিজ।",
+    title: "Latest Products | Just Launched",
+    description: "নতুন এবং এক্সক্লুসিভ সব প্রোডাক্ট।",
     noIndex: true,
   },
   {
     page_key: "aboutUs",
     path: "about-us",
-    title: "About Our Brand | Trusted Leather Goods Shop in BD",
-    description: "বাংলাদেশে খাঁটি চামড়ার পণ্য সরবরাহে আমরা একটি বিশ্বস্ত নাম।",
+    title: "About Us | Our Story & Values",
+    description:
+      "মানসম্পন্ন পণ্য ও নির্ভরযোগ্য সেবায় আমরা একটি বিশ্বস্ত নাম। আমাদের গল্প জানুন।",
     noIndex: false,
   },
   {

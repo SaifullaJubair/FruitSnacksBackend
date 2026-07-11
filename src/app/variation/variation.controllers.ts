@@ -8,6 +8,7 @@ import {
   updateVariationService,
   BulkVariationRow,
 } from "./variation.services";
+import VariationModel from "./variation.model";
 
 // Mirrors the per-product cap enforced in product.controllers.ts. Also keeps
 // the JSON body well under express.json({ limit: "200kb" }) — the three
@@ -132,6 +133,11 @@ export const patchVariation: RequestHandler = async (
       "variation_badge_text",
       "variation_badge_icon_key",
       "variation_price",
+      // Kept in step with variation_price by the admin's Variations modal. The
+      // price resolver reads EITHER the absolute price OR base + delta, so a
+      // stale delta left behind by an absolute-price edit makes the two fields
+      // disagree about what the variation costs.
+      "variation_price_delta",
       "variation_discount_price",
       "variation_buying_price",
       "variation_quantity",
@@ -151,6 +157,49 @@ export const patchVariation: RequestHandler = async (
     if (Object.keys(update).length === 0) {
       throw new ApiError(400, "No updatable fields provided");
     }
+
+    // Price rules, enforced here because the schema cannot express them: a 0 in
+    // `variation_price` is legal for delta-model rows, so `min: 1` on the field
+    // would reject them. But this route is the admin's absolute-price editor —
+    // whatever it sends must be a real price. Four live products reached
+    // production with variation_price = 0, which printed a bare "0" next to the
+    // price on the PDP, zeroed the subtotal, and dropped them out of the
+    // price-range filter entirely.
+    if (update.variation_price !== undefined) {
+      const price = Number(update.variation_price);
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new ApiError(400, "Variation price must be greater than 0");
+      }
+      update.variation_price = price;
+    }
+    if (
+      update.variation_discount_price !== undefined &&
+      update.variation_discount_price !== null &&
+      update.variation_discount_price !== ""
+    ) {
+      const discount = Number(update.variation_discount_price);
+      if (!Number.isFinite(discount) || discount < 0) {
+        throw new ApiError(400, "Variation discount price must be 0 or more");
+      }
+      // A discount is only meaningful below the regular price. The regular price
+      // may be arriving in this same request or already be on the doc, so read
+      // whichever applies before comparing.
+      let regular = Number(update.variation_price);
+      if (!Number.isFinite(regular) || regular <= 0) {
+        const current = await VariationModel.findById(id)
+          .select("variation_price")
+          .lean();
+        regular = Number((current as any)?.variation_price) || 0;
+      }
+      if (discount > 0 && regular > 0 && discount >= regular) {
+        throw new ApiError(
+          400,
+          "Variation discount price must be less than the variation price",
+        );
+      }
+      update.variation_discount_price = discount;
+    }
+
     const result = await updateVariationService(id, update);
     if (!result || (result as any).matchedCount === 0) {
       throw new ApiError(404, "Variation not found");
