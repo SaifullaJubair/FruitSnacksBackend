@@ -5,14 +5,20 @@ import mongoose from "mongoose";
 import { steadfastStatusMap } from "./webhook/webhook.controller";
 import { restockOrder } from "./order.stock";
 
-const STEADFAST_BASE_URL = "https://portal.packzy.com/api/v1";
-const STEADFAST_API_KEY = process.env.STEADFAST_API_KEY;
-const STEADFAST_SECRET_KEY = process.env.STEADFAST_SECRET_KEY;
-const steadfastHeaders = {
-  "Api-Key": STEADFAST_API_KEY,
-  "Secret-Key": STEADFAST_SECRET_KEY,
+// Credentials come from the settings document, never from process.env — the
+// .env here still holds the PREVIOUS owner's Steadfast keys. See
+// courier.config.ts.
+import { getSteadfastConfig, SteadfastConfig } from "./courier.config";
+
+// Built per call from the current config. This used to be one object created at
+// module load from process.env, so a credential change never took effect until
+// the process restarted — the service kept authenticating as whoever the env
+// said, forever.
+const headersFor = (cfg: SteadfastConfig) => ({
+  "Api-Key": cfg.api_key,
+  "Secret-Key": cfg.api_secret,
   "Content-Type": "application/json",
-};
+});
 
 // ── Helper: phone normalize (01XXXXXXXXX format) ─────────────────────────────
 const normalizePhone = (phone: string): string =>
@@ -69,10 +75,11 @@ export const sendOrderToSteadfastService = async (
 
   console.log("Steadfast payload:", payload);
 
+  const cfg = await getSteadfastConfig();
   const response = await axios.post(
-    `${STEADFAST_BASE_URL}/create_order`,
+    `${cfg.base_url}/create_order`,
     payload,
-    { headers: steadfastHeaders },
+    { headers: headersFor(cfg) },
   );
 
   console.log("Steadfast response:", response.data);
@@ -150,19 +157,21 @@ export const bulkSendToSteadfastService = async (
 export const trackSteadfastOrderService = async (
   consignment_id: string,
 ): Promise<any> => {
+  const cfg = await getSteadfastConfig();
   const response = await axios.get(
-    `${STEADFAST_BASE_URL}/status_by_cid/${consignment_id}`,
-    { headers: steadfastHeaders },
+    `${cfg.base_url}/status_by_cid/${consignment_id}`,
+    { headers: headersFor(cfg) },
   );
   return response.data;
 };
 
 // Steadfast balance check
 export const getSteadfastBalanceService = async (): Promise<any> => {
-  const response = await axios.get(`${STEADFAST_BASE_URL}/get_balance`, {
+  const cfg = await getSteadfastConfig();
+  const response = await axios.get(`${cfg.base_url}/get_balance`, {
     headers: {
-      "Api-Key": STEADFAST_API_KEY,
-      "Secret-Key": STEADFAST_SECRET_KEY,
+      "Api-Key": cfg.api_key,
+      "Secret-Key": cfg.api_secret,
     },
   });
   return response.data;
@@ -181,9 +190,10 @@ export const syncSteadfastOrderService = async (
     throw new ApiError(400, "এই order Steadfast এ পাঠানো হয়নি।");
   }
 
+  const cfg = await getSteadfastConfig();
   const response = await axios.get(
-    `${STEADFAST_BASE_URL}/status_by_cid/${order.steadfast_consignment_id}`,
-    { headers: steadfastHeaders },
+    `${cfg.base_url}/status_by_cid/${order.steadfast_consignment_id}`,
+    { headers: headersFor(cfg) },
   );
 
   const steadfastStatus = response.data?.delivery_status?.toLowerCase();

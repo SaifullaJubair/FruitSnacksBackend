@@ -99,13 +99,28 @@ const settingSchema = new Schema<ISettingInterface>(
     steadfast_enabled: { type: Boolean, default: false },
     steadfast_api_key: { type: String },
     steadfast_api_secret: { type: String },
+    // Steadfast does not sign its webhooks, so the guard is a shared token the
+    // owner appends to the webhook URL registered in the Steadfast dashboard
+    // (?token=…). Generated from the admin Courier tab.
+    steadfast_webhook_secret: { type: String },
 
     pathao_enabled: { type: Boolean, default: false },
     pathao_client_id: { type: String },
     pathao_client_secret: { type: String },
     pathao_username: { type: String },
     pathao_password: { type: String },
+    // Required by the send-order payload; was env-only (PATHAO_STORE_ID).
+    pathao_store_id: { type: String },
+    // Pathao signs its webhooks with HMAC-SHA256 over the raw body. The merchant
+    // sets this secret in the Pathao merchant panel; we verify against it.
+    pathao_webhook_secret: { type: String },
+    // Pathao has separate sandbox and live hosts. Getting this wrong sends REAL
+    // orders to the test server, silently — so it is an explicit toggle rather
+    // than a free-text URL.
+    pathao_sandbox: { type: Boolean, default: false },
 
+    // NOTE: redx_* has no service behind it — there is no RedX integration in
+    // this codebase. Left in the schema (harmless) but not exposed in the admin.
     redx_enabled: { type: Boolean, default: false },
     redx_api_key: { type: String },
 

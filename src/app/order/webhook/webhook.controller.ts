@@ -1,7 +1,17 @@
 // webhook.controller.ts
 import { Request, Response } from "express";
+import crypto from "crypto";
 import OrderModel from "../order.model";
 import { restockOrder } from "../order.stock";
+import { getWebhookSecrets } from "../courier.config";
+
+// Constant-time compare so the secret can't be recovered a byte at a time by
+// timing the response. Length is compared first (that much is unavoidable).
+const timingSafeEqualStr = (a: string, b: string): boolean => {
+  const ab = Buffer.from(a || "");
+  const bb = Buffer.from(b || "");
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+};
 
 // Steadfast status → আমাদের order_status mapping
 
@@ -22,26 +32,36 @@ export const steadfastStatusMap: Record<string, string> = {
 // F008 — shared-secret guard. Steadfast does not sign its webhooks, so the
 // defense is a secret token the owner appends when registering the webhook URL
 // in the Steadfast dashboard (as `?token=…` or an `x-steadfast-webhook-secret`
-// header). When STEADFAST_WEBHOOK_SECRET is set and the request doesn't match,
-// we reject — otherwise anyone could POST a fake "cancelled" status and cancel
-// + restock any order. When the secret is unset (local dev) the check is
-// skipped so development isn't blocked.
-const STEADFAST_WEBHOOK_SECRET = process.env.STEADFAST_WEBHOOK_SECRET || "";
-
+// header). Without it, anyone could POST a fake "cancelled" status and cancel +
+// restock any order in the shop.
+//
+// FAIL CLOSED. This used to read process.env and skip the check entirely when
+// the variable was unset — which is exactly how production ran: the secret was
+// never set, so the guard did nothing at all. The secret now lives in the
+// settings doc (generated from Admin → Settings → Courier), and no secret means
+// we CANNOT verify the caller, so we refuse. A courier that has not been
+// configured yet is not sending us webhooks anyway.
 export const steadfastWebhookController = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    if (STEADFAST_WEBHOOK_SECRET) {
-      const provided =
-        (req.query?.token as string) ||
-        (req.headers["x-steadfast-webhook-secret"] as string) ||
-        "";
-      if (provided !== STEADFAST_WEBHOOK_SECRET) {
-        console.warn("Steadfast webhook: rejected — bad/missing secret");
-        return res.status(401).json({ status: "error", message: "Unauthorized" });
-      }
+    const { steadfast: secret } = await getWebhookSecrets();
+
+    if (!secret) {
+      console.warn(
+        "Steadfast webhook: rejected — no webhook secret configured (Admin → Settings → Courier)",
+      );
+      return res.status(401).json({ status: "error", message: "Unauthorized" });
+    }
+
+    const provided =
+      (req.query?.token as string) ||
+      (req.headers["x-steadfast-webhook-secret"] as string) ||
+      "";
+    if (!timingSafeEqualStr(provided, secret)) {
+      console.warn("Steadfast webhook: rejected — bad/missing secret");
+      return res.status(401).json({ status: "error", message: "Unauthorized" });
     }
 
     const payload = req.body;

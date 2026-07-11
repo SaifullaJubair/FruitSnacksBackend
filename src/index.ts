@@ -42,7 +42,25 @@ app.use(
 // F006: explicit body size limit. Default 100kb is fine for ~99% of payloads;
 // 200kb gives 2x headroom for the rich-text page-content patch without
 // enabling body-bomb DoS. File uploads use multer with its own limits.
-app.use(express.json({ limit: "200kb" }));
+//
+// `verify` stashes the EXACT bytes for the courier webhooks. Pathao signs the
+// raw body with HMAC-SHA256, and the handler was hashing
+// `JSON.stringify(req.body)` - i.e. Express's parsed object re-serialised. That
+// is not the same string: JSON.stringify drops a trailing zero (1250.50 ->
+// 1250.5) and collapses whitespace, so the HMAC never matched and every genuine
+// webhook was rejected (silently, because the handler still answers 202 as
+// Pathao requires). Only kept for the webhook paths, so no memory is spent on
+// the rest of the API.
+app.use(
+  express.json({
+    limit: "200kb",
+    verify: (req: any, _res, buf) => {
+      if (req.originalUrl?.startsWith("/api/v1/webhook/")) {
+        req.rawBody = buf;
+      }
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "200kb" }));
 
 // CORS configuration

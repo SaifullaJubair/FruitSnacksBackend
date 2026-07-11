@@ -5,12 +5,11 @@ import OrderModel from "../order/order.model";
 import OrderProductModel from "../orderProducts/orderProduct.model";
 import { restockOrder } from "./order.stock";
 
-const PATHAO_BASE_URL =
-  process.env.PATHAO_BASE_URL || "https://api-hermes.pathao.com/aladdin/api/v1";
-const PATHAO_CLIENT_ID = process.env.PATHAO_CLIENT_ID!;
-const PATHAO_CLIENT_SECRET = process.env.PATHAO_CLIENT_SECRET!;
-const PATHAO_CLIENT_EMAIL = process.env.PATHAO_CLIENT_EMAIL!;
-const PATHAO_CLIENT_PASSWORD = process.env.PATHAO_CLIENT_PASSWORD!;
+// Credentials come from the settings document, never from process.env — the
+// .env here still holds the PREVIOUS owner's Pathao keys, and falling back to
+// them would ship this shop's parcels on someone else's account. See
+// courier.config.ts.
+import { getPathaoConfig, PathaoConfig } from "./courier.config";
 
 // ── Helper: phone normalize (01XXXXXXXXX format) ─────────────────────────────
 const normalizePhone = (phone: string): string =>
@@ -19,19 +18,30 @@ const normalizePhone = (phone: string): string =>
 // ================================================================
 // Token Cache
 // ================================================================
+// Keyed by the credentials that produced the token. The cache used to be a bare
+// module-level string, so when an admin corrected the Pathao credentials the old
+// token stayed valid for up to an hour — orders kept flowing to the OLD account
+// with no sign anything was wrong. Keying on the creds means new credentials
+// simply miss the cache.
 let cachedToken: string | null = null;
-let tokenExpiry: number = 0;
+let cachedTokenKey = "";
+let tokenExpiry = 0;
 
-const getPathaoAccessToken = async (): Promise<string> => {
+const credsKey = (c: PathaoConfig) =>
+  `${c.base_url}|${c.client_id}|${c.username}`;
+
+const getPathaoAccessToken = async (cfg: PathaoConfig): Promise<string> => {
   const now = Date.now();
-  if (cachedToken && now < tokenExpiry - 5 * 60 * 1000) return cachedToken;
+  const key = credsKey(cfg);
+  if (cachedToken && cachedTokenKey === key && now < tokenExpiry - 5 * 60 * 1000)
+    return cachedToken;
 
   try {
-    const response = await axios.post(`${PATHAO_BASE_URL}/issue-token`, {
-      client_id: PATHAO_CLIENT_ID,
-      client_secret: PATHAO_CLIENT_SECRET,
-      username: PATHAO_CLIENT_EMAIL,
-      password: PATHAO_CLIENT_PASSWORD,
+    const response = await axios.post(`${cfg.base_url}/issue-token`, {
+      client_id: cfg.client_id,
+      client_secret: cfg.client_secret,
+      username: cfg.username,
+      password: cfg.password,
       grant_type: "password",
     });
 
@@ -39,6 +49,7 @@ const getPathaoAccessToken = async (): Promise<string> => {
       throw new ApiError(400, "Pathao Token নেওয়া ব্যর্থ হয়েছে!");
 
     cachedToken = response.data.access_token;
+    cachedTokenKey = key;
     const expiresIn = response.data?.expires_in || 3600;
     tokenExpiry = now + expiresIn * 1000;
     return cachedToken!;
@@ -129,7 +140,8 @@ export const sendOrderToPathaoService = async (
 
   const altPhone = order.delivery_alt_phone || "";
 
-  const accessToken = await getPathaoAccessToken();
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
 
   // ── Compute item_weight (kg) and item_quantity from order line items ───────
   // Each variation may carry `variation_weight_grams`. Fallback per item: 500g.
@@ -164,7 +176,7 @@ export const sendOrderToPathaoService = async (
   const item_quantity = Math.max(1, totalQty);
 
   const payload = {
-    store_id: process.env.PATHAO_STORE_ID,
+    store_id: cfg.store_id,
     merchant_order_id: order.invoice_id,
     recipient_name: recipientName,
     recipient_phone: normalizePhone(recipientPhone),
@@ -182,7 +194,7 @@ export const sendOrderToPathaoService = async (
   };
 
   try {
-    const response = await axios.post(`${PATHAO_BASE_URL}/orders`, payload, {
+    const response = await axios.post(`${cfg.base_url}/orders`, payload, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
@@ -286,8 +298,9 @@ export const bulkSendToPathaoService = async (
   if (validOrders.length === 0)
     return { success: successList, failed: failedList };
 
-  const accessToken = await getPathaoAccessToken();
-  const storeId = Number(process.env.PATHAO_STORE_ID);
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
+  const storeId = Number(cfg.store_id);
   const timeNow =
     new Date().toISOString().split("T")[0] +
     " " +
@@ -342,7 +355,7 @@ export const bulkSendToPathaoService = async (
         item_description: `Order ${o.invoice_id}`,
       };
 
-      const response = await axios.post(`${PATHAO_BASE_URL}/orders`, payload, {
+      const response = await axios.post(`${cfg.base_url}/orders`, payload, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
@@ -428,11 +441,12 @@ export const syncPathaoOrderService = async (
       "Consignment ID পাওয়া যায়নি। Pathao bulk send async — ১-২ মিনিট অপেক্ষা করুন তারপর আবার Sync করুন।",
     );
 
-  const accessToken = await getPathaoAccessToken();
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
 
   try {
     const response = await axios.get(
-      `${PATHAO_BASE_URL}/orders/${order.consignment_id}/info`,
+      `${cfg.base_url}/orders/${order.consignment_id}/info`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -507,7 +521,8 @@ export const bulkSyncPathaoOrdersService = async (): Promise<{
     order_status: { $nin: ["delivered", "return", "cancel"] },
   });
 
-  const accessToken = await getPathaoAccessToken();
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
   const timeNow =
     new Date().toISOString().split("T")[0] +
     " " +
@@ -527,7 +542,7 @@ export const bulkSyncPathaoOrdersService = async (): Promise<{
 
     try {
       const response = await axios.get(
-        `${PATHAO_BASE_URL}/orders/${o.consignment_id}/info`,
+        `${cfg.base_url}/orders/${o.consignment_id}/info`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -610,11 +625,12 @@ export const cancelPathaoOrderService = async (
     );
   }
 
-  const accessToken = await getPathaoAccessToken();
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
 
   try {
     const response = await axios.put(
-      `${PATHAO_BASE_URL}/orders/${order.consignment_id}/cancel`,
+      `${cfg.base_url}/orders/${order.consignment_id}/cancel`,
       {},
       {
         headers: {
@@ -662,10 +678,11 @@ export const cancelPathaoOrderService = async (
 export const trackPathaoOrderService = async (
   consignment_id: string,
 ): Promise<any> => {
-  const accessToken = await getPathaoAccessToken();
+  const cfg = await getPathaoConfig();
+  const accessToken = await getPathaoAccessToken(cfg);
   try {
     const response = await axios.get(
-      `${PATHAO_BASE_URL}/orders/${consignment_id}/info`,
+      `${cfg.base_url}/orders/${consignment_id}/info`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,

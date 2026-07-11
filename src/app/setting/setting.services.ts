@@ -27,6 +27,16 @@ export const SETTING_SECRET_FIELDS = [
   "pathao_client_secret",
   "steadfast_api_secret",
   "redx_api_key",
+  // Courier webhook secrets. These are the ONLY thing standing between a
+  // stranger and "POST a cancelled status, cancel + restock any order", so they
+  // must never reach the browser through the public /setting response.
+  "steadfast_webhook_secret",
+  "pathao_webhook_secret",
+  // The Steadfast API key and Pathao client id / username are credentials too -
+  // they were public before only because nothing read them from the DB.
+  "steadfast_api_key",
+  "pathao_client_id",
+  "pathao_username",
   // NOTE: chat_livechat_embed_code used to live here as "secret", but a
   // live-chat widget (Tawk.to/Crisp) is client-side JS that MUST reach the
   // browser to render — keeping it in the secret-strip meant the storefront
@@ -244,26 +254,37 @@ export interface ISmsConfig {
   providerName: string;
 }
 
+/**
+ * SMS credentials, from the settings document only.
+ *
+ * NO `process.env` FALLBACK - same reasoning as courier.config.ts. A rebranded
+ * deployment's .env can still hold the PREVIOUS owner's BulkSMS key and sender
+ * id, and falling back to them would send this shop's OTPs and order
+ * confirmations from someone else's account, on someone else's balance.
+ *
+ * Returns null when SMS is off or not fully configured. Callers treat null as
+ * "SMS not available" and no-op - SMS is never load-bearing enough to fail a
+ * request over.
+ */
 export const getSmsConfig = async (): Promise<ISmsConfig | null> => {
   const setting = await getCachedSetting().catch(() => null);
+  if (!setting) return null;
 
-  // Owner explicitly disabled SMS — silent no-op.
-  if (setting && setting.sms_enabled === false) {
-    return null;
-  }
+  // Off, or never switched on. `!== true` rather than `=== false` so an
+  // unconfigured shop (field absent) is treated as OFF, not as "try anyway".
+  if (setting.sms_enabled !== true) return null;
 
-  const apiKey =
-    (setting && setting.sms_api_key) || process.env.BULKSMS_API_KEY || "";
-  const senderId =
-    (setting && setting.sms_sender_id) || process.env.BULKSMS_SENDER_ID || "";
-  const secret =
-    (setting && setting.sms_api_secret) ||
-    process.env.BULKSMS_API_SECRET ||
-    "";
-  const providerName =
-    (setting && setting.sms_provider_name) || "BulkSMS BD";
+  const apiKey = (setting.sms_api_key || "").trim();
+  const senderId = (setting.sms_sender_id || "").trim();
+  const secret = (setting.sms_api_secret || "").trim();
+  const providerName = setting.sms_provider_name || "BulkSMS BD";
 
+  // Enabled but half-configured - say so, rather than firing a request that
+  // will fail at the provider.
   if (!apiKey || !senderId) {
+    console.warn(
+      "[sms] enabled but not configured (api key / sender id missing) - Admin -> Settings -> SMS Provider",
+    );
     return null;
   }
 
@@ -286,21 +307,28 @@ export interface IEmailConfig {
   fromName: string;
 }
 
+// No process.env fallback, for the same reason as getSmsConfig and
+// courier.config.ts: on a rebranded deployment the .env can still carry the
+// previous owner's SMTP account, and silently relaying this shop's mail through
+// it is worse than sending nothing. `ignoreEnabledFlag` is used by the
+// "send test email" endpoint, which must be able to test a config before the
+// owner switches the provider on.
 export const getEmailConfig = async (
   { ignoreEnabledFlag = false } = {},
 ): Promise<IEmailConfig | null> => {
   const setting = await getCachedSetting().catch(() => null);
+  if (!setting) return null;
 
-  if (!ignoreEnabledFlag && setting && setting.email_provider_enabled === false) {
+  if (!ignoreEnabledFlag && setting.email_provider_enabled !== true) {
     return null;
   }
 
-  const host = (setting && setting.email_host) || process.env.SMTP_HOST || "";
-  const port = (setting && setting.email_port) || Number(process.env.SMTP_PORT) || 587;
-  const username = (setting && setting.email_username) || process.env.SMTP_USER || "";
-  const password = (setting && setting.email_password) || process.env.SMTP_PASS || "";
-  const fromAddress = (setting && setting.email_from_address) || process.env.SMTP_FROM_ADDRESS || "";
-  const fromName = (setting && setting.email_from_name) || process.env.SMTP_FROM_NAME || "FruitSnacks";
+  const host = (setting.email_host || "").trim();
+  const port = Number(setting.email_port) || 587;
+  const username = (setting.email_username || "").trim();
+  const password = (setting.email_password || "").trim();
+  const fromAddress = (setting.email_from_address || "").trim();
+  const fromName = setting.email_from_name || "FruitSnacks";
 
   if (!host || !username || !password || !fromAddress) {
     return null;

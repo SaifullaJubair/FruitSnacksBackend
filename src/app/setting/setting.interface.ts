@@ -99,13 +99,18 @@ export interface ISettingInterface {
   steadfast_enabled?: boolean;
   steadfast_api_key?: string;
   steadfast_api_secret?: string;
+  steadfast_webhook_secret?: string;
 
   pathao_enabled?: boolean;
   pathao_client_id?: string;
   pathao_client_secret?: string;
   pathao_username?: string;
   pathao_password?: string;
+  pathao_store_id?: string;
+  pathao_webhook_secret?: string;
+  pathao_sandbox?: boolean;
 
+  // No RedX service exists in this codebase - schema-only, not exposed in admin.
   redx_enabled?: boolean;
   redx_api_key?: string;
 
