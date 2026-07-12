@@ -114,6 +114,10 @@ export interface ISettingInterface {
   redx_enabled?: boolean;
   redx_api_key?: string;
 
+  // Fraud check (FraudBD) — see setting.model.ts for why it moved out of .env
+  fraud_check_enabled?: boolean;
+  fraud_api_key?: string;
+
   // ✅ Announcement Bar (top of page, 3 items in design)
   announcement_bar?: IAnnouncementBarItem[];
 

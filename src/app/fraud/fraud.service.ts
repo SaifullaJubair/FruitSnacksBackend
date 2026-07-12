@@ -1,11 +1,28 @@
 import axios from "axios";
 import OrderModel from "../order/order.model";
+import { getCachedSetting } from "../../helpers/settingCache";
 
-const FRAUDBD_API_KEY = process.env.FRAUDBD_API_KEY || "";
 const FRAUDBD_BASE_URL = "https://fraudbd.com";
+
+// The key comes from the settings document, not process.env — the same reason the
+// courier and SMS keys moved: this codebase is rebranded and resold, and the .env
+// a deployment inherits belongs to the PREVIOUS shop. An env fallback here would
+// mean the fraud checks quietly run on, and bill, someone else's FraudBD account.
+//
+// No key = the courier-history half of the check is skipped, and the caller still
+// gets the order-history half (see fraudCheckService). It never throws: a fraud
+// lookup failing must not block an order from being placed.
+const getFraudApiKey = async (): Promise<string> => {
+  const s: any = (await getCachedSetting()) || {};
+  if (!s.fraud_check_enabled) return "";
+  return (s.fraud_api_key || "").trim();
+};
 
 // ── FraudBD API call ─────────────────────────────────────────
 const checkFraudBD = async (phone_number: string) => {
+  const apiKey = await getFraudApiKey();
+  if (!apiKey) return null; // not configured — skip, don't fail
+
   try {
     const response = await axios.post(
       `${FRAUDBD_BASE_URL}/api/check-courier-info`,
@@ -13,7 +30,7 @@ const checkFraudBD = async (phone_number: string) => {
       {
         headers: {
           "Content-Type": "application/json",
-          api_key: FRAUDBD_API_KEY,
+          api_key: apiKey,
         },
       },
     );

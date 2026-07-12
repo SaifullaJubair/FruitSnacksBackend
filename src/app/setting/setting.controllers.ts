@@ -3,6 +3,8 @@ import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import ApiError from "../../errors/ApiError";
 import { ISettingInterface } from "./setting.interface";
+import { getPathaoConfig } from "../order/courier.config";
+import { getPathaoAccessToken } from "../order/pathao.service";
 import {
   getSettingServices,
   getSettingWithSecretsServices,
@@ -184,39 +186,24 @@ export const getZoneData: RequestHandler = async (
         message: "City ID is required !",
       });
     }
-    const response = await fetch(
-      "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
+    // Credentials come from the settings document, like every other courier call.
+    // This endpoint was the last one still reaching into process.env — and on a
+    // rebranded deployment the .env carries the PREVIOUS shop's Pathao account, so
+    // the checkout's zone list was being fetched with someone else's login. It also
+    // reuses the shared cached token from pathao.service instead of issuing a fresh
+    // one on every zone lookup.
+    const cfg = await getPathaoConfig();
+    const token = await getPathaoAccessToken(cfg);
 
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_id: process.env.PATHAO_CLIENT_ID,
-          client_secret: process.env.PATHAO_CLIENT_SECRET,
-          grant_type: "password",
-          username: process.env.PATHAO_CLIENT_EMAIL, 
-          password: process.env.PATHAO_CLIENT_PASSWORD, 
-        }),
+    const zoneData = await fetch(`${cfg.base_url}/cities/${city_id}/zone-list`, {
+      method: "get",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
-    );
+    });
 
-    const result = await response.json();
-    console.log("Pathao token result:", JSON.stringify(result));
-    // city data
-    const zoneData = await fetch(
-      `https://api-hermes.pathao.com/aladdin/api/v1/cities/${city_id}/zone-list`,
-      {
-        method: "get",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${result?.access_token}`, // Replace access_token with actual token
-        },
-      },
-    );
-
-    // Parse zoneData
     const zoneResult = await zoneData.json();
-    console.log("Zone API response:", JSON.stringify(zoneResult));
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,

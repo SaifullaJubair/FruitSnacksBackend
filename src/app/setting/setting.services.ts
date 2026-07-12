@@ -37,6 +37,9 @@ export const SETTING_SECRET_FIELDS = [
   "steadfast_api_key",
   "pathao_client_id",
   "pathao_username",
+  // FraudBD key — was env-only. Listed here so it is write-only from the admin
+  // and stripped from the public /setting response like every other secret.
+  "fraud_api_key",
   // NOTE: chat_livechat_embed_code used to live here as "secret", but a
   // live-chat widget (Tawk.to/Crisp) is client-side JS that MUST reach the
   // browser to render — keeping it in the secret-strip meant the storefront

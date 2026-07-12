@@ -30,7 +30,11 @@ let tokenExpiry = 0;
 const credsKey = (c: PathaoConfig) =>
   `${c.base_url}|${c.client_id}|${c.username}`;
 
-const getPathaoAccessToken = async (cfg: PathaoConfig): Promise<string> => {
+// Exported so the checkout's zone lookup (setting.controllers → getZoneData) can
+// reuse the same cached token instead of issuing its own on every request.
+export const getPathaoAccessToken = async (
+  cfg: PathaoConfig,
+): Promise<string> => {
   const now = Date.now();
   const key = credsKey(cfg);
   if (cachedToken && cachedTokenKey === key && now < tokenExpiry - 5 * 60 * 1000)

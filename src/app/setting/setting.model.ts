@@ -124,6 +124,13 @@ const settingSchema = new Schema<ISettingInterface>(
     redx_enabled: { type: Boolean, default: false },
     redx_api_key: { type: String },
 
+    // ✅ Fraud check (FraudBD) — was env-only (FRAUDBD_API_KEY), the last secret
+    // this shop could not set for itself. Same reason as the courier keys: a
+    // rebranded deployment inherits the previous shop's .env, so "the fraud check
+    // works" silently meant "it works, billed to someone else's account".
+    fraud_check_enabled: { type: Boolean, default: false },
+    fraud_api_key: { type: String }, // SECRET
+
     // ✅ Announcement Bar (3-item rolling banner at top of page)
     announcement_bar: [
       {
