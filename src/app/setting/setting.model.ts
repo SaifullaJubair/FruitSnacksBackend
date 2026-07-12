@@ -328,7 +328,10 @@ const settingSchema = new Schema<ISettingInterface>(
     brand_story_image: { type: String },
     brand_story_image_key: { type: String },
     brand_story_cta_label: { type: String, default: "আরও জানুন" },
-    brand_story_cta_url: { type: String, default: "/about" },
+    // The About page is at /about-us. This default was "/about", which is not a
+    // route — it seeded the live settings, so the homepage Brand Story button
+    // 404'd until the shop owner noticed and retyped the URL.
+    brand_story_cta_url: { type: String, default: "/about-us" },
 
     // 8b. Reviews carousel
     reviews_carousel_source: {
