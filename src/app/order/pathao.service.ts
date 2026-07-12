@@ -9,7 +9,11 @@ import { restockOrder } from "./order.stock";
 // .env here still holds the PREVIOUS owner's Pathao keys, and falling back to
 // them would ship this shop's parcels on someone else's account. See
 // courier.config.ts.
-import { getPathaoConfig, PathaoConfig } from "./courier.config";
+import {
+  getPathaoConfig,
+  PathaoConfig,
+  PathaoLookupConfig,
+} from "./courier.config";
 
 // ── Helper: phone normalize (01XXXXXXXXX format) ─────────────────────────────
 const normalizePhone = (phone: string): string =>
@@ -27,13 +31,15 @@ let cachedToken: string | null = null;
 let cachedTokenKey = "";
 let tokenExpiry = 0;
 
-const credsKey = (c: PathaoConfig) =>
+const credsKey = (c: PathaoLookupConfig) =>
   `${c.base_url}|${c.client_id}|${c.username}`;
 
-// Exported so the checkout's zone lookup (setting.controllers → getZoneData) can
-// reuse the same cached token instead of issuing its own on every request.
+// Takes PathaoLookupConfig, not PathaoConfig: issuing a token needs the four auth
+// fields and nothing else. PathaoConfig is a superset, so order-sending still
+// passes straight through — but the checkout's read-only zone lookup can call this
+// with credentials that carry no store_id, and therefore cannot post a parcel.
 export const getPathaoAccessToken = async (
-  cfg: PathaoConfig,
+  cfg: PathaoLookupConfig,
 ): Promise<string> => {
   const now = Date.now();
   const key = credsKey(cfg);

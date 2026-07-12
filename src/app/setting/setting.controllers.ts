@@ -3,7 +3,7 @@ import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import ApiError from "../../errors/ApiError";
 import { ISettingInterface } from "./setting.interface";
-import { getPathaoConfig } from "../order/courier.config";
+import { getPathaoLookupConfig } from "../order/courier.config";
 import { getPathaoAccessToken } from "../order/pathao.service";
 import {
   getSettingServices,
@@ -186,13 +186,14 @@ export const getZoneData: RequestHandler = async (
         message: "City ID is required !",
       });
     }
-    // Credentials come from the settings document, like every other courier call.
-    // This endpoint was the last one still reaching into process.env — and on a
-    // rebranded deployment the .env carries the PREVIOUS shop's Pathao account, so
-    // the checkout's zone list was being fetched with someone else's login. It also
-    // reuses the shared cached token from pathao.service instead of issuing a fresh
-    // one on every zone lookup.
-    const cfg = await getPathaoConfig();
+    // getPathaoLookupConfig, not getPathaoConfig: this is a read-only lookup of
+    // Pathao's public zone list, so it prefers the shop's own credentials but
+    // falls back to the environment while the settings are still empty — otherwise
+    // a shop that has not entered its Pathao details yet has no checkout at all,
+    // because the customer cannot pick an address. Crucially it carries no
+    // store_id, so these credentials cannot send a parcel anywhere. Order sending
+    // still goes through getPathaoConfig and still fails closed.
+    const cfg = await getPathaoLookupConfig();
     const token = await getPathaoAccessToken(cfg);
 
     const zoneData = await fetch(`${cfg.base_url}/cities/${city_id}/zone-list`, {

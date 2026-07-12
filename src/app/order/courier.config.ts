@@ -50,6 +50,65 @@ const missing = (courier: string, fields: string[]) =>
       `Set them in Admin → Settings → Courier.`,
   );
 
+/**
+ * Credentials for READ-ONLY Pathao lookups — the city / zone / area lists the
+ * checkout address form is built from. This is the ONE place with a process.env
+ * fallback, and it is deliberate.
+ *
+ * The rule everywhere else is: no credentials in the settings document means the
+ * courier is not configured, and we fail loudly rather than ship a customer's
+ * parcel on the previous owner's account. That rule protects money and parcels.
+ * A zone list moves neither: it returns the same public list of Dhaka areas
+ * whichever merchant account asks for it.
+ *
+ * Without a fallback, a shop that has not entered its Pathao credentials yet has
+ * no checkout at all — the customer cannot pick an address, so they cannot order,
+ * from any courier. That is a worse failure than the one we are guarding against.
+ *
+ * Note what this does NOT return: `store_id`. Sending a parcel requires one, and
+ * it only ever comes from the settings document (getPathaoConfig). So these
+ * credentials cannot be used to send an order to anyone's account, by accident or
+ * otherwise — they can only read a list.
+ */
+export type PathaoLookupConfig = {
+  base_url: string;
+  client_id: string;
+  client_secret: string;
+  username: string;
+  password: string;
+};
+
+export const getPathaoLookupConfig = async (): Promise<PathaoLookupConfig> => {
+  const s = (await loadSetting()) || {};
+
+  // The shop's own credentials win the moment they are entered — the fallback is
+  // only ever reached while the settings are still empty.
+  const fromDb = {
+    client_id: (s.pathao_client_id || "").trim(),
+    client_secret: (s.pathao_client_secret || "").trim(),
+    username: (s.pathao_username || "").trim(),
+    password: (s.pathao_password || "").trim(),
+  };
+  const complete = Object.values(fromDb).every(Boolean);
+
+  const cfg: PathaoLookupConfig = complete
+    ? { base_url: s.pathao_sandbox ? PATHAO_SANDBOX : PATHAO_LIVE, ...fromDb }
+    : {
+        base_url: process.env.PATHAO_BASE_URL?.trim() || PATHAO_LIVE,
+        client_id: (process.env.PATHAO_CLIENT_ID || "").trim(),
+        client_secret: (process.env.PATHAO_CLIENT_SECRET || "").trim(),
+        username: (process.env.PATHAO_CLIENT_EMAIL || "").trim(),
+        password: (process.env.PATHAO_CLIENT_PASSWORD || "").trim(),
+      };
+
+  const blank = (
+    ["client_id", "client_secret", "username", "password"] as const
+  ).filter((k) => !cfg[k]);
+  if (blank.length) throw missing("Pathao", blank as unknown as string[]);
+
+  return cfg;
+};
+
 /** Throws with an actionable message when Pathao is off or half-configured. */
 export const getPathaoConfig = async (): Promise<PathaoConfig> => {
   const s = (await loadSetting()) || {};
