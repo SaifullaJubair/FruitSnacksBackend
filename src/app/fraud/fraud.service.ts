@@ -30,7 +30,10 @@ const checkFraudBD = async (phone_number: string) => {
       {
         headers: {
           "Content-Type": "application/json",
-          api_key: apiKey,
+          // FraudBD wants a HYPHEN here. With api_key it answers "Missing API
+          // key header" and the lookup silently returns null — which is why the
+          // courier half of the fraud check had never once worked.
+          "api-key": apiKey,
         },
       },
     );
