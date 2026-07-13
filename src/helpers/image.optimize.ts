@@ -50,7 +50,7 @@ const isOptimisableImage = (filename: string) => OPTIMISABLE.test(filename);
 type ImageProfile = {
   maxEdge: number;
   quality: number;
-  format: "webp" | "keep";
+  format: "webp" | "keep" | "original";
 };
 
 const PROFILES: Record<string, ImageProfile> = {
@@ -60,6 +60,19 @@ const PROFILES: Record<string, ImageProfile> = {
   avatar: { maxEdge: 512, quality: 80, format: "webp" },
   icon: { maxEdge: 256, quality: 90, format: "webp" },
   favicon: { maxEdge: 256, quality: 90, format: "keep" }, // Safari: no WebP favicons
+
+  // The escape hatch, and the server-side twin of the admin's "Compress" toggle.
+  //
+  // Lossy compression is not always acceptable and the shop owner is the one who
+  // knows: a product photo with small printed text on the packaging, an
+  // ingredients panel, a size chart, a fabric swatch where the weave matters.
+  // Re-encoding those at q80 smears exactly the detail that was the point of the
+  // image. When the owner turns compression OFF, we must actually leave the
+  // bytes alone — not "compress a bit less".
+  //
+  // So this is a genuine passthrough: no resize, no re-encode, EXIF intact. The
+  // multer size cap is still the backstop against something absurd.
+  original: { maxEdge: 0, quality: 100, format: "original" },
 };
 
 const resolveProfile = (name?: string): ImageProfile =>
@@ -84,17 +97,45 @@ const optimiseImageInPlace = async (
   const ext = path.extname(file.filename);
   const isHeic = /\.(heic|heif)$/i.test(file.filename);
 
+  // "Compression off". Ship exactly what was uploaded — see the `original`
+  // profile above for why a half-measure would be worse than nothing.
+  // HEIC is the one thing we still convert: the alternative is not a
+  // higher-quality image, it is an image no browser can display at all.
+  if (profile.format === "original" && !isHeic) return;
+
   // A HEIC/HEIF file must be re-encoded whatever the profile says: no browser
   // can display it. `keep` cannot mean "keep .heic" — it would be invisible.
   const toWebp = profile.format === "webp" || isHeic;
 
+  // On the `keep` path we may still have to change the container: a transparent
+  // AVIF/GIF is written out as PNG (see the encoder choice below), and the
+  // extension has to follow, or getContentType() names a type the bytes are not
+  // and the browser downloads the file instead of rendering it.
+  let outExt = ext;
+  if (!toWebp) {
+    const probe = await sharp(file.path).metadata();
+    outExt = /\.(png|jpe?g)$/i.test(ext)
+      ? ext // already a container we write natively
+      : probe.hasAlpha
+        ? ".png" // transparent → PNG (JPEG would flatten the alpha)
+        : ".jpg"; // opaque
+  }
+
   const dir = path.dirname(file.path);
   const base = path.basename(file.filename, ext);
-  const outName = toWebp ? `${base}.webp` : `${base}${ext}`;
+  const outName = toWebp ? `${base}.webp` : `${base}${outExt}`;
   const outPath = path.join(dir, toWebp ? outName : `opt-${outName}`);
 
   try {
     const before = fs.statSync(file.path).size;
+
+    // Does this image carry transparency? It decides what we may re-encode to.
+    // WebP supports alpha (4 channels, same as PNG) — measured, not assumed — so
+    // a cut-out shape or a floating accent image survives the WebP path intact.
+    // JPEG does NOT: it would flatten every transparent pixel onto a background
+    // and quietly wreck the design.
+    const meta = await sharp(file.path).metadata();
+    const hasAlpha = Boolean(meta.hasAlpha);
 
     let pipeline = sharp(file.path)
       // Phone photos carry an EXIF orientation flag. Without this they come out
@@ -106,13 +147,22 @@ const optimiseImageInPlace = async (
       });
 
     if (toWebp) {
+      // Safe for transparent images: WebP keeps the alpha channel.
       pipeline = pipeline.webp({ quality: profile.quality });
-    } else if (/\.png$/i.test(ext)) {
-      // Favicon path. Stay PNG — Safari will not render a WebP favicon, and this
-      // same file is the apple-touch-icon. Palette mode + max compression keeps a
-      // 256px icon at a few KB, so nothing is lost by not going WebP.
-      pipeline = pipeline.png({ compressionLevel: 9, palette: true });
+    } else if (/\.png$/i.test(outExt)) {
+      // The `keep` path (today: favicon). PNG when the source was a PNG, and
+      // also whenever the image is transparent — a transparent GIF/AVIF must not
+      // reach the JPEG branch below, which would destroy the alpha.
+      //
+      // `palette: true` is dropped when the image has alpha: palette mode
+      // quantises to 256 colours, which visibly bands a soft alpha edge. A flat
+      // icon is fine; a cut-out shape with a feathered edge is not.
+      pipeline = pipeline.png({
+        compressionLevel: 9,
+        palette: !hasAlpha,
+      });
     } else {
+      // Opaque, and the profile asked us not to change the format.
       pipeline = pipeline.jpeg({ quality: profile.quality, mozjpeg: true });
     }
 
