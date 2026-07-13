@@ -8,6 +8,7 @@ import {
 import multer from "multer";
 import * as fs from "fs";
 import ApiError from "../errors/ApiError";
+import { ImageOptimizeHelper } from "./image.optimize";
 const path = require("path");
 import { randomUUID } from "crypto";
 
@@ -167,6 +168,14 @@ const getContentType = (filename: string) => {
 // clients of the same niche, NOT deleted when a client clears demo data).
 // Trailing slash is normalized so both "demo/food" and "demo/food/" work.
 const uploadToSpaces = async (file: any, keyPrefix = "fruit_snacks_images/") => {
+  // Re-encode before the bytes leave the box: cap the dimensions, convert to
+  // WebP, strip EXIF. This sits INSIDE uploadToSpaces on purpose — every image
+  // in the system goes through here, so no call site can forget it and quietly
+  // put a 5 MB phone photo on the storefront. Videos/PDFs are passed over.
+  // Mutates file.filename/file.path, which is why it must run before either is
+  // read below.
+  await ImageOptimizeHelper.optimiseImageInPlace(file);
+
   const fileStream = fs.createReadStream(file.path);
   const contentType = getContentType(file.filename);
 
