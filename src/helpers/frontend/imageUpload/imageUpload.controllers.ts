@@ -14,7 +14,17 @@ export const postImageUpload: RequestHandler = async (
   try {
     if (req.files && "image" in req.files) {
       const imageData = req.files["image"][0];
-      const image_upload = await FileUploadHelper.uploadToSpaces(imageData);
+      // Optional. This endpoint is generic — it has no idea whether the caller
+      // wants a product photo or a favicon — so the caller says. Unknown or
+      // absent falls back to "product", which is what every caller got before
+      // profiles existed.
+      const profile =
+        typeof req.body?.profile === "string" ? req.body.profile : undefined;
+      const image_upload = await FileUploadHelper.uploadToSpaces(
+        imageData,
+        undefined,
+        profile,
+      );
       return sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
