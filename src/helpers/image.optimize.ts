@@ -124,7 +124,14 @@ const optimiseImageInPlace = async (
   const dir = path.dirname(file.path);
   const base = path.basename(file.filename, ext);
   const outName = toWebp ? `${base}.webp` : `${base}${outExt}`;
-  const outPath = path.join(dir, toWebp ? outName : `opt-${outName}`);
+  // toWebp writes straight to outName UNLESS the source is already .webp — then
+  // outName equals file.filename and outPath would resolve to the exact same
+  // path Sharp is reading from. Sharp reading and writing one file at once
+  // corrupts it / throws mid-stream, which is what "Failed to fetch" on a WebP
+  // banner upload actually was. Same `opt-` scratch prefix the non-webp path
+  // already uses below, just needs to apply here too when there's a collision.
+  const collides = toWebp && outName === file.filename;
+  const outPath = path.join(dir, toWebp && !collides ? outName : `opt-${outName}`);
 
   try {
     const before = fs.statSync(file.path).size;
@@ -185,16 +192,17 @@ const optimiseImageInPlace = async (
 
     fs.unlinkSync(file.path); // drop the original; the re-encode replaces it
 
-    if (toWebp) {
+    if (toWebp && !collides) {
       // Extension changed (.jpg -> .webp), so the temp file already carries the
       // final name.
       file.filename = outName;
       file.path = outPath;
     } else {
-      // Same extension, so the re-encode was written to a scratch path
-      // (`opt-<name>`) to avoid sharp reading and writing one file at once.
-      // Move it onto the original path: `filename` must keep matching the file
-      // that uploadToSpaces streams, or the S3 key names a file that is not there.
+      // Same extension (or source was already .webp, so outName collided with
+      // file.filename and the re-encode was forced onto an `opt-<name>` scratch
+      // path). Move it onto the original path: `filename` must keep matching
+      // the file that uploadToSpaces streams, or the S3 key names a file that
+      // is not there.
       fs.renameSync(outPath, file.path);
       file.filename = outName;
     }
