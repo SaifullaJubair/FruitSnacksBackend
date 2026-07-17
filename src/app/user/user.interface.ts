@@ -53,6 +53,14 @@ export interface IUserAddress {
   is_default?: boolean;
 }
 
+// SECURITY: the ONLY fields safe to return to a client for a customer. An
+// allow-list (fails closed), so user_password / forgot_otp / otp_* can never
+// leak — including through a .populate() on another module (review/question),
+// where .select() on the parent does NOT reach the joined user doc. Ported from
+// core 2026-07-17 (the staff-list hash-leak class, recurring in user paths).
+export const USER_PUBLIC_PROJECTION =
+  "user_name user_phone user_email user_image user_division user_district user_status status_changed_at user_type customer_group createdAt";
+
 export const userSearchableField = [
   "user_name",
   "user_phone",

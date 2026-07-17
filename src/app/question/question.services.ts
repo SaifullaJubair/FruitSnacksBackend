@@ -3,6 +3,7 @@ import {
   questionSearchableField,
 } from "./question.interface";
 import QuestionModel from "./question.model";
+import { USER_PUBLIC_PROJECTION } from "../user/user.interface";
 
 // Create A Question
 export const postQuestionServices = async (
@@ -24,7 +25,10 @@ export const findAllQuestionServices = async (
     question_product_id: question_product_id,
     question_status: "active",
   })
-    .populate("question_user_id")
+    // SECURITY: PUBLIC per-product Q&A list (no auth). Project the asker or the
+    // populate ships their user_password hash to every visitor. Ported from
+    // core 2026-07-17.
+    .populate({ path: "question_user_id", select: USER_PUBLIC_PROJECTION })
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
@@ -84,7 +88,12 @@ export const findAllDashboardQuestionServices = async (
   const findQuestion: IQuestionInterface[] | [] = await QuestionModel.find(
     whereCondition
   )
-    .populate(["question_user_id", "question_product_id"])
+    // SECURITY: project the asker — an unprojected populate leaked the
+    // user_password hash into the admin question list. Ported from core 2026-07-17.
+    .populate([
+      { path: "question_user_id", select: USER_PUBLIC_PROJECTION },
+      { path: "question_product_id" },
+    ])
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)

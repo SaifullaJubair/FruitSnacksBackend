@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import ApiError from "../../errors/ApiError";
-import { IUserInterface, userSearchableField } from "./user.interface";
+import {
+  IUserInterface,
+  userSearchableField,
+  USER_PUBLIC_PROJECTION,
+} from "./user.interface";
 import UserModel from "./user.model";
 
 // Create A User
@@ -108,7 +112,10 @@ export const findAllDashboardUserServices = async (
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)
-    .select("-__v");
+    // SECURITY: allow-list, not .select("-__v") — the deny-list shipped every
+    // customer's user_password hash + forgot_otp to the admin list (the
+    // staff-list leak class). Ported from core 2026-07-17.
+    .select(USER_PUBLIC_PROJECTION);
   return findUser;
 };
 
