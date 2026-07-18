@@ -11,19 +11,25 @@ export interface IOrderInterface {
     | "confirmed"
     | "processing"
     | "shipped"
+    | "partial_delivered"
     | "delivered"
     | "completed"
     | "cancel"
-    | "return";
+    | "return"
+    | "exchange"
+    | "refunded";
   pending_time?: string;
   on_hold_time?: string;
   confirmed_time?: string;
   processing_time?: string;
   shipped_time?: string;
+  partial_delivered_time?: string;
   delivered_time?: string;
   completed_time?: string;
   cancel_time?: string;
   return_time?: string;
+  exchange_time?: string;
+  refunded_time?: string;
   billing_country: string;
   billing_city: string;
   billing_state: string;
@@ -52,11 +58,32 @@ export interface IOrderInterface {
   pathao_status?: string;
   consignment_id?: string;
   delivery_fee?: number;
-  courier_type?: "pathao" | "steadfast";
+  // Multi-courier seam — pathao + steadfast wired; the rest integration-ready.
+  courier_type?:
+    | "pathao"
+    | "steadfast"
+    | "redx"
+    | "paperfly"
+    | "ecourier"
+    | "carrybee";
   steadfast_consignment_id?: string;
   steadfast_tracking_code?: string;
   steadfast_status?: string;
   steadfast_tracking_message?: string;
+  // Normalized cross-courier phase + raw courier string (audit). Nullable/unused
+  // until a 2nd courier lands — the seam avoids a migration then.
+  courier_phase?:
+    | "booked"
+    | "picked"
+    | "in_transit"
+    | "out_for_delivery"
+    | "delivered"
+    | "partial_delivered"
+    | "returned"
+    | "cancelled"
+    | "hold"
+    | "unknown";
+  courier_status_raw?: string;
   // ── Delivery override fields (admin editable) ─────────────────────────────
   // Courier এ পাঠানোর সময় এগুলো থাকলে use হবে, না থাকলে original billing data
   delivery_name?: string; // recipient name override

@@ -11,16 +11,23 @@ const orderSchema = new Schema<IOrderInterface>(
     order_status: {
       required: true,
       type: String,
+      // BUSINESS lifecycle — what the OWNER/admin sets, courier-agnostic. Courier
+      // vocabulary (Pathao/Steadfast/RedX/…) lives on courier_* fields; adding a
+      // courier must NOT change this enum. partial_delivered/exchange/refunded
+      // added 2026-07-18 (append-only, backward-compatible — no data migration).
       enum: [
         "pending",
         "on_hold",
         "confirmed",
         "processing",
         "shipped",
+        "partial_delivered",
         "delivered",
         "completed",
         "cancel",
         "return",
+        "exchange",
+        "refunded",
       ],
       default: "pending",
     },
@@ -29,10 +36,13 @@ const orderSchema = new Schema<IOrderInterface>(
     confirmed_time: { type: String },
     processing_time: { type: String },
     shipped_time: { type: String },
+    partial_delivered_time: { type: String },
     delivered_time: { type: String },
     completed_time: { type: String },
     cancel_time: { type: String },
     return_time: { type: String },
+    exchange_time: { type: String },
+    refunded_time: { type: String },
     sub_total_amount: {
       required: true,
       type: Number,
@@ -117,7 +127,29 @@ const orderSchema = new Schema<IOrderInterface>(
 
     courier_type: {
       type: String,
-      enum: ["pathao", "steadfast"],
+      // Multi-courier seam (2026-07-18): pathao+steadfast wired; the rest are
+      // integration-ready so adding one is a handler change, not a migration.
+      enum: ["pathao", "steadfast", "redx", "paperfly", "ecourier", "carrybee"],
+    },
+    // Multi-courier seam: normalized courier-agnostic phase + raw courier string.
+    // Nullable/unused until a 2nd courier lands — the seam avoids a migration then.
+    courier_phase: {
+      type: String,
+      enum: [
+        "booked",
+        "picked",
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "partial_delivered",
+        "returned",
+        "cancelled",
+        "hold",
+        "unknown",
+      ],
+    },
+    courier_status_raw: {
+      type: String,
     },
     steadfast_consignment_id: {
       type: String,
