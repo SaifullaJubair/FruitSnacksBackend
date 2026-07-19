@@ -3,6 +3,7 @@ import { IOrderInterface, orderSearchableField } from "./order.interface";
 import OrderModel from "./order.model";
 import ApiError from "../../errors/ApiError";
 import OrderProductModel from "../orderProducts/orderProduct.model";
+import { USER_PUBLIC_PROJECTION } from "../user/user.interface";
 
 // Create A Order
 export const postOrderServices = async (
@@ -131,7 +132,7 @@ export const getDashboardOrderServices = async (
       {
         path: "customer_id",
         model: "users",
-        select: "-user_password -user_otp",
+        select: USER_PUBLIC_PROJECTION,
       },
     ])
     .sort({ createdAt: -1 })
@@ -182,7 +183,7 @@ export const getSteadfastOrderServices = async (
       {
         path: "customer_id",
         model: "users",
-        select: "-user_password -user_otp",
+        select: USER_PUBLIC_PROJECTION,
       },
     ])
     .sort({ createdAt: -1 })
@@ -233,7 +234,7 @@ export const getPathaoOrderServices = async (
       {
         path: "customer_id",
         model: "users",
-        select: "-user_password -user_otp",
+        select: USER_PUBLIC_PROJECTION,
       },
     ])
     .sort({ createdAt: -1 })
@@ -259,7 +260,7 @@ export const getAOrderWithOrderProductsServices = async (
     {
       path: "customer_id",
       model: "users",
-      select: "-user_password -user_otp",
+      select: USER_PUBLIC_PROJECTION,
     },
     {
       path: "coupon_id",
