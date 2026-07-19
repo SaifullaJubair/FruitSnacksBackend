@@ -70,6 +70,17 @@ router
 // ⚠️ MUST be before /:order_id route below to avoid CastError.
 router.route("/:order_id/email").patch(setOrderEmail);
 
+// Admin order detail (guarded). Same handler/data as the public /:order_id
+// below, but behind `order_show` — this is what the admin panel's order-detail
+// / print flows hit. The public /:order_id stays open because the storefront
+// order-success + invoice pages call it while the just-placed guest has no
+// session (order_id is the bearer). Closes the admin IDOR without touching that.
+//
+// ⚠️ MUST be before /:order_id route below to avoid CastError.
+router
+  .route("/admin/:order_id")
+  .get(verifyToken("order_show"), getAOrderWithOrderProducts);
+
 // Order details with products
 // ⚠️ এই route সবার নিচে রাখতে হবে — নইলে /steadfast, /pathao, /dashboard
 // সব /:order_id হিসেবে match হয়ে যাবে এবং Cast Error দেবে
