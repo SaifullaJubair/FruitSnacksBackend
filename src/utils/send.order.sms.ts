@@ -30,7 +30,7 @@ const sendSMS = async (phone: string, message: string): Promise<void> => {
     const cfg = await getSmsConfig();
     if (!cfg) return;
 
-    await axios.post(
+    const response = await axios.post(
       "https://bulksmsbd.net/api/smsapi",
       {
         api_key: cfg.apiKey,
@@ -40,6 +40,21 @@ const sendSMS = async (phone: string, message: string): Promise<void> => {
       },
       { headers: { "Content-Type": "application/json" } },
     );
+
+    // BulkSMS answers 200 OK even when it refuses the message — an expired
+    // balance validity, a bad sender id and an unknown number all come back as
+    // a 200 carrying response_code 1006 / 1011 / … . Awaiting the call without
+    // reading the body therefore logged NOTHING on failure, and an operator
+    // watching the logs saw a silent success while no SMS ever left. The OTP
+    // sender has always checked this; the order sender never did.
+    const code = response?.data?.response_code;
+    if (code !== 202) {
+      console.error("Order SMS rejected by provider:", {
+        response_code: code,
+        error_message: response?.data?.error_message,
+        invoice_hint: message.split("\n")[1],
+      });
+    }
   } catch (err) {
     console.error("SMS send failed:", err);
   }
