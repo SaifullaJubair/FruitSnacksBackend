@@ -23,7 +23,7 @@ import { postSingleOrderUserServices } from "../user/user.services";
 import UserModel from "../user/user.model";
 import mongoose from "mongoose";
 import { sendMetaEvent } from "../metaPixel/meta.pixel.service";
-import { sendOrderSMS_GuestUnverified, sendOrderSMS_LoggedIn, sendOrderSMS_VerifiedGuest } from "../../utils/send.order.sms";
+import { sendOrderSMS_GuestUnverified, sendOrderSMS_VerifiedGuest } from "../../utils/send.order.sms";
 import { recomputeOrderTotals } from "./order.recompute";
 import {
   decrementStockForLines,
@@ -1142,15 +1142,27 @@ export const updateOrder: RequestHandler = async (
         const phone = orderBeforeUpdate?.customer_phone;
         const invoice_id = orderBeforeUpdate?.invoice_id;
         const customer: any = orderBeforeUpdate?.customer_id;
-        const is_logged_in = customer && !customer?.is_guest;
         const user_verified = customer?.user_verified;
         if (phone && invoice_id) {
+          // Two cases, not three. The old third branch keyed off
+          // `customer.is_guest` — a field that exists in no schema, is written
+          // by no code path, and was therefore `undefined` on every user, so
+          // `!is_guest` was always true and EVERY verified customer got the
+          // "check order history" link. That link lands on /user-profile, which
+          // bounces anyone without a live session to the login page, so a
+          // verified customer who simply wasn't logged in on their phone could
+          // not reach their own order.
+          //
+          // The tracking page needs no session (verified: anonymous GET returns
+          // the full order), and it also carries a "set your password" banner,
+          // so it serves the logged-in and logged-out alike. Send it to every
+          // verified customer and drop the guess about login state.
           if (!user_verified) {
+            // No password yet → point at set-password, which doubles as the
+            // way to reach their orders later.
             await sendOrderSMS_GuestUnverified(phone, invoice_id);
-          } else if (user_verified && !is_logged_in) {
-            await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
           } else {
-            await sendOrderSMS_LoggedIn(phone, invoice_id);
+            await sendOrderSMS_VerifiedGuest(phone, invoice_id, invoice_id);
           }
         }
       } catch (_) {}

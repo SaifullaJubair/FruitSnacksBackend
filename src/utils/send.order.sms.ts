@@ -76,6 +76,11 @@ export const sendOrderSMS_VerifiedGuest = async (
 };
 
 // ── Case 3: Verified + Logged-in user ────────────────────────────────────────
+// CURRENTLY UNUSED. The confirm handler can't tell a logged-in customer from a
+// logged-out one (the `is_guest` flag it used to branch on exists in no schema),
+// and this link lands on /user-profile, which redirects anyone without a live
+// session to the login page. Verified customers now get the tracking link
+// above, which works either way. Kept for the day a real session signal exists.
 export const sendOrderSMS_LoggedIn = async (
   phone: string,
   invoice_id: string,
