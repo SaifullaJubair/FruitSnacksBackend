@@ -227,6 +227,7 @@ const orderSchema = new Schema<IOrderInterface>(
     // skip re-fire when these flags are true (set after first success).
     meta_purchase_sent: { type: Boolean, default: false },
     tiktok_purchase_sent: { type: Boolean, default: false },
+    purchase_event_id: { type: String },
 
     // D18 POS fields
     order_source: {

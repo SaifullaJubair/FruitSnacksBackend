@@ -143,6 +143,10 @@ export interface IOrderInterface {
   // visits from a different device.
   meta_purchase_sent?: boolean;
   tiktok_purchase_sent?: boolean;
+  // Frontend-generated event_id shared between the browser pixel and the
+  // server CAPI call so Meta/TikTok can dedupe the two legs of ONE event.
+  // Falls back to `purchase-<orderId>` server-side when absent.
+  purchase_event_id?: string;
 
   // D18 POS fields
   order_source?: "storefront" | "admin";

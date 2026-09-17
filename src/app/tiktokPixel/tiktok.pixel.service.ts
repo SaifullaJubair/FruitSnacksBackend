@@ -54,13 +54,15 @@ export const sendTikTokEvent = async (
     return { ok: false, skipped: "no_credentials" };
   }
 
-  // Phase 1B Purchase dedup mirror.
+  // Phase 1B Purchase dedup mirror. Atomic claim BEFORE the outbound call
+  // (see meta.pixel.service.ts for why read-then-write-after races).
   const orderId = data.properties?.order_id;
   if (data.event_name === "CompletePayment" && orderId) {
-    const order: any = await OrderModel.findById(orderId)
-      .select("tiktok_purchase_sent")
-      .lean();
-    if (order?.tiktok_purchase_sent) {
+    const claimed = await OrderModel.findOneAndUpdate(
+      { _id: orderId, tiktok_purchase_sent: { $ne: true } },
+      { $set: { tiktok_purchase_sent: true } },
+    ).lean();
+    if (!claimed) {
       return { ok: true, skipped: "dedup" };
     }
   }
@@ -114,21 +116,30 @@ export const sendTikTokEvent = async (
 
     if (!ok) {
       console.warn("TikTok CAPI: non-zero code", response.data);
-    }
-
-    if (ok && data.event_name === "CompletePayment" && orderId) {
-      await OrderModel.updateOne(
-        { _id: orderId },
-        { $set: { tiktok_purchase_sent: true } },
-      ).catch((e) =>
-        console.error("TikTok CAPI: failed to mark order purchase_sent", e),
-      );
+      // Release the claim — TikTok rejected the event, so a retry
+      // shouldn't be dedup-skipped forever.
+      if (data.event_name === "CompletePayment" && orderId) {
+        await OrderModel.updateOne(
+          { _id: orderId },
+          { $set: { tiktok_purchase_sent: false } },
+        ).catch((e) =>
+          console.error("TikTok CAPI: failed to release purchase_sent claim", e),
+        );
+      }
     }
 
     return { ok };
   } catch (error: any) {
     const msg = error?.response?.data || error?.message || "unknown";
     console.error("TikTok Events API error:", msg);
+    if (data.event_name === "CompletePayment" && orderId) {
+      await OrderModel.updateOne(
+        { _id: orderId },
+        { $set: { tiktok_purchase_sent: false } },
+      ).catch((e) =>
+        console.error("TikTok CAPI: failed to release purchase_sent claim", e),
+      );
+    }
     return { ok: false, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
   }
 };

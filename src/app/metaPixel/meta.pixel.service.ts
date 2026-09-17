@@ -57,12 +57,20 @@ export const sendMetaEvent = async (
   // miss when the user clears storage / shares the success URL; this
   // is the ultimate guarantee. event_id alone isn't enough because
   // Meta dedups on event_id+event_name within ~48h but caches roll.
+  //
+  // Atomic claim BEFORE the outbound call (not a read-then-write-after
+  // check): two near-simultaneous callers for the same order (e.g. the
+  // backend's own post-commit call racing a frontend-triggered one) can
+  // otherwise both read meta_purchase_sent:false before either writes
+  // it, so both fire. findOneAndUpdate with a $ne filter is the atomic
+  // compare-and-swap — only one caller can win the claim.
   const orderId = data.custom_data?.order_id;
   if (data.event_name === "Purchase" && orderId) {
-    const order: any = await OrderModel.findById(orderId)
-      .select("meta_purchase_sent")
-      .lean();
-    if (order?.meta_purchase_sent) {
+    const claimed = await OrderModel.findOneAndUpdate(
+      { _id: orderId, meta_purchase_sent: { $ne: true } },
+      { $set: { meta_purchase_sent: true } },
+    ).lean();
+    if (!claimed) {
       return { ok: true, skipped: "dedup" };
     }
   }
@@ -120,20 +128,17 @@ export const sendMetaEvent = async (
         "Meta CAPI: events_received=0, payload may be malformed",
         response.data,
       );
-    }
-
-    if (
-      eventsAccepted &&
-      data.event_name === "Purchase" &&
-      orderId
-    ) {
-      // Mark sent only after Meta confirms receipt.
-      await OrderModel.updateOne(
-        { _id: orderId },
-        { $set: { meta_purchase_sent: true } },
-      ).catch((e) =>
-        console.error("Meta CAPI: failed to mark order purchase_sent", e),
-      );
+      // The atomic claim above already flipped meta_purchase_sent:true
+      // before this call. Meta rejected the event, so release the claim
+      // — otherwise a real retry would be silently dedup-skipped forever.
+      if (data.event_name === "Purchase" && orderId) {
+        await OrderModel.updateOne(
+          { _id: orderId },
+          { $set: { meta_purchase_sent: false } },
+        ).catch((e) =>
+          console.error("Meta CAPI: failed to release purchase_sent claim", e),
+        );
+      }
     }
 
     return {
@@ -143,6 +148,16 @@ export const sendMetaEvent = async (
   } catch (error: any) {
     const msg = error?.response?.data || error?.message || "unknown";
     console.error("Meta CAPI error:", msg);
+    // Same rollback for a hard failure (network error, 4xx/5xx) so the
+    // claimed-but-never-sent order isn't stuck dedup-skipped forever.
+    if (data.event_name === "Purchase" && orderId) {
+      await OrderModel.updateOne(
+        { _id: orderId },
+        { $set: { meta_purchase_sent: false } },
+      ).catch((e) =>
+        console.error("Meta CAPI: failed to release purchase_sent claim", e),
+      );
+    }
     return { ok: false, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
   }
 };
