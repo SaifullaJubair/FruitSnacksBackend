@@ -235,8 +235,13 @@ export const updateCategoryServices = async (
     String(newParentRaw ?? "") !== String(oldParent ?? "");
 
   // Non-reparent path — preserve existing simple update behaviour exactly.
+  // `parent_id` is dropped here: it's either absent, or present-but-unchanged
+  // (isReparent already confirmed no real change). Forms always send it as a
+  // string ("" for root), which Mongoose can't cast to ObjectId — passing it
+  // through to updateOne() throws a CastError even though nothing moved.
   if (!isReparent) {
-    const Category = await CategoryModel.updateOne({ _id }, data, {
+    const { parent_id, ...safeData } = data as any;
+    const Category = await CategoryModel.updateOne({ _id }, safeData, {
       runValidators: true,
     });
     return Category;
