@@ -148,6 +148,11 @@ const recomputeShippingCost = (
 ): number => {
   if (lines.length === 0) return 0;
 
+  // POS pickup: the customer carries the goods out of the shop, so there is
+  // nothing to ship. This is checked here rather than only in the controller
+  // so the rule holds for every caller of the recompute, not just the one.
+  if (requestData?.delivery_type === "pickup") return 0;
+
   // Zone detection — case-insensitive match on division name.
   const zoneName = String(requestData?.billing_state || "").trim().toLowerCase();
   const isInsideDhaka = zoneName === "dhaka";

@@ -1278,26 +1278,55 @@ export const postAdminOrder: any = async (
 
     await findOrCreateUser(requestData, session);
 
-    // Capture admin-chosen shipping before recompute overwrites it.
-    // recomputeShippingCost re-derives from billing_state + settings; for POS
-    // the admin explicitly chose pickup (0) or a zone rate — trust that choice.
-    const adminChosenShipping = Number(requestData?.shipping_cost) || 0;
-
-    // Server-side recompute for product prices (trusted from DB)
+    // Server-side recompute for product prices, shipping and VAT (all trusted
+    // from the DB, never from the client).
+    //
+    // Shipping used to be taken from the client here ("the admin chose it"),
+    // which meant the POS's own hardcoded rate was stored verbatim and the
+    // shop's free-delivery rule never applied to counter sales. The POS now
+    // sends the city as `billing_state` — the same field the storefront sends
+    // — so the recompute derives the identical charge for both channels.
+    // Pickup is handled inside recomputeShippingCost via `delivery_type`.
     const recomputed = await recomputeOrderTotals(requestData, session);
     requestData.sub_total_amount = recomputed.sub_total_amount;
-    // Restore the admin-chosen shipping cost (overrides recompute's zone calc)
-    requestData.shipping_cost = adminChosenShipping;
+    requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount;
 
     // D11 — manual discount replaces coupon path for POS
-    const manualDiscount = Math.max(0, Number(requestData?.admin_manual_discount) || 0);
+    const manualDiscount = Math.min(
+      Math.max(0, Number(requestData?.admin_manual_discount) || 0),
+      recomputed.sub_total_amount,
+    );
     requestData.admin_manual_discount = manualDiscount;
     requestData.discount_amount = manualDiscount;
     requestData.coupon_id = undefined; // ensure no coupon leaks in
+
+    // VAT is re-derived on the POST-discount base. `recomputed.vat_amount` was
+    // calculated against the coupon discount (always 0 for POS), so using it
+    // as-is would tax the manual discount the customer never paid — and would
+    // differ from how the storefront taxes a coupon. Same per-line formula,
+    // with the manual discount apportioned by line value.
+    const posVatAmount = (() => {
+      if (recomputed.sub_total_amount <= 0) return 0;
+      let total = 0;
+      for (const ln of recomputed.order_products as any[]) {
+        const pct = Number(ln?.vat_pct) || 0;
+        if (pct <= 0) continue;
+        const lineTotal = Number(ln?.product_grand_total_price) || 0;
+        const lineShare =
+          (lineTotal / recomputed.sub_total_amount) * manualDiscount;
+        total += ((lineTotal - lineShare) * pct) / 100;
+      }
+      return Math.round(total);
+    })();
+    requestData.vat_amount = posVatAmount;
+
     requestData.grand_total_amount = Math.max(
       0,
-      recomputed.sub_total_amount + adminChosenShipping + (recomputed.vat_amount || 0) - manualDiscount,
+      recomputed.sub_total_amount +
+        recomputed.shipping_cost +
+        posVatAmount -
+        manualDiscount,
     );
     requestData.loyalty_redeem_points = 0;
     requestData.loyalty_redeem_amount = 0;

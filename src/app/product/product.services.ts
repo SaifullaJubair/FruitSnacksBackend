@@ -3252,7 +3252,13 @@ export const findAllDashboardProductServices = async (
     .limit(limit)
     .select(
       "_id product_name product_slug product_sku main_image product_price " +
-      "product_sale_price product_quantity product_status is_variation",
+      "product_sale_price product_quantity product_status is_variation " +
+      // POS needs these to preview the same totals the server will compute:
+      // VAT is per-line (override beats the global rate) and delivery can be
+      // overridden per product, so without them the cashier's on-screen total
+      // and the stored order would silently disagree.
+      "vat_percentage_override delivery_mode delivery_flat_amount " +
+      "delivery_free_after_qty",
     )
     .lean();
 
