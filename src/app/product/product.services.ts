@@ -50,7 +50,11 @@ export const findAProductDetailsServices = async (
         { path: "product_attributes.attribute_id", model: "attributes" },
       ])
       .select(
-        "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt",
+        // 🔴 A digital product's license_key and download_url are what the customer
+        // PAYS for; this public route handed them to any visitor. product_updated_by is
+        // a staff id. All three excluded. group_prices stays: the storefront's PDP and
+        // cart read it to show a VIP/wholesale customer their own price.
+        "-__v -barcode -barcode_image -product_publisher_id -product_updated_by -product_by -product_supplier_id -product_buying_price -product_alert_quantity -license_key -download_url -createdAt -updatedAt",
       )
       .lean();
   };
@@ -229,7 +233,11 @@ export const findCartProductServices = async (
       { path: "category_id", model: "categories" },
     ])
     .select(
-      "-__v -barcode -barcode_image -product_publisher_id -product_by -product_supplier_id -product_buying_price -product_alert_quantity -createdAt -updatedAt -category_id -category_path -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
+      // 🔴 A digital product's license_key and download_url are what the customer
+      // PAYS for; this public route handed them to any visitor. product_updated_by is
+      // a staff id. All three excluded. group_prices stays: the storefront's PDP and
+      // cart read it to show a VIP/wholesale customer their own price.
+      "-__v -barcode -barcode_image -product_publisher_id -product_updated_by -product_by -product_supplier_id -product_buying_price -product_alert_quantity -license_key -download_url -createdAt -updatedAt -category_id -category_path -product_sku -description -other_images -main_image_key -meta_title -meta_description -meta_keywords -attributes_details",
     )
     .lean();
 
