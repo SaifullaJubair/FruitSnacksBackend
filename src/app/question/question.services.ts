@@ -3,7 +3,10 @@ import {
   questionSearchableField,
 } from "./question.interface";
 import QuestionModel from "./question.model";
-import { USER_PUBLIC_PROJECTION } from "../user/user.interface";
+import {
+  USER_PUBLIC_PROJECTION,
+  USER_REVIEWER_PUBLIC_PROJECTION,
+} from "../user/user.interface";
 
 // Create A Question
 export const postQuestionServices = async (
@@ -28,7 +31,7 @@ export const findAllQuestionServices = async (
     // SECURITY: PUBLIC per-product Q&A list (no auth). Project the asker or the
     // populate ships their user_password hash to every visitor. Ported from
     // core 2026-07-17.
-    .populate({ path: "question_user_id", select: USER_PUBLIC_PROJECTION })
+    .populate({ path: "question_user_id", select: USER_REVIEWER_PUBLIC_PROJECTION })
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)

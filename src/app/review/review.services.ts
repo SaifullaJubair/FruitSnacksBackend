@@ -4,7 +4,10 @@ import OrderProductModel from "../orderProducts/orderProduct.model";
 import ProductModel from "../product/product.model";
 import { IReviewInterface, reviewSearchableField } from "./review.interface";
 import ReviewModel from "./review.model";
-import { USER_PUBLIC_PROJECTION } from "../user/user.interface";
+import {
+  USER_PUBLIC_PROJECTION,
+  USER_REVIEWER_PUBLIC_PROJECTION,
+} from "../user/user.interface";
 
 // Find A Review with serial
 export const findAReviewSerialServices = async (
@@ -45,7 +48,7 @@ export const findAllReviewServices = async (
     // reviewer on the populate stops the user_password hash leaking to any
     // visitor (.select() on the parent doesn't reach populated docs). Ported
     // from core 2026-07-17.
-    .populate({ path: "review_user_id", select: USER_PUBLIC_PROJECTION })
+    .populate({ path: "review_user_id", select: USER_REVIEWER_PUBLIC_PROJECTION })
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit)

@@ -61,6 +61,17 @@ export interface IUserAddress {
 export const USER_PUBLIC_PROJECTION =
   "user_name user_phone user_email user_image user_division user_district user_status status_changed_at user_type customer_group createdAt";
 
+// Who wrote a review or asked a question, as shown to ANY visitor: a name and a
+// picture (plus `_id`, which Mongoose always returns and the Q&A section uses to
+// tell "my questions" from others').
+//
+// USER_PUBLIC_PROJECTION above carries the phone number and email, and it was
+// used on the public review and Q&A lists, so every reviewer's phone and email
+// went to anyone who opened a product's reviews. The admin dashboards keep
+// using USER_PUBLIC_PROJECTION; only the two public lists use this one. The
+// storefront reads only user_name, user_image and _id from a reviewer/asker.
+export const USER_REVIEWER_PUBLIC_PROJECTION = "user_name user_image";
+
 export const userSearchableField = [
   "user_name",
   "user_phone",
