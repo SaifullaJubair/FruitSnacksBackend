@@ -4,7 +4,7 @@ import httpStatus from "http-status";
 import ApiError from "../../errors/ApiError";
 import { ISettingInterface } from "./setting.interface";
 import { getPathaoLookupConfig } from "../order/courier.config";
-import { getPathaoAccessToken } from "../order/pathao.service";
+import { getPathaoAccessToken, invalidatePathaoToken } from "../order/pathao.service";
 import {
   getSettingServices,
   getSettingWithSecretsServices,
@@ -194,23 +194,52 @@ export const getZoneData: RequestHandler = async (
     // store_id, so these credentials cannot send a parcel anywhere. Order sending
     // still goes through getPathaoConfig and still fails closed.
     const cfg = await getPathaoLookupConfig();
-    const token = await getPathaoAccessToken(cfg);
 
-    const zoneData = await fetch(`${cfg.base_url}/cities/${city_id}/zone-list`, {
-      method: "get",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    // One retry with a forced-fresh token. Pathao can start rejecting an
+    // already-cached token without the issue-token call ever 401-ing again —
+    // seen live 2026-10-24: every request got HTTP 200 with no `data`, and
+    // only a process restart (which clears the in-memory cache) fixed it.
+    // A customer should not be blocked on checkout until someone notices and
+    // restarts the server, so the service does the cache-clear itself.
+    let zoneResult: any;
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) invalidatePathaoToken();
+      const token = await getPathaoAccessToken(cfg);
 
-    const zoneResult = await zoneData.json();
+      const zoneData = await fetch(`${cfg.base_url}/cities/${city_id}/zone-list`, {
+        method: "get",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      lastStatus = zoneData.status;
+      zoneResult = await zoneData.json();
+
+      if (zoneData.ok && Array.isArray(zoneResult?.data?.data)) break;
+    }
+
+    // Pathao can answer with HTTP 200 and still carry an error body (rate
+    // limit, invalid city_id, maintenance) — `data.data` is then missing and
+    // we were silently returning success:true with no list. Surface what
+    // Pathao actually said so this doesn't look like a frontend bug next time.
+    if (!Array.isArray(zoneResult?.data?.data)) {
+      console.error(
+        `[zone-list] Pathao responded ${lastStatus} for city_id=${city_id} after retry:`,
+        JSON.stringify(zoneResult),
+      );
+      throw new ApiError(
+        400,
+        zoneResult?.message || "Pathao থেকে Zone list আনা যায়নি।",
+      );
+    }
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
       success: true,
       message: "Setting Get successfully !",
-      data: zoneResult?.data?.data,
+      data: zoneResult.data.data,
     });
   } catch (error: any) {
     next(error);

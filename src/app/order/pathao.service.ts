@@ -34,6 +34,18 @@ let tokenExpiry = 0;
 const credsKey = (c: PathaoLookupConfig) =>
   `${c.base_url}|${c.client_id}|${c.username}`;
 
+// Clears the cache so the next call re-issues a token instead of reusing a
+// stale one. Pathao can start rejecting an already-cached token (revoked,
+// rotated on their end) without ever 401-ing the issue-token call again —
+// the cache just keeps handing out the bad token until something restarts
+// the process. Callers that detect a bad response mid-flight call this and
+// retry once, so a manual restart is never the only way to recover.
+export const invalidatePathaoToken = () => {
+  cachedToken = null;
+  cachedTokenKey = "";
+  tokenExpiry = 0;
+};
+
 // Takes PathaoLookupConfig, not PathaoConfig: issuing a token needs the four auth
 // fields and nothing else. PathaoConfig is a superset, so order-sending still
 // passes straight through — but the checkout's read-only zone lookup can call this
