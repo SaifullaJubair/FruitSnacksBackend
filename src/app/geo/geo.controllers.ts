@@ -3,6 +3,7 @@ import httpStatus from "http-status";
 
 import sendResponse from "../../shared/sendResponse";
 import {
+  findAllDistrictsServices,
   findAllGeoServices,
   findGeoBreadcrumbServices,
   findGeoChildrenServices,
@@ -32,6 +33,34 @@ export const getGeoChildren: RequestHandler = async (
       statusCode: httpStatus.OK,
       success: true,
       message: "Locations fetched",
+      data: result,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+/**
+ * GET /geo/districts — PUBLIC. All 64 districts, flat, across every
+ * division.
+ *
+ * The checkout's actual first dropdown (owner decision, 2026-10-27: Division
+ * is skipped in the picker — one fewer screen to tap through). Division is
+ * not lost from the data model, just from the UI; resolveGeoSnapshotServices
+ * still fills it onto the order from whichever district/upazila the
+ * customer picks.
+ */
+export const getAllDistricts: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<any> => {
+  try {
+    const result = await findAllDistrictsServices();
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "Districts fetched",
       data: result,
     });
   } catch (error: any) {

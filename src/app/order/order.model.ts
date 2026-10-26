@@ -123,6 +123,7 @@ const orderSchema = new Schema<IOrderInterface>(
     // replacing them. Snapshot names so historical orders keep rendering
     // even if the geo row is later renamed/deactivated.
     geo_division_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },
+    geo_division_name: { type: String },
     geo_district_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },
     geo_district_name: { type: String },
     geo_upazila_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },

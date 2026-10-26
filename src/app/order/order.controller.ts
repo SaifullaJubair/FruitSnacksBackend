@@ -246,31 +246,46 @@ export const postOrder: any = async (
     // geo_upazila_id into a server-trusted name snapshot. THE NAMES ARE
     // NEVER TAKEN FROM THE REQUEST (see geo.services.ts
     // resolveGeoSnapshotServices for why: this is a public, unauthenticated
-    // route). billing_city/billing_state keep coming from the client
-    // exactly as before this module existed — they are display names the
-    // customer already saw on the picker, not security-sensitive, and
-    // order.recompute.ts's shipping-cost string-match depends on them
-    // staying in that exact shape (see docs/_ai/GEO_LOCATION_SELF_HOSTED_PLAN.md
-    // Phase 2/3).
+    // route).
     //
-    // Audit finding #8 (2026-10-26): there was previously no server-side
-    // check that a delivery order had ANY location at all — only a
-    // client-side toast. A delivery order (not POS pickup) with neither a
-    // resolvable geo id NOR a billing_city/billing_state now fails loudly
-    // here instead of silently placing with a blank destination.
+    // Division dropped from the picker UI (owner decision, 2026-10-27) — the
+    // frontend now sends ONLY geo_district_id/geo_upazila_id, no
+    // billing_city/billing_state at all. So billing_state/billing_city are
+    // now DERIVED here from the resolved snapshot (division name / district-
+    // or-upazila name) rather than trusted from the request — this is what
+    // keeps order.recompute.ts's shipping-cost "dhaka" string-match working
+    // without the customer ever seeing a Division field (see
+    // docs/_ai/GEO_LOCATION_SELF_HOSTED_PLAN.md Phase 2/3 update).
+    // billing_address (the free-text house/road/area line) still comes
+    // straight from the client — that part never changed.
     const geoSnapshot = await resolveGeoSnapshotServices(
       requestData?.geo_upazila_id || requestData?.geo_district_id,
     );
     Object.assign(requestData, geoSnapshot);
+    if (geoSnapshot.geo_division_name) {
+      requestData.billing_state = geoSnapshot.geo_division_name;
+    }
+    if (geoSnapshot.geo_upazila_name || geoSnapshot.geo_district_name) {
+      requestData.billing_city =
+        geoSnapshot.geo_upazila_name || geoSnapshot.geo_district_name;
+    }
+
+    // Audit finding #8 (2026-10-26): there was previously no server-side
+    // check that a delivery order had ANY location at all — only a
+    // client-side toast. A delivery order (not POS pickup) with neither a
+    // resolvable geo id NOR a billing_city/billing_state now fails loudly
+    // here instead of silently placing with a blank destination. District
+    // AND upazila both required now that Division alone isn't offered as a
+    // fallback level in the picker.
     if (
       requestData?.delivery_type !== "pickup" &&
-      !geoSnapshot.geo_district_id &&
+      (!geoSnapshot.geo_district_id || !geoSnapshot.geo_upazila_id) &&
       !requestData?.billing_city &&
       !requestData?.billing_state
     ) {
       throw new ApiError(
         400,
-        "Delivery location is required. Please select your Division and District.",
+        "Delivery location is required. Please select your District and Area.",
       );
     }
 
@@ -543,22 +558,30 @@ export const postSingleOrder: any = async (
       throw new ApiError(400, "Phone verification required before placing an order.");
     }
 
-    // Geo module — same server-trusted resolve + delivery-location guard as
-    // postOrder above (see its comment for the full rationale). This route
-    // is what the PDP buy-now form (SingleProduct.jsx) posts to.
+    // Geo module — same server-trusted resolve + billing_state/billing_city
+    // derivation + delivery-location guard as postOrder above (see its
+    // comment for the full rationale). This route is what the PDP buy-now
+    // form (SingleProduct.jsx) posts to.
     const singleGeoSnapshot = await resolveGeoSnapshotServices(
       requestData?.geo_upazila_id || requestData?.geo_district_id,
     );
     Object.assign(requestData, singleGeoSnapshot);
+    if (singleGeoSnapshot.geo_division_name) {
+      requestData.billing_state = singleGeoSnapshot.geo_division_name;
+    }
+    if (singleGeoSnapshot.geo_upazila_name || singleGeoSnapshot.geo_district_name) {
+      requestData.billing_city =
+        singleGeoSnapshot.geo_upazila_name || singleGeoSnapshot.geo_district_name;
+    }
     if (
       requestData?.delivery_type !== "pickup" &&
-      !singleGeoSnapshot.geo_district_id &&
+      (!singleGeoSnapshot.geo_district_id || !singleGeoSnapshot.geo_upazila_id) &&
       !requestData?.billing_city &&
       !requestData?.billing_state
     ) {
       throw new ApiError(
         400,
-        "Delivery location is required. Please select your Division and District.",
+        "Delivery location is required. Please select your District and Area.",
       );
     }
 

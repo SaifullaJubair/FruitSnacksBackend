@@ -2,6 +2,7 @@ import express from "express";
 
 import { verifyToken } from "../../middlewares/verify.token";
 import {
+  getAllDistricts,
   getGeoBreadcrumb,
   getGeoChildren,
   getGeoChildrenAdmin,
@@ -25,6 +26,7 @@ const router = express.Router();
  * live Pathao `/setting/zone` call the checkout used to depend on.
  */
 router.route("/children").get(getGeoChildren);
+router.route("/districts").get(getAllDistricts);
 router.route("/breadcrumb/:id").get(getGeoBreadcrumb);
 
 /**

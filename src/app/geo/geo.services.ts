@@ -105,6 +105,51 @@ const dedupeForPicker = (rows: any[]): any[] => {
 };
 
 /**
+ * ALL districts, flat, across every division — the checkout's actual first
+ * dropdown.
+ *
+ * Division is skipped entirely in the picker (owner decision, 2026-10-27):
+ * one fewer screen to tap through before a customer can even reach District.
+ * It isn't lost — `resolveGeoSnapshotServices` below still fills
+ * `geo_division_id`/name onto the order by walking the picked district's own
+ * `geo_path`, so `billing_state` and the shipping-cost split in
+ * order.recompute.ts stay exactly as they were.
+ *
+ * 64 rows, cheap to return in one shot — no reason to paginate what a picker
+ * renders as one scrollable list anyway.
+ */
+export const findAllDistrictsServices = async (): Promise<any[]> => {
+  const rows: any[] = await GeoLocationModel.find({
+    type: "district",
+    is_active: true,
+  })
+    .sort({ name_en: 1 })
+    .select(PUBLIC_FIELDS)
+    .lean();
+
+  // Attach the division's own name onto each row (division_name_en) so the
+  // checkout can show a shipping-zone hint and derive billing_state-equivalent
+  // display text WITHOUT a second round trip or a Division dropdown of its
+  // own. One extra query, not N — divisions are only ever 8 rows.
+  const divisionIds = Array.from(
+    new Set(rows.map((r) => String((r.geo_path ?? [])[0] || "")).filter(Boolean)),
+  );
+  const divisions: any[] = await GeoLocationModel.find({
+    _id: { $in: divisionIds },
+  })
+    .select("_id name_en")
+    .lean();
+  const divisionNameById = new Map(
+    divisions.map((d: any) => [String(d._id), d.name_en]),
+  );
+
+  return rows.map((r) => ({
+    ...r,
+    division_name_en: divisionNameById.get(String((r.geo_path ?? [])[0])) || null,
+  }));
+};
+
+/**
  * One location plus its ancestors, ordered root → leaf.
  *
  * Used to render "Dhaka › Dhaka › Savar" and to snapshot the full address onto
@@ -280,6 +325,8 @@ export const getGeoMappingStatsServices = async (
 export const resolveGeoSnapshotServices = async (
   locationId?: string | null,
 ): Promise<{
+  geo_division_id?: string;
+  geo_division_name?: string;
   geo_district_id?: string;
   geo_district_name?: string;
   geo_upazila_id?: string;
@@ -313,7 +360,30 @@ export const resolveGeoSnapshotServices = async (
     out.geo_district_id = String(node._id);
     out.geo_district_name = node.name_en;
   }
-  // A division alone is too coarse to ship to, so it snapshots nothing.
+
+  // Division is skipped in the picker UI (owner decision, 2026-10-27 — one
+  // fewer dropdown to tap through), but still resolved and snapshotted here:
+  // `billing_state` and order.recompute.ts's shipping-cost "dhaka" match
+  // both need the division NAME, not the district's. geo_path is ordered
+  // root → parent, so the division is always index 0 regardless of whether
+  // the picked node is a district (geo_path = [division]) or an upazila
+  // (geo_path = [division, district]).
+  const divisionId = (node.geo_path ?? [])[0];
+  if (divisionId) {
+    const division: any = await GeoLocationModel.findById(divisionId)
+      .select("_id name_en")
+      .lean();
+    if (division) {
+      out.geo_division_id = String(division._id);
+      out.geo_division_name = division.name_en;
+    }
+  } else if (node.type === "division") {
+    // Defensive — the picker never sends a division id directly anymore,
+    // but resolving one correctly if it ever did is cheap and avoids a
+    // silent gap.
+    out.geo_division_id = String(node._id);
+    out.geo_division_name = node.name_en;
+  }
 
   return out;
 };

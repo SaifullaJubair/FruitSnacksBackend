@@ -67,6 +67,7 @@ export interface IOrderInterface {
   // geo row is later renamed or deactivated. All optional: a POS walk-in
   // has no delivery geography at all.
   geo_division_id?: string;
+  geo_division_name?: string;
   geo_district_id?: string;
   geo_district_name?: string;
   geo_upazila_id?: string;
