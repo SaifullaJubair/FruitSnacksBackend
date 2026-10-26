@@ -51,11 +51,26 @@ export interface IOrderInterface {
   order_updated_by?: Types.ObjectId | IAdminInterface;
   tracking_code?: string;
   // D18 BLOCKER 3 — POS walk-in/pickup orders have no Pathao zone; all 4 optional
+  // ⚠️ These are RESOLVED SERVER-SIDE at dispatch time from geo_district_id/
+  // geo_upazila_id below (see geo.services.ts findPathaoRefServices), never
+  // trusted from the request. The frontend stopped sending them directly —
+  // see docs/_ai/GEO_LOCATION_SELF_HOSTED_PLAN.md Phase 2/5.
   pathao_city_id?: number;
   pathao_city_name?: string;
   pathao_zone_id?: number;
   pathao_zone_name?: string;
   pathao_status?: string;
+  // Geo module (self-hosted division/district/upazila) — additive, alongside
+  // the billing_city/billing_state/pathao_* fields above, never replacing
+  // them. `_id`s reference geo_locations; `_name` is a snapshot taken at
+  // order-placement time so historical orders keep rendering even if the
+  // geo row is later renamed or deactivated. All optional: a POS walk-in
+  // has no delivery geography at all.
+  geo_division_id?: string;
+  geo_district_id?: string;
+  geo_district_name?: string;
+  geo_upazila_id?: string;
+  geo_upazila_name?: string;
   consignment_id?: string;
   delivery_fee?: number;
   // Multi-courier seam — pathao + steadfast wired; the rest integration-ready.

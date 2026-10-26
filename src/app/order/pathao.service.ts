@@ -14,6 +14,7 @@ import {
   PathaoConfig,
   PathaoLookupConfig,
 } from "./courier.config";
+import { findPathaoRefServices } from "../geo/geo.services";
 
 // ── Helper: phone normalize (01XXXXXXXXX format) ─────────────────────────────
 const normalizePhone = (phone: string): string =>
@@ -144,10 +145,30 @@ export const sendOrderToPathaoService = async (
     );
   }
 
+  // Geo module fallback: orders placed through the new Division/District
+  // picker (Phase 2+) no longer arrive with pathao_city_id/zone_id already
+  // set — the frontend never sees Pathao's numbers (see
+  // docs/_ai/GEO_LOCATION_SELF_HOSTED_PLAN.md Phase 5). Resolve them here,
+  // at the one moment they're actually needed, by walking up the geo tree
+  // from whichever location the customer picked. An order placed before
+  // this module existed has pathao_city_id/zone_id already and skips this
+  // entirely — untouched, as the plan's "existing orders stay compatible"
+  // decision requires.
+  if (!order.pathao_city_id || !order.pathao_zone_id) {
+    const locationId = order.geo_upazila_id || order.geo_district_id;
+    const ref = locationId
+      ? await findPathaoRefServices(String(locationId))
+      : null;
+    if (ref?.city_id && ref?.zone_id) {
+      order.pathao_city_id = ref.city_id;
+      order.pathao_zone_id = ref.zone_id;
+    }
+  }
+
   if (!order.pathao_city_id || !order.pathao_zone_id) {
     throw new ApiError(
       400,
-      "এই order এ Pathao city/zone সেট করা নেই। Order details চেক করুন।",
+      "এই order এ Pathao city/zone সেট করা নেই (এই এলাকায় Pathao ম্যাপিং পাওয়া যায়নি)। Order details চেক করুন।",
     );
   }
 
@@ -306,11 +327,23 @@ export const bulkSendToPathaoService = async (
       });
       continue;
     }
+    // Same geo-tree fallback as the single-send path above — an order from
+    // the new picker has no pathao_city_id/zone_id set until resolved here.
+    if (!o.pathao_city_id || !o.pathao_zone_id) {
+      const locationId = o.geo_upazila_id || o.geo_district_id;
+      const ref = locationId
+        ? await findPathaoRefServices(String(locationId))
+        : null;
+      if (ref?.city_id && ref?.zone_id) {
+        o.pathao_city_id = ref.city_id;
+        o.pathao_zone_id = ref.zone_id;
+      }
+    }
     if (!o.pathao_city_id || !o.pathao_zone_id) {
       failedList.push({
         order_id: o._id,
         invoice_id: o.invoice_id,
-        reason: "Pathao city/zone সেট করা নেই",
+        reason: "Pathao city/zone সেট করা নেই (এই এলাকায় Pathao ম্যাপিং পাওয়া যায়নি)",
       });
       continue;
     }

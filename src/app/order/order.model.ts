@@ -109,6 +109,8 @@ const orderSchema = new Schema<IOrderInterface>(
       type: String,
     },
     // D18 BLOCKER 3 — POS walk-in/pickup has no Pathao zone; all optional
+    // ⚠️ Resolved server-side at dispatch time from geo_district_id/
+    // geo_upazila_id below — see geo.services.ts findPathaoRefServices.
     pathao_city_id: { type: Number },
     pathao_city_name: { type: String },
     pathao_zone_id: { type: Number },
@@ -117,6 +119,14 @@ const orderSchema = new Schema<IOrderInterface>(
     pathao_status: {
       type: String,
     },
+    // Geo module — additive, alongside pathao_*/billing_* above, never
+    // replacing them. Snapshot names so historical orders keep rendering
+    // even if the geo row is later renamed/deactivated.
+    geo_division_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },
+    geo_district_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },
+    geo_district_name: { type: String },
+    geo_upazila_id: { type: Schema.Types.ObjectId, ref: "geo_locations" },
+    geo_upazila_name: { type: String },
     consignment_id: {
       type: String,
     },
