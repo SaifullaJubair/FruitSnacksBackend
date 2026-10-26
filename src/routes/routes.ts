@@ -17,6 +17,7 @@ import { SliderRoutes } from "../app/slider/slider.routes";
 import { AuthenticationRoutes } from "../app/authentication/authentication.routes";
 import { PaymentMethodRoutes } from "../app/withdrow_payment_method/withdrow_payment_method.routes";
 import { SettingRoutes } from "../app/setting/setting.routes";
+import { GeoRoutes } from "../app/geo/geo.routes";
 import { UserRegRoutes } from "../app/user/user.routes";
 import { ProductFilterRoutes } from "../app/productFilter/product.filter.routes";
 import { PaymentWithdrawListRoutes } from "../app/paymentWithdrawList/paymentWithdrawList.routes";
@@ -150,6 +151,10 @@ const moduleRoutes = [
   {
     path: "/setting",
     route: SettingRoutes,
+  },
+  {
+    path: "/geo",
+    route: GeoRoutes,
   },
   {
     path: "/image_upload",
