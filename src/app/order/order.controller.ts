@@ -1,4 +1,4 @@
-import { NextFunction, Request, RequestHandler, Response } from "express";
+﻿import { NextFunction, Request, RequestHandler, Response } from "express";
 import sendResponse from "../../shared/sendResponse";
 import ApiError from "../../errors/ApiError";
 import { IOrderInterface, orderSearchableField } from "./order.interface";
@@ -69,9 +69,9 @@ const findOrCreateUser = async (
   requestData: any,
   session: mongoose.ClientSession,
 ) => {
-  // F1.3 (2026-06-20) � normalize the stored order phone for EVERY order, not
+  // F1.3 (2026-06-20) — normalize the stored order phone for EVERY order, not
   // just guest auto-create. The FE sends `01XXXXXXXXX` for logged-in users
-  // (user_phone.slice) and E.164 `+8801�` for guests; without this the orders
+  // (user_phone.slice) and E.164 `+8801…` for guests; without this the orders
   // collection holds two formats, so any direct equality lookup on
   // customer_phone (e.g. markAbandonedCartRecoveredByPhone) silently misses.
   // normalizeBdPhone leaves non-BD/foreign numbers untouched (clone-safe).
@@ -80,7 +80,7 @@ const findOrCreateUser = async (
   requestData.customer_phone = normalizedPhone;
 
   if (!requestData?.need_user_create) {
-    // ? Logged in user � DB ???? user_verified ????? ???
+    // ✅ Logged in user — DB থেকে user_verified নিয়ে আসো
     const loggedInUser: any = await UserModel.findOne({
       _id: requestData?.customer_id,
     }).session(session);
@@ -89,7 +89,7 @@ const findOrCreateUser = async (
     return;
   }
 
-  // B1 (2026-06-04) � guest auto-create dedup: look up against BOTH the
+  // B1 (2026-06-04) — guest auto-create dedup: look up against BOTH the
   // normalized form AND the raw form until the backfill script rewrites legacy
   // docs.
 
@@ -103,7 +103,7 @@ const findOrCreateUser = async (
   if (userCheck) {
     requestData.customer_id = userCheck?._id?.toString();
     requestData.user_created = false;
-    requestData.user_verified = userCheck?.user_verified ?? false; // ?
+    requestData.user_verified = userCheck?.user_verified ?? false; // ✅
     return;
   }
 
@@ -145,7 +145,7 @@ const findOrCreateUser = async (
 
   requestData.customer_id = result?._id?.toString();
   requestData.user_created = true;
-  requestData.user_verified = userCreateData.user_verified; // ?
+  requestData.user_verified = userCreateData.user_verified; // ✅
 };
 
 // ================================================================
@@ -157,7 +157,7 @@ const handleCouponUsage = async (
 ) => {
   if (!requestData?.coupon_id) return;
 
-  // 11� D6 � anonymous BOGO allowed. If no customer_id (FB-ad guest checkout),
+  // 11β D6 — anonymous BOGO allowed. If no customer_id (FB-ad guest checkout),
   // skip the coupon_used per-user counter entirely; the global atomic decrement
   // below still gates re-use via coupon_available.
   if (requestData?.customer_id) {
@@ -194,9 +194,9 @@ const handleCouponUsage = async (
     }
   }
 
-  // 11� HIGH 7 � atomic decrement guard. Previously two concurrent orders both
+  // 11β HIGH 7 — atomic decrement guard. Previously two concurrent orders both
   // saw coupon_available > 0, both passed the recompute check, and both made
-  // it here ? counter went to -1. findOneAndUpdate with $gt:0 filter is
+  // it here → counter went to -1. findOneAndUpdate with $gt:0 filter is
   // atomic at the document level; if it returns null another order won the
   // race and we must reject this one cleanly.
   const mainCouponUpdate = await CouponModel.findOneAndUpdate(
@@ -205,11 +205,11 @@ const handleCouponUsage = async (
     { new: true, session, runValidators: true },
   );
   if (!mainCouponUpdate)
-    throw new ApiError(409, "Coupon stock exhausted � please try without it.");
+    throw new ApiError(409, "Coupon stock exhausted — please try without it.");
 };
 
 // ================================================================
-// POST Order (Main � Add to Cart)
+// POST Order (Main — Add to Cart)
 // ================================================================
 export const postOrder: any = async (
   req: Request,
@@ -221,7 +221,7 @@ export const postOrder: any = async (
   try {
     const requestData = req.body;
 
-    // C13 HIGH 6 � min_order_amount server check FIRST (before any DB writes).
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
     // Client-side hint is UX only; this is the real gate. DevTools bypass blocked.
     const orderSetting = await getCachedSetting().catch(() => null);
     const minOrderAmount = orderSetting?.min_order_amount ?? 0;
@@ -230,34 +230,34 @@ export const postOrder: any = async (
       if (clientSubTotal < minOrderAmount) {
         throw new ApiError(
           400,
-          `Minimum order amount is ?${minOrderAmount}. Your cart total is ?${clientSubTotal}.`,
+          `Minimum order amount is ৳${minOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
         );
       }
     }
 
-    // C13 M9 � verify_phone_on_order: if ON, FE must send otp_verified:true.
+    // C13 M9 — verify_phone_on_order: if ON, FE must send otp_verified:true.
     // Default OFF preserves anonymous checkout (owner-locked rule).
     const verifyPhoneOnOrder = orderSetting?.verify_phone_on_order ?? false;
     if (verifyPhoneOnOrder && !requestData?.otp_verified) {
       throw new ApiError(400, "Phone verification required before placing an order.");
     }
 
-    // Geo module � resolve the client-supplied geo_district_id/
+    // Geo module — resolve the client-supplied geo_district_id/
     // geo_upazila_id into a server-trusted name snapshot. THE NAMES ARE
     // NEVER TAKEN FROM THE REQUEST (see geo.services.ts
     // resolveGeoSnapshotServices for why: this is a public, unauthenticated
     // route).
     //
-    // Division dropped from the picker UI (owner decision, 2026-10-27) � the
+    // Division dropped from the picker UI (owner decision, 2026-10-27) — the
     // frontend now sends ONLY geo_district_id/geo_upazila_id, no
     // billing_city/billing_state at all. So billing_state/billing_city are
     // now DERIVED here from the resolved snapshot (division name / district-
-    // or-upazila name) rather than trusted from the request � this is what
+    // or-upazila name) rather than trusted from the request — this is what
     // keeps order.recompute.ts's shipping-cost "dhaka" string-match working
     // without the customer ever seeing a Division field (see
     // docs/_ai/GEO_LOCATION_SELF_HOSTED_PLAN.md Phase 2/3 update).
     // billing_address (the free-text house/road/area line) still comes
-    // straight from the client � that part never changed.
+    // straight from the client — that part never changed.
     const geoSnapshot = await resolveGeoSnapshotServices(
       requestData?.geo_upazila_id || requestData?.geo_district_id,
     );
@@ -271,7 +271,7 @@ export const postOrder: any = async (
     }
 
     // Audit finding #8 (2026-10-26): there was previously no server-side
-    // check that a delivery order had ANY location at all � only a
+    // check that a delivery order had ANY location at all — only a
     // client-side toast. A delivery order (not POS pickup) with neither a
     // resolvable geo id NOR a billing_city/billing_state now fails loudly
     // here instead of silently placing with a blank destination. District
@@ -291,7 +291,7 @@ export const postOrder: any = async (
 
     await findOrCreateUser(requestData, session);
 
-    // ?? Server-side recompute � client-sent prices/totals are NEVER trusted.
+    // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
     // Overwrite the order totals + per-line prices with server-computed values.
     const recomputed = await recomputeOrderTotals(requestData, session);
     requestData.sub_total_amount = recomputed.sub_total_amount;
@@ -299,12 +299,12 @@ export const postOrder: any = async (
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
-    // Phase G3 (F1b) � persist the clamped redeem values on the order doc so
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
     // admin can see them in PaymentInfoCard + so reports can split discount
     // vs loyalty without spelunking the ledger.
     requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
     requestData.loyalty_redeem_amount = recomputed.loyalty_redeem_amount || 0;
-    // Order Unification Phase A � server-trusted order-level metadata.
+    // Order Unification Phase A — server-trusted order-level metadata.
     requestData.pre_discount_total = recomputed.pre_discount_total;
     requestData.order_type = requestData.order_type || "regular";
     requestData.currency = orderSetting?.currency_code || "BDT";
@@ -337,12 +337,12 @@ export const postOrder: any = async (
             product_main_price: line?.product_main_price,
             product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
-            // Phase 1 � snapshot SKU + barcode at placement.
+            // Phase 1 — snapshot SKU + barcode at placement.
             product_sku_snapshot: line?.product_sku_snapshot,
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
-            // Order Unification Phase A � display snapshot + discount source + per-line VAT.
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
             product_name_snapshot: line?.product_name_snapshot,
             product_image_snapshot: line?.product_image_snapshot,
             discount_source: line?.discount_source || "none",
@@ -365,9 +365,9 @@ export const postOrder: any = async (
     if (maintainStock) {
       await decrementStockForLines(recomputed.order_products, session);
     }
-    // ?? Bump sold_count for social-proof / reporting (Phase F).
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
-    // ?? Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
     try {
       if (recomputed.loyalty_redeem_points) {
         await redeemOnOrder(
@@ -378,7 +378,7 @@ export const postOrder: any = async (
         );
       }
     } catch (_) {}
-    // ?? Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
     try {
       await earnOnOrder(
         requestData?.customer_id,
@@ -408,7 +408,7 @@ export const postOrder: any = async (
     await session.commitTransaction();
     session.endSession();
 
-    // -- Meta Purchase event (silent fail) ------------------------------------
+    // ── Meta Purchase event (silent fail) ────────────────────────────────────
     try {
       const clientIp =
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
@@ -416,7 +416,7 @@ export const postOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
-      // Phase 1B EMQ � split name, sum qty, pass form-derived geo.
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
       const nameParts = String(requestData?.customer_name || "")
         .trim()
         .split(/\s+/)
@@ -463,7 +463,7 @@ export const postOrder: any = async (
       });
     } catch (_) {}
 
-    // -- SMS on order-place DISABLED � SMS fires on admin order-confirm instead --
+    // ── SMS on order-place DISABLED — SMS fires on admin order-confirm instead ──
     // try {
     //   const phone = requestData?.customer_phone;
     //   const invoice_id = requestData?.invoice_id;
@@ -476,8 +476,8 @@ export const postOrder: any = async (
     //   }
     // } catch (_) {}
 
-    // -- Phase G2: mark any open abandoned-cart for this phone as recovered
-    // (silent fail � recovery tracking is best-effort).
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
     try {
       await markAbandonedCartRecoveredByPhone(
         requestData?.customer_phone,
@@ -485,7 +485,7 @@ export const postOrder: any = async (
       );
     } catch (_) {}
 
-    // -- Phase C: hand off to the chosen payment gateway (post-commit so a
+    // ── Phase C: hand off to the chosen payment gateway (post-commit so a
     // gateway hiccup doesn't roll back the order). For COD this is a no-op.
     // Phase C3: if an advance was requested, initiate the advance gateway for
     // ONLY the advance_amount (order itself stays cod for the rest).
@@ -539,7 +539,7 @@ export const postSingleOrder: any = async (
   try {
     const requestData = req.body;
 
-    // C13 HIGH 6 � min_order_amount server check FIRST (before any DB writes).
+    // C13 HIGH 6 — min_order_amount server check FIRST (before any DB writes).
     const singleOrderSetting = await getCachedSetting().catch(() => null);
     const singleMinOrderAmount = singleOrderSetting?.min_order_amount ?? 0;
     if (singleMinOrderAmount > 0) {
@@ -547,18 +547,18 @@ export const postSingleOrder: any = async (
       if (clientSubTotal < singleMinOrderAmount) {
         throw new ApiError(
           400,
-          `Minimum order amount is ?${singleMinOrderAmount}. Your cart total is ?${clientSubTotal}.`,
+          `Minimum order amount is ৳${singleMinOrderAmount}. Your cart total is ৳${clientSubTotal}.`,
         );
       }
     }
 
-    // C13 M9 � verify_phone_on_order gate.
+    // C13 M9 — verify_phone_on_order gate.
     const singleVerifyPhone = singleOrderSetting?.verify_phone_on_order ?? false;
     if (singleVerifyPhone && !requestData?.otp_verified) {
       throw new ApiError(400, "Phone verification required before placing an order.");
     }
 
-    // Geo module � same server-trusted resolve + billing_state/billing_city
+    // Geo module — same server-trusted resolve + billing_state/billing_city
     // derivation + delivery-location guard as postOrder above (see its
     // comment for the full rationale). This route is what the PDP buy-now
     // form (SingleProduct.jsx) posts to.
@@ -587,18 +587,18 @@ export const postSingleOrder: any = async (
 
     await findOrCreateUser(requestData, session);
 
-    // ?? Server-side recompute � client-sent prices/totals are NEVER trusted.
+    // 🔒 Server-side recompute — client-sent prices/totals are NEVER trusted.
     const recomputed = await recomputeOrderTotals(requestData, session);
     requestData.sub_total_amount = recomputed.sub_total_amount;
     requestData.discount_amount = recomputed.discount_amount;
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount; // Phase H
     requestData.grand_total_amount = recomputed.grand_total_amount;
-    // Order Unification Phase A � server-trusted order-level metadata.
+    // Order Unification Phase A — server-trusted order-level metadata.
     requestData.pre_discount_total = recomputed.pre_discount_total;
     requestData.order_type = requestData.order_type || "regular";
     requestData.currency = singleOrderSetting?.currency_code || "BDT";
-    // Phase G3 (F1b) � persist the clamped redeem values on the order doc so
+    // Phase G3 (F1b) — persist the clamped redeem values on the order doc so
     // admin can see them in PaymentInfoCard + so reports can split discount
     // vs loyalty without spelunking the ledger.
     requestData.loyalty_redeem_points = recomputed.loyalty_redeem_points || 0;
@@ -624,12 +624,12 @@ export const postSingleOrder: any = async (
             product_main_price: line?.product_main_price,
             product_main_discount_price: line?.product_main_discount_price,
             customer_id: requestData?.customer_id,
-            // Phase 1 � snapshot SKU + barcode at placement.
+            // Phase 1 — snapshot SKU + barcode at placement.
             product_sku_snapshot: line?.product_sku_snapshot,
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
-            // Order Unification Phase A � display snapshot + discount source + per-line VAT.
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
             product_name_snapshot: line?.product_name_snapshot,
             product_image_snapshot: line?.product_image_snapshot,
             discount_source: line?.discount_source || "none",
@@ -652,9 +652,9 @@ export const postSingleOrder: any = async (
     if (singleMaintainStock) {
       await decrementStockForLines(recomputed.order_products, session);
     }
-    // ?? Bump sold_count for social-proof / reporting (Phase F).
+    // 📈 Bump sold_count for social-proof / reporting (Phase F).
     await bumpSoldCounts(recomputed.order_products, session);
-    // ?? Phase G3 (F1b): debit redeemed points (recompute clamped already).
+    // 🎁 Phase G3 (F1b): debit redeemed points (recompute clamped already).
     try {
       if (recomputed.loyalty_redeem_points) {
         await redeemOnOrder(
@@ -665,7 +665,7 @@ export const postSingleOrder: any = async (
         );
       }
     } catch (_) {}
-    // ?? Phase G3: auto-earn loyalty points (silent no-op if disabled).
+    // 🎁 Phase G3: auto-earn loyalty points (silent no-op if disabled).
     try {
       await earnOnOrder(
         requestData?.customer_id,
@@ -680,7 +680,7 @@ export const postSingleOrder: any = async (
     await session.commitTransaction();
     session.endSession();
 
-    // -- Meta Purchase event (silent fail) ------------------------------------
+    // ── Meta Purchase event (silent fail) ────────────────────────────────────
     try {
       const clientIp =
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
@@ -688,7 +688,7 @@ export const postSingleOrder: any = async (
         "";
       const currency = await getCurrencyCode();
 
-      // Phase 1B EMQ � split name, sum qty, pass form-derived geo.
+      // Phase 1B EMQ — split name, sum qty, pass form-derived geo.
       const nameParts = String(requestData?.customer_name || "")
         .trim()
         .split(/\s+/)
@@ -734,7 +734,7 @@ export const postSingleOrder: any = async (
       });
     } catch (_) {}
 
-    // -- SMS on order-place DISABLED � SMS fires on admin order-confirm instead --
+    // ── SMS on order-place DISABLED — SMS fires on admin order-confirm instead ──
     // try {
     //   const phone = requestData?.customer_phone;
     //   const invoice_id = requestData?.invoice_id;
@@ -747,8 +747,8 @@ export const postSingleOrder: any = async (
     //   }
     // } catch (_) {}
 
-    // -- Phase G2: mark any open abandoned-cart for this phone as recovered
-    // (silent fail � recovery tracking is best-effort).
+    // ── Phase G2: mark any open abandoned-cart for this phone as recovered
+    // (silent fail — recovery tracking is best-effort).
     try {
       await markAbandonedCartRecoveredByPhone(
         requestData?.customer_phone,
@@ -756,7 +756,7 @@ export const postSingleOrder: any = async (
       );
     } catch (_) {}
 
-    // -- Phase C: hand off to the chosen payment gateway (post-commit so a
+    // ── Phase C: hand off to the chosen payment gateway (post-commit so a
     // gateway hiccup doesn't roll back the order). For COD this is a no-op.
     // Phase C3: if an advance was requested, initiate the advance gateway for
     // ONLY the advance_amount (order itself stays cod for the rest).
@@ -830,7 +830,7 @@ export const getACustomerAllOrder: RequestHandler = async (
 ): Promise<any> => {
   try {
     const { page, limit, searchTerm }: any = req.query;
-    // F012 � derive the customer from the auth token, NOT the query string.
+    // F012 — derive the customer from the auth token, NOT the query string.
     // verifyUserToken populates req.user.id; any client-sent customer_id is
     // ignored so a user can only ever read their own orders.
     const customer_id = (req as any).user?.id;
@@ -990,7 +990,7 @@ export const getSteadfastOrders: RequestHandler = async (
 };
 
 // ================================================================
-// ? GET Pathao Orders
+// ✅ GET Pathao Orders
 // ================================================================
 export const getPathaoOrders: RequestHandler = async (
   req: Request,
@@ -1155,7 +1155,7 @@ export const updateOrder: RequestHandler = async (
   session.startTransaction();
   try {
     const requestData = req.body;
-    // Order Unification Phase A � cancel_reason / return_reason / internal_note
+    // Order Unification Phase A — cancel_reason / return_reason / internal_note
     // arrive in req.body and pass straight through to updateOrderServices.
     // This route is admin-gated (verifyToken("order_update")), so these admin-
     // only fields can never be set by a storefront user. internal_note is never
@@ -1210,7 +1210,7 @@ export const updateOrder: RequestHandler = async (
     await session.commitTransaction();
     session.endSession();
 
-    // -- SMS on order-confirm --------------------------------------------------
+    // ── SMS on order-confirm ──────────────────────────────────────────────────
     // Fires AFTER commit so a failed SMS never rolls back the status change.
     if (requestData?.order_status === "confirmed" && orderBeforeUpdate) {
       try {
@@ -1220,7 +1220,7 @@ export const updateOrder: RequestHandler = async (
         const user_verified = customer?.user_verified;
         if (phone && invoice_id) {
           // Two cases, not three. The old third branch keyed off
-          // `customer.is_guest` � a field that exists in no schema, is written
+          // `customer.is_guest` — a field that exists in no schema, is written
           // by no code path, and was therefore `undefined` on every user, so
           // `!is_guest` was always true and EVERY verified customer got the
           // "check order history" link. That link lands on /user-profile, which
@@ -1233,7 +1233,7 @@ export const updateOrder: RequestHandler = async (
           // so it serves the logged-in and logged-out alike. Send it to every
           // verified customer and drop the guess about login state.
           if (!user_verified) {
-            // No password yet ? point at set-password, which doubles as the
+            // No password yet → point at set-password, which doubles as the
             // way to reach their orders later.
             await sendOrderSMS_GuestUnverified(phone, invoice_id);
           } else {
@@ -1274,7 +1274,7 @@ export const updateOrderDeliveryInfo: RequestHandler = async (
       delivery_note,
     } = req.body;
 
-    // ???? delivery fields update ??? � order_status ?? ???? ???? ??
+    // শুধু delivery fields update করব — order_status বা অন্য কিছু না
     const updateData: any = {};
     if (delivery_name !== undefined) updateData.delivery_name = delivery_name;
     if (delivery_phone !== undefined)
@@ -1314,10 +1314,10 @@ export const updateOrderDeliveryInfo: RequestHandler = async (
 // ================================================================
 // POST Admin / POS Order
 // ================================================================
-// D18 BLOCKER 1 � gated by verifyToken("order_create_admin") in routes.
-// D10 � no Meta/TikTok CAPI, no SMS for admin-source orders.
-// D11 � manual discount only (no coupon); coupon system untouched.
-// D18 BLOCKER 2 � userUpdate block SKIPPED (walk-in address must not
+// D18 BLOCKER 1 — gated by verifyToken("order_create_admin") in routes.
+// D10 — no Meta/TikTok CAPI, no SMS for admin-source orders.
+// D11 — manual discount only (no coupon); coupon system untouched.
+// D18 BLOCKER 2 — userUpdate block SKIPPED (walk-in address must not
 //   overwrite the returning customer's saved address).
 export const postAdminOrder: any = async (
   req: Request,
@@ -1333,24 +1333,24 @@ export const postAdminOrder: any = async (
     requestData.order_source = "admin";
     requestData.admin_created_by = (req as any).userId;
 
-    // M1 � pickup delivery type ? shipping cost = 0
+    // M1 — pickup delivery type → shipping cost = 0
     if (requestData?.delivery_type === "pickup") {
       requestData.shipping_cost = 0;
     }
 
-    // Geo module � resolve geo_district_id/geo_upazila_id into a
+    // Geo module — resolve geo_district_id/geo_upazila_id into a
     // server-trusted name snapshot (see postOrder's comment for the full
     // rationale). No "location required" rejection here, unlike the public
     // storefront routes: this is an authenticated admin route
     // (verifyToken("order_create_admin")), a POS walk-in legitimately has no
     // delivery geography at all, and the cashier already sees a client-side
-    // prompt � see CreateOrderPage.jsx.
+    // prompt — see CreateOrderPage.jsx.
     const adminGeoSnapshot = await resolveGeoSnapshotServices(
       requestData?.geo_upazila_id || requestData?.geo_district_id,
     );
     Object.assign(requestData, adminGeoSnapshot);
 
-    // C13 HIGH 6 � min_order_amount still enforced for POS
+    // C13 HIGH 6 — min_order_amount still enforced for POS
     const adminOrderSetting = await getCachedSetting().catch(() => null);
     const adminMinOrder = adminOrderSetting?.min_order_amount ?? 0;
     if (adminMinOrder > 0) {
@@ -1358,7 +1358,7 @@ export const postAdminOrder: any = async (
       if (clientSubTotal < adminMinOrder) {
         throw new ApiError(
           400,
-          `Minimum order amount is ?${adminMinOrder}. Cart total is ?${clientSubTotal}.`,
+          `Minimum order amount is ৳${adminMinOrder}. Cart total is ৳${clientSubTotal}.`,
         );
       }
     }
@@ -1371,15 +1371,15 @@ export const postAdminOrder: any = async (
     // Shipping used to be taken from the client here ("the admin chose it"),
     // which meant the POS's own hardcoded rate was stored verbatim and the
     // shop's free-delivery rule never applied to counter sales. The POS now
-    // sends the city as `billing_state` � the same field the storefront sends
-    // � so the recompute derives the identical charge for both channels.
+    // sends the city as `billing_state` — the same field the storefront sends
+    // — so the recompute derives the identical charge for both channels.
     // Pickup is handled inside recomputeShippingCost via `delivery_type`.
     const recomputed = await recomputeOrderTotals(requestData, session);
     requestData.sub_total_amount = recomputed.sub_total_amount;
     requestData.shipping_cost = recomputed.shipping_cost;
     requestData.vat_amount = recomputed.vat_amount;
 
-    // D11 � manual discount replaces coupon path for POS
+    // D11 — manual discount replaces coupon path for POS
     const manualDiscount = Math.min(
       Math.max(0, Number(requestData?.admin_manual_discount) || 0),
       recomputed.sub_total_amount,
@@ -1390,7 +1390,7 @@ export const postAdminOrder: any = async (
 
     // VAT is re-derived on the POST-discount base. `recomputed.vat_amount` was
     // calculated against the coupon discount (always 0 for POS), so using it
-    // as-is would tax the manual discount the customer never paid � and would
+    // as-is would tax the manual discount the customer never paid — and would
     // differ from how the storefront taxes a coupon. Same per-line formula,
     // with the manual discount apportioned by line value.
     const posVatAmount = (() => {
@@ -1417,7 +1417,7 @@ export const postAdminOrder: any = async (
     );
     requestData.loyalty_redeem_points = 0;
     requestData.loyalty_redeem_amount = 0;
-    // Order Unification Phase A � server-trusted order-level metadata.
+    // Order Unification Phase A — server-trusted order-level metadata.
     requestData.pre_discount_total = recomputed.pre_discount_total;
     requestData.order_type = requestData.order_type || "regular";
     requestData.currency = adminOrderSetting?.currency_code || "BDT";
@@ -1446,7 +1446,7 @@ export const postAdminOrder: any = async (
             variation_sku_snapshot: line?.variation_sku_snapshot,
             product_barcode_snapshot: line?.product_barcode_snapshot,
             variation_barcode_snapshot: line?.variation_barcode_snapshot,
-            // Order Unification Phase A � display snapshot + discount source + per-line VAT.
+            // Order Unification Phase A — display snapshot + discount source + per-line VAT.
             product_name_snapshot: line?.product_name_snapshot,
             product_image_snapshot: line?.product_image_snapshot,
             discount_source: line?.discount_source || "none",
@@ -1463,7 +1463,7 @@ export const postAdminOrder: any = async (
       if (!orderDetails) throw new ApiError(400, "Order Create Failed!");
     }
 
-    // C13 D8 � maintain_stock respected for POS (admin flips toggle if needed for OOS)
+    // C13 D8 — maintain_stock respected for POS (admin flips toggle if needed for OOS)
     const adminMaintainStock = adminOrderSetting?.maintain_stock ?? true;
     if (adminMaintainStock) {
       await decrementStockForLines(recomputed.order_products, session);
@@ -1478,14 +1478,14 @@ export const postAdminOrder: any = async (
       );
     } catch (_) {}
 
-    // D18 BLOCKER 2 � skip userUpdate entirely for POS
+    // D18 BLOCKER 2 — skip userUpdate entirely for POS
     // Returning customer's saved address must not be overwritten by walk-in address
 
     await session.commitTransaction();
     session.endSession();
 
-    // D10 � NO Meta/TikTok CAPI event for admin-source orders
-    // D10 � NO SMS for admin-source orders
+    // D10 — NO Meta/TikTok CAPI event for admin-source orders
+    // D10 — NO SMS for admin-source orders
 
     return sendResponse(res, {
       statusCode: httpStatus.OK,
@@ -1503,8 +1503,8 @@ export const postAdminOrder: any = async (
   }
 };
 
-// S4+S5 Phase 1C � opt-in email collection from the post-order
-// success-page prompt. Public (no auth) � same security model as
+// S4+S5 Phase 1C — opt-in email collection from the post-order
+// success-page prompt. Public (no auth) — same security model as
 // the order_id-in-URL details endpoint that already exists.
 //
 // Single-use: rejects overwrite if customer_email already set, so
