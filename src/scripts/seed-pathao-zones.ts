@@ -100,7 +100,7 @@ async function run() {
     districts.map((d: any) => [norm(d.name_en), d]),
   );
 
-  const stats = { created: 0, updated: 0, unchanged: 0, skippedCities: 0 };
+  const stats = { created: 0, updated: 0, unchanged: 0, skippedCities: 0, skippedZones: 0 };
 
   for (const city of pathao.cities) {
     const target =
@@ -129,24 +129,60 @@ async function run() {
       const existing: any = await GeoLocationModel.findOne({ code }).lean();
 
       if (!existing) {
-        stats.created++;
-        if (APPLY) {
-          await GeoLocationModel.create({
-            code,
-            name_en: z.zone_name,
-            // Pathao publishes no Bangla name. Falling back to the English one
-            // keeps the field populated and honest — better than an empty
-            // string the UI would render as a blank option.
-            name_bn: z.zone_name,
-            type: "upazila",
-            parent_id: target._id,
-            geo_path,
-            depth: geo_path.length,
-            source: "pathao",
-            courier_refs: {
-              pathao: { city_id: city.city_id, zone_id: z.zone_id },
-            },
-          });
+        // A Pathao zone can share its exact name with a sibling government
+        // upazila under the same district (e.g. "Bagerhat Sadar" exists in
+        // both bd-geo.json and Pathao's own list) — the scoped
+        // (parent_id, name_en) unique index on geo.model.ts correctly
+        // refuses the duplicate. This is not a data error: dedupeForPicker
+        // in geo.services.ts already collapses the display for exactly this
+        // case, Pathao's row simply isn't needed as a SEPARATE row here —
+        // the government row already serves that name under that parent.
+        // Checked up front (not just caught) so a dry run reports the same
+        // outcome --apply will actually produce.
+        const nameCollision = await GeoLocationModel.findOne({
+          parent_id: target._id,
+          name_en: z.zone_name,
+        }).lean();
+        if (nameCollision) {
+          stats.skippedZones++;
+          log(
+            `    ⚠ zone "${z.zone_name}" collides by name with a sibling under ${target.name_en} — skipped (already servable, see dedupeForPicker)`,
+          );
+        } else {
+          stats.created++;
+          if (APPLY) {
+            try {
+              await GeoLocationModel.create({
+                code,
+                name_en: z.zone_name,
+                // Pathao publishes no Bangla name. Falling back to the
+                // English one keeps the field populated and honest — better
+                // than an empty string the UI would render as a blank
+                // option.
+                name_bn: z.zone_name,
+                type: "upazila",
+                parent_id: target._id,
+                geo_path,
+                depth: geo_path.length,
+                source: "pathao",
+                courier_refs: {
+                  pathao: { city_id: city.city_id, zone_id: z.zone_id },
+                },
+              });
+            } catch (e: any) {
+              // Race against the up-front check above (another process
+              // inserted the same name between the findOne and the create) —
+              // vanishingly unlikely for a one-time seed run, but correct to
+              // not crash the whole run over it.
+              if (e?.code === 11000) {
+                stats.created--;
+                stats.skippedZones++;
+                log(`    ⚠ zone "${z.zone_name}" collided at write time — skipped`);
+              } else {
+                throw e;
+              }
+            }
+          }
         }
       } else {
         // Only ever repair structure + the courier id. Names are the admin's.
@@ -179,7 +215,7 @@ async function run() {
   }
 
   log(
-    `\ncreated ${stats.created} · repaired ${stats.updated} · unchanged ${stats.unchanged} · cities skipped ${stats.skippedCities}`,
+    `\ncreated ${stats.created} · repaired ${stats.updated} · unchanged ${stats.unchanged} · zones skipped (name collision) ${stats.skippedZones} · cities skipped ${stats.skippedCities}`,
   );
   if (APPLY) {
     log(`collection now holds ${await GeoLocationModel.countDocuments()} locations`);
